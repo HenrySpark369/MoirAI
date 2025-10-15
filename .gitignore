@@ -1,0 +1,56 @@
+# Environment variables y configuración sensible
+.env
+.env.local
+.env.production
+.env.development
+.env.docker
+
+# Entornos virtuales
+.venv
+venv/
+env/
+
+# Bases de datos
+*.db
+*.sqlite
+*.sqlite3
+moirai.db
+
+# Cache y archivos compilados
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+*.so
+.Python
+
+# Logs y archivos temporales
+*.log
+logs/
+temp/
+tmp/
+
+# Archivos del sistema
+.DS_Store
+Thumbs.db
+
+# Archivos de IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# Archivos de backup
+*.bak
+*.backup
+
+# Certificates y keys
+*.pem
+*.key
+*.crt
+*.p12
+
+# Uploads y archivos de usuario
+uploads/
+media/
+static/collected/
