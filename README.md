@@ -1,6 +1,6 @@
 # MoirAI - Plataforma de Matching Laboral UNRC
 
-**API RESTful inteligente para conectar estudiantes de la Universidad Nacional de Río Cuarto con oportunidades laborales mediante análisis NLP y algoritmos de matchmaking.**
+**API RESTful inteligente para conectar estudiantes de la Universidad Nacional Rosario Castellanos con oportunidades laborales mediante análisis NLP y algoritmos de matchmaking.**
 
 ## 🎯 Descripción
 
