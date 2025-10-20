@@ -16,7 +16,7 @@ MoirAI es una plataforma innovadora que utiliza técnicas de procesamiento de le
 
 ### Stack Tecnológico
 
-- **Backend**: FastAPI + Python 3.9+
+- **Backend**: FastAPI + Python 3.11 (recomendado). Compatible con Python 3.9–3.11
 - **Base de datos**: SQLModel + PostgreSQL/SQLite
 - **NLP**: spaCy + scikit-learn + RapidFuzz
 - **Autenticación**: OAuth 2.0 / JWT (demo con API keys)
@@ -74,9 +74,10 @@ source .venv/bin/activate  # Linux/macOS
 
 ### Prerrequisitos
 
-- Python 3.9+
+- **Python 3.11** (recomendado) - Compatible con Python 3.9–3.11
 - PostgreSQL (opcional, se puede usar SQLite para desarrollo)
 - Git
+- Xcode Command Line Tools (macOS) o build-essential (Linux)
 
 ### Instalación
 
@@ -86,14 +87,51 @@ git clone https://github.com/unrc/moirai.git
 cd moirai
 ```
 
-2. **Crear entorno virtual**
+2. **Verificar e instalar Python 3.11**
 ```bash
-python -m venv .venv
+# Verificar si Python 3.11 está instalado
+python3.11 --version
+
+# Si el comando anterior falla, instalar Python 3.11:
+
+# En macOS con Homebrew
+brew install python@3.11
+
+# En macOS con pyenv (alternativa recomendada)
+brew install pyenv
+pyenv install 3.11.6
+pyenv local 3.11.6
+
+# En Ubuntu/Debian
+sudo apt update
+sudo apt install python3.11 python3.11-venv python3.11-dev
+
+# En CentOS/RHEL/Fedora
+sudo dnf install python3.11 python3.11-devel
+
+# Verificar instalación exitosa
+python3.11 --version
+```
+
+3. **Crear entorno virtual con Python 3.11**
+```bash
+# Usar Python 3.11 específicamente
+python3.11 -m venv .venv
 source .venv/bin/activate  # En Windows: .venv\Scripts\activate
+
+# Verificar que el entorno virtual usa Python 3.11
+python --version  # Debe mostrar Python 3.11.x
 ```
 
 3. **Instalar dependencias**
 ```bash
+# ⚠️ IMPORTANTE: Asegúrate de tener el entorno virtual activado
+source .venv/bin/activate
+
+# Actualizar pip para evitar problemas de compatibilidad
+pip install --upgrade pip setuptools wheel
+
+# Instalar dependencias del proyecto
 pip install -r requirements.txt
 
 # Instalar modelo de spaCy para español
