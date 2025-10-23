@@ -60,6 +60,8 @@ flake8>=6.1.0
 # Email functionality
 aiosmtplib>=3.0.1
 jinja2>=3.1.2
+email-validator>=2.0.0
+pydantic[email]>=2.0.0
 
 # Environment and configuration
 python-decouple>=3.8
