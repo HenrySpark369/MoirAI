@@ -1,11 +1,25 @@
 """
-Modelos de base de datos para MoirAI
-Incluye modelos para estudiantes, empresas, eventos de matching y auditoría
+Modelos de datos para MoirAI
 """
+
 from datetime import datetime
 from typing import Optional
 from sqlmodel import SQLModel, Field
 
+# Importar modelos específicos
+from .user import User, UserCreate, UserRead, UserUpdate
+from .job_scraping import (
+    JobApplicationDB,
+    SearchQueryDB,
+    SearchResultDB,
+    UserJobAlertDB,
+    ScrapingLogDB
+)
+
+
+# ============================================================================
+# MODELOS DE DOMINIO PRINCIPAL
+# ============================================================================
 
 class Student(SQLModel, table=True):
     """Modelo de estudiante UNRC"""
@@ -52,38 +66,73 @@ class Company(SQLModel, table=True):
 
 
 class JobPosition(SQLModel, table=True):
-    """Modelo de posición laboral publicada por empresa"""
+    """
+    Modelo unificado de posición laboral
+    Sirve tanto para empleos publicados por empresas como para empleos scrapeados
+    """
+    __tablename__ = "job_positions"
     
     id: Optional[int] = Field(default=None, primary_key=True)
-    company_id: int = Field(foreign_key="company.id")
-    title: str = Field(max_length=100, description="Título del puesto")
+    
+    # Información básica (campos obligatorios)
+    title: str = Field(max_length=200, description="Título del puesto")
+    company: str = Field(max_length=150, description="Nombre de la empresa")
+    location: str = Field(max_length=150, description="Ubicación del trabajo")
     description: str = Field(description="Descripción completa del puesto")
-    requirements: Optional[str] = Field(description="Requisitos técnicos y experiencia")
-    location: Optional[str] = Field(max_length=100, description="Ubicación del trabajo")
-    salary_range: Optional[str] = Field(max_length=50, description="Rango salarial")
-    job_type: str = Field(default="full-time", description="Tipo de trabajo")
     
-    # Estado
-    is_active: bool = Field(default=True)
-    expires_at: Optional[datetime] = None
+    # Campos específicos para empleos de empresas registradas
+    company_id: Optional[int] = Field(default=None, foreign_key="company.id", description="ID de empresa registrada (si aplica)")
     
-    # Metadatos
+    # Campos específicos para empleos scrapeados
+    external_job_id: Optional[str] = Field(default=None, index=True, description="ID externo del empleo (ej: OCC ID)")
+    external_url: Optional[str] = Field(default=None, description="URL original del empleo")
+    source: str = Field(default="internal", description="Fuente del empleo (internal, occ, linkedin, etc.)")
+    
+    # Información detallada
+    requirements: Optional[str] = Field(default=None, description="Requisitos técnicos y experiencia")
+    salary_range: Optional[str] = Field(default=None, max_length=100, description="Rango salarial")
+    benefits: Optional[str] = Field(default=None, description="Beneficios ofrecidos (JSON)")
+    
+    # Categorización y filtros
+    job_type: str = Field(default="full-time", description="Tipo de trabajo (full-time, part-time, contract, etc.)")
+    work_mode: Optional[str] = Field(default=None, description="Modalidad (presencial, remoto, híbrido)")
+    category: Optional[str] = Field(default=None, max_length=100, description="Categoría laboral")
+    experience_level: Optional[str] = Field(default=None, max_length=50, description="Nivel de experiencia requerido")
+    education_required: Optional[str] = Field(default=None, max_length=100, description="Educación requerida")
+    skills: Optional[str] = Field(default=None, description="Habilidades requeridas (JSON)")
+    
+    # Información de la empresa (para empleos externos)
+    company_verified: bool = Field(default=False, description="Si la empresa está verificada")
+    company_logo: Optional[str] = Field(default=None, description="URL del logo de la empresa")
+    
+    # Metadatos y estado
+    publication_date: Optional[datetime] = Field(default=None, description="Fecha de publicación original")
+    scraped_at: Optional[datetime] = Field(default=None, description="Fecha de scraping (si aplica)")
+    is_active: bool = Field(default=True, description="Si el empleo está activo")
+    is_featured: bool = Field(default=False, description="Si es empleo destacado")
+    expires_at: Optional[datetime] = Field(default=None, description="Fecha de expiración")
+    
+    # Metadatos del sistema (updated_at es suficiente)
     created_at: datetime = Field(default_factory=datetime.utcnow)
-    updated_at: Optional[datetime] = None
+    updated_at: datetime = Field(default_factory=datetime.utcnow, description="Última actualización")
 
+
+# ============================================================================
+# MODELOS DE AUDITORÍA Y SEGURIDAD
+# ============================================================================
 
 class JobMatchEvent(SQLModel, table=True):
     """Eventos de matching entre estudiante y trabajos"""
     
     id: Optional[int] = Field(default=None, primary_key=True)
     student_id: int = Field(foreign_key="student.id")
-    job_position_id: Optional[int] = Field(foreign_key="jobposition.id", default=None)
+    job_position_id: Optional[int] = Field(foreign_key="job_positions.id", default=None)
     
     # Detalles del matching
     query: str = Field(description="Query utilizada para la búsqueda")
     match_score: Optional[float] = Field(description="Puntuación de compatibilidad")
     num_results: int = Field(description="Número de resultados obtenidos")
-    source: str = Field(default="internal", description="Fuente del matching (internal, jsearch, etc.)")
+    source: str = Field(default="internal", description="Fuente del matching (internal, occ, jsearch, etc.)")
     
     # Metadatos
     created_at: datetime = Field(default_factory=datetime.utcnow)
@@ -166,3 +215,32 @@ class ApiKey(SQLModel, table=True):
     # Metadatos
     created_at: datetime = Field(default_factory=datetime.utcnow)
     updated_at: Optional[datetime] = None
+
+
+# ============================================================================
+# EXPORTACIONES
+# ============================================================================
+
+__all__ = [
+    # User models
+    "User",
+    "UserCreate", 
+    "UserRead",
+    "UserUpdate",
+    
+    # Core models
+    "Student",
+    "Company", 
+    "JobPosition",
+    "JobMatchEvent",
+    "AuditLog",
+    "UserSession",
+    "ApiKey",
+    
+    # Job scraping models
+    "JobApplicationDB",
+    "SearchQueryDB",
+    "SearchResultDB", 
+    "UserJobAlertDB",
+    "ScrapingLogDB",
+]
