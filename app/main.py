@@ -28,18 +28,28 @@ app = FastAPI(
     
     ## Características principales:
     
-    -   Análisis NLP de Currículums**: Extracción automática de habilidades técnicas, blandas y proyectos
-    *   Matchmaking Inteligente**: Algoritmos de compatibilidad entre perfiles y vacantes
-    *   Búsqueda Multi-proveedor**: Integración con múltiples fuentes de trabajos
-    *   Gestión de Roles**: Acceso diferenciado para estudiantes, empresas y administradores
-    *   Cumplimiento LFPDPPP**: Protección de datos y auditoría integrada
-    *   Arquitectura Escalable**: FastAPI + PostgreSQL + modelos de ML
+    * **Análisis NLP de Currículums**: Extracción automática de habilidades técnicas, blandas y proyectos
+    * **Matchmaking Inteligente**: Algoritmos de compatibilidad entre perfiles y vacantes
+    * **Web Scraping OCC.com.mx**: Sistema completo de scraping y seguimiento de empleos ✅ IMPLEMENTADO
+    * **Gestión de Aplicaciones**: Seguimiento de aplicaciones con estados y estadísticas
+    * **Sistema de Alertas**: Notificaciones automáticas de nuevos empleos relevantes
+    * **Gestión de Roles**: Acceso diferenciado para estudiantes, empresas y administradores
+    * **Cumplimiento LFPDPPP**: Protección de datos y auditoría integrada
+    * **Arquitectura Escalable**: FastAPI + PostgreSQL + modelos de ML
+
+    ## Funcionalidades del Sistema de Scraping:
+    
+    * **Búsqueda Inteligente**: Filtros avanzados por ubicación, salario, modalidad de trabajo
+    * **Aplicaciones Tracking**: Estados detallados (aplicado, entrevista, rechazado, aceptado)
+    * **Alertas Personalizadas**: Notificaciones diarias/semanales por palabras clave
+    * **Analytics**: Empleos trending, estadísticas personales, análisis de mercado
+    * **Rate Limiting**: Respeta límites de OCC.com.mx con delays inteligentes
 
     ## Roles de Usuario:
     
-    * **Estudiantes**: Gestión de perfil, recomendaciones personalizadas
+    * **Estudiantes**: Gestión de perfil, búsqueda de empleos, seguimiento de aplicaciones
     * **Empresas**: Búsqueda y filtrado de candidatos, publicación de vacantes
-    * **Administradores**: KPIs, gestión de usuarios, auditoría del sistema
+    * **Administradores**: KPIs, gestión de usuarios, auditoría del sistema, procesamiento de alertas
     """,
     contact={
         "name": "UNRC - Ciencia de Datos para Negocios",
@@ -214,6 +224,10 @@ async def compliance_info():
 # Incluir routers de endpoints
 app.include_router(auth.router, prefix=settings.API_V1_STR)
 app.include_router(students.router, prefix=settings.API_V1_STR)
+
+# Sistema de scraping de empleos OCC.com.mx - ✅ IMPLEMENTADO
+from app.api.endpoints import job_scraping
+app.include_router(job_scraping.router, prefix=settings.API_V1_STR)
 
 # TODO: Incluir otros routers cuando estén implementados
 # app.include_router(jobs.router, prefix=settings.API_V1_STR)

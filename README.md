@@ -7,8 +7,11 @@
 MoirAI es una plataforma innovadora que utiliza técnicas de procesamiento de lenguaje natural (NLP) y algoritmos de machine learning para:
 
 - **Analizar currículums automáticamente** y extraer habilidades técnicas, blandas y proyectos
+- **Scraping inteligente de empleos** desde portales como OCC.com.mx con alertas personalizadas
+- **Seguimiento completo de aplicaciones** laborales con estados y estadísticas de éxito
 - **Generar recomendaciones personalizadas** de trabajos para estudiantes
 - **Facilitar búsqueda avanzada** de candidatos para empresas colaboradoras
+- **Sistema de alertas automáticas** para nuevas oportunidades laborales
 - **Proporcionar métricas y KPIs** para administradores universitarios
 - **Garantizar cumplimiento** de normativas de protección de datos (LFPDPPP)
 
@@ -19,8 +22,9 @@ MoirAI es una plataforma innovadora que utiliza técnicas de procesamiento de le
 - **Backend**: FastAPI + Python 3.11 (recomendado). Compatible con Python 3.9–3.11
 - **Base de datos**: SQLModel + PostgreSQL/SQLite
 - **NLP**: spaCy + scikit-learn + RapidFuzz
+- **Web Scraping**: BeautifulSoup4 + lxml + httpx (async)
 - **Autenticación**: OAuth 2.0 / JWT (demo con API keys)
-- **Proveedores externos**: JSearch API, LinkedIn API (futuro)
+- **Proveedores externos**: OCC.com.mx Scraper, JSearch API, LinkedIn API (futuro)
 - **Documentación**: OpenAPI/Swagger automático
 
 ### Estructura del Proyecto
@@ -34,18 +38,25 @@ MoirAI/
 │   │   ├── config.py          # Configuración y settings
 │   │   └── database.py        # Conexión a base de datos
 │   ├── models/
-│   │   └── __init__.py        # Modelos SQLModel (Student, Company, etc.)
+│   │   ├── __init__.py        # Modelos SQLModel (Student, Company, etc.)
+│   │   ├── user.py            # Modelo de usuario básico
+│   │   └── job_scraping.py    # Modelos para sistema de scraping
 │   ├── schemas/
 │   │   └── __init__.py        # Esquemas Pydantic para validación
 │   ├── api/
 │   │   └── endpoints/
 │   │       ├── students.py    # Endpoints de estudiantes
+│   │       ├── job_scraping.py # ✅ Endpoints de scraping OCC.com.mx
+│   │       ├── auth.py        # ✅ Endpoints de autenticación
 │   │       ├── jobs.py        # Endpoints de trabajos (futuro)
 │   │       ├── companies.py   # Endpoints de empresas (futuro)
 │   │       └── admin.py       # Endpoints de administración (futuro)
 │   ├── services/
 │   │   ├── nlp_service.py     # Servicio de análisis NLP
-│   │   └── matching_service.py # Algoritmos de matchmaking
+│   │   ├── matching_service.py # Algoritmos de matchmaking
+│   │   ├── occ_scraper_service.py # ✅ Servicio de scraping OCC.com.mx
+│   │   ├── job_application_service.py # ✅ Gestión de aplicaciones
+│   │   └── api_key_service.py # ✅ Gestión de API keys
 │   ├── providers/
 │   │   └── __init__.py        # Proveedores de trabajos externos
 │   ├── middleware/
@@ -83,8 +94,8 @@ source .venv/bin/activate  # Linux/macOS
 
 1. **Clonar el repositorio**
 ```bash
-git clone https://github.com/unrc/moirai.git
-cd moirai
+git clone https://github.com/HenrySpark369/MoirAI.git
+cd MoirAI
 ```
 
 2. **Verificar e instalar Python 3.11**
@@ -131,13 +142,14 @@ source .venv/bin/activate
 # Actualizar pip para evitar problemas de compatibilidad
 pip install --upgrade pip setuptools wheel
 
-# Instalar dependencias del proyecto
+# Instalar dependencias del proyecto (incluye scraping, NLP, validación, bases de datos)
 pip install -r requirements.txt
 
-# Instalar modelo de spaCy para español
+# Descargar modelos pre-entrenados de spaCy para NLP
+# Español (recomendado para análisis de currículums en español)
 python -m spacy download es_core_news_sm
 
-# O para inglés (recomendado para términos técnicos)
+# Inglés (recomendado para términos técnicos)
 python -m spacy download en_core_web_sm
 ```
 
@@ -162,6 +174,12 @@ openssl rand -base64 32
 5. **Inicializar base de datos**
 ```bash
 # La base de datos se crea automáticamente al iniciar la aplicación
+
+# Para inicializar el sistema de scraping de empleos (opcional):
+python migrate_job_scraping.py
+
+# Con datos de ejemplo para testing:
+python migrate_job_scraping.py --sample-data
 ```
 
 ### 🔐 Configuración de Seguridad
@@ -219,6 +237,10 @@ La API estará disponible en:
 - ✅ **Crear perfil manual** sin necesidad de currículum digital
 - ✅ **Actualizar habilidades** manualmente según experiencia
 - ✅ **Acceder a perfil público** para empresas interesadas
+- ✅ **Buscar empleos en OCC.com.mx** con filtros avanzados
+- ✅ **Registrar aplicaciones** y seguir estados (aplicado, entrevista, etc.)
+- ✅ **Configurar alertas automáticas** para nuevos empleos relevantes
+- ✅ **Ver estadísticas personales** de aplicaciones y tasa de éxito
 - 🔄 **Recibir recomendaciones** personalizadas de trabajos
 - 🔄 **Recibir notificaciones** de oportunidades relevantes
 
@@ -226,6 +248,7 @@ La API estará disponible en:
 - ✅ **Buscar candidatos** por habilidades y proyectos específicos
 - ✅ **Acceder a perfiles públicos** de estudiantes
 - ✅ **Filtrar por criterios avanzados** (programa, habilidades, proyectos)
+- ✅ **Ver empleos trending** y estadísticas del mercado
 - 🔄 **Publicar vacantes** con requisitos detallados
 - 🔄 **Acceder a candidatos destacados** con alta compatibilidad
 - 🔄 **Utilizar filtros avanzados** para encontrar perfiles ideales
@@ -238,6 +261,8 @@ La API estará disponible en:
 - ✅ **Operaciones en lote** para procesamiento masivo
 - ✅ **Monitorear cumplimiento** de normativas de privacidad
 - ✅ **Acceder a logs de auditoría** completos
+- ✅ **Procesar alertas de empleo** automáticamente para todos los usuarios
+- ✅ **Monitorear sistema de scraping** con logs y métricas
 - 🔄 **Visualizar KPIs** de empleabilidad y matching
 - 🔄 **Analizar métricas** de inserción laboral
 
@@ -273,6 +298,29 @@ POST   /api/v1/students/{id}/reanalyze      # Re-analizar currículum con NLP
 POST   /api/v1/students/bulk-reanalyze      # Re-análisis en lote
 ```
 
+### Scraping de Empleos OCC.com.mx ✅ COMPLETAMENTE IMPLEMENTADO
+```
+# Búsqueda y gestión de empleos
+POST   /job-scraping/search              # Buscar empleos con filtros avanzados
+GET    /job-scraping/job/{job_id}        # Detalles de empleo específico
+GET    /job-scraping/trending-jobs       # Empleos en tendencia
+GET    /job-scraping/search-history      # Historial de búsquedas del usuario
+
+# Gestión de aplicaciones
+POST   /job-scraping/apply               # Registrar aplicación a empleo
+PUT    /job-scraping/application/{id}/status # Actualizar estado de aplicación
+GET    /job-scraping/applications        # Listar aplicaciones del usuario
+GET    /job-scraping/applications/stats  # Estadísticas de aplicaciones
+
+# Sistema de alertas
+POST   /job-scraping/alerts              # Crear alerta personalizada
+GET    /job-scraping/alerts              # Listar alertas del usuario
+DELETE /job-scraping/alerts/{id}         # Eliminar alerta
+
+# Administración
+POST   /job-scraping/admin/process-alerts # Procesar todas las alertas (admin)
+```
+
 ### Trabajos (próximamente)
 ```
 GET    /api/v1/jobs/search               # Buscar trabajos
@@ -294,13 +342,22 @@ GET    /api/v1/admin/audit_logs         # Logs de auditoría
 GET    /api/v1/admin/users              # Gestión de usuarios
 ```
 
-## 🤖 Características de NLP
+## 🤖 Características de NLP y Web Scraping
 
-### Extracción Automática
+### Extracción Automática de Currículums
 - **Habilidades técnicas**: Python, SQL, React, Machine Learning, etc.
 - **Habilidades blandas**: Liderazgo, comunicación, trabajo en equipo, etc.
 - **Proyectos**: Descripciones y tecnologías utilizadas
 - **Experiencia**: Análisis de roles y responsabilidades
+
+### Sistema de Scraping OCC.com.mx ✅
+- **Búsqueda automatizada** con filtros por ubicación, salario, modalidad
+- **Extracción estructurada** de ofertas de trabajo con NLP
+- **Rate limiting inteligente** para evitar bloqueos
+- **Headers anti-detección** y manejo de errores robusto
+- **Seguimiento de aplicaciones** con estados y notas
+- **Sistema de alertas** personalizadas con notificaciones automáticas
+- **Analytics y trending** de empleos más buscados
 
 ### Algoritmos de Matching
 - **Puntuación de compatibilidad** entre perfil y vacante
@@ -449,12 +506,16 @@ El endpoint `/api/v1/students/stats` proporciona:
 - ✅ **Búsqueda avanzada** por habilidades y criterios
 - ✅ **Estadísticas y métricas** en tiempo real
 - ✅ **Operaciones administrativas** (bulk, reactivación, etc.)
+- ✅ **Sistema completo de scraping OCC.com.mx** con 12 endpoints
+- ✅ **Seguimiento de aplicaciones** laborales con estados
+- ✅ **Sistema de alertas personalizadas** con notificaciones automáticas
+- ✅ **Analytics de empleos** y estadísticas de éxito
 
 ### Fase 2 - Expansión (Noviembre 2025)
 - 🔄 **API de empresas** completa con gestión de vacantes
 - 🔄 **Sistema de matching** inteligente estudiante-trabajo
 - 🔄 **Recomendaciones personalizadas** para estudiantes
-- 🔄 **Notificaciones** en tiempo real
+- 🔄 **Notificaciones push/email** en tiempo real
 - 🔄 **Panel web** para administradores
 - 🔄 **Integración con proveedores** externos (JSearch, LinkedIn)
 
@@ -517,9 +578,28 @@ openssl rand -base64 32
 ### Desarrollo y Uso
 
 **P: ¿Cómo empiezo a usar la API?**
-1. Ejecute `./setup_secure.sh` para configuración inicial
-2. Inicie con `uvicorn app.main:app --reload`
-3. Vaya a `http://localhost:8000/docs` para documentación interactiva
+1. Ejecute `./setup_secure.sh` para configuración inicial segura
+2. Ejecute `pip install -r requirements.txt` para instalar todas las dependencias (incluye scraping, NLP y validación)
+3. Descargue los modelos de spaCy: `python -m spacy download es_core_news_sm`
+4. Configure la base de datos de scraping: `python migrate_job_scraping.py`
+5. Inicie con `uvicorn app.main:app --reload --host 0.0.0.0 --port 8000`
+6. Vaya a `http://localhost:8000/docs` para documentación interactiva Swagger
+
+**P: ¿Necesito instalar dependencias adicionales después de pip install -r requirements.txt?**
+❌ **NO.** El archivo `requirements.txt` incluye TODAS las dependencias necesarias:
+- ✅ Scraping: BeautifulSoup4, lxml, httpx
+- ✅ NLP: spaCy, scikit-learn, pandas, numpy
+- ✅ Validación: pydantic, email-validator
+- ✅ Base de datos: sqlmodel, psycopg2, alembic
+
+Solo necesita descargar los **modelos pre-entrenados de spaCy** por separado (ver paso 3 arriba).
+
+**P: ¿Cómo funciona el sistema de scraping de empleos?**
+El sistema permite buscar empleos en OCC.com.mx, registrar aplicaciones y configurar alertas automáticas. Incluye:
+- Rate limiting inteligente para evitar bloqueos
+- Headers anti-detección
+- Manejo robusto de errores
+- Seguimiento completo de aplicaciones con estados
 
 **P: ¿Cómo obtengo una API key?**
 - Para desarrollo: Use las claves en su archivo `.env`
@@ -530,10 +610,9 @@ openssl rand -base64 32
 
 ## 📞 Soporte
 
-- **Email**: contacto@ing.unrc.edu.ar
-- **Documentación**: https://unrc.github.io/moirai/
-- **Issues**: https://github.com/unrc/moirai/issues
-- **Wiki**: https://github.com/unrc/moirai/wiki
+- **Documentación**: Consulte este README o el archivo `/docs/` para información detallada
+- **Issues y Bugs**: Reporte problemas en https://github.com/HenrySpark369/MoirAI/issues
+- **Discusiones**: Participe en las discusiones del repositorio
 
 ## 📄 Licencia
 
@@ -541,9 +620,9 @@ Este proyecto está licenciado bajo la Licencia MIT - vea el archivo [LICENSE](L
 
 ## 🙏 Agradecimientos
 
-- **Universidad Nacional Rosario Castellanos** - Ciencia de Datos para Negocios
-- **Estudiantes y empresas** participantes del programa piloto
-- **Comunidad open source** de FastAPI, spaCy y scikit-learn
+- **Universidad Nacional Rosario Castellanos** - Por la iniciativa de conectar estudiantes con oportunidades laborales - Lic. en Ciencia de Datos para Negocios MAC-801
+- **Comunidad open source** de FastAPI, spaCy, SQLAlchemy y scikit-learn
+- **Todos los contribuyentes** que ayudan a mejorar la plataforma
 
 ---
 
@@ -663,15 +742,7 @@ El servidor estará disponible en:
 - Estadísticas y métricas en tiempo real
 - Operaciones administrativas avanzadas
 
-## Documentación de Usuario
-
-### Primeros Pasos
-
-Para empezar a usar la API de MoirAI, necesitarás:
-
-1. Asegurarte de que el servicio esté en ejecución
-2. Obtener una API key válida (ver sección de autenticación)
-3. Utilizar un cliente HTTP (Postman, curl, o aplicación frontend) para realizar solicitudes
+## 📚 Documentación Completa
 
 ### Autenticación
 
@@ -682,15 +753,66 @@ La API utiliza autenticación basada en API keys mediante el header `X-API-Key`:
 curl -H "X-API-Key: YOUR_API_KEY" "http://localhost:8000/api/v1/students/"
 ```
 
-**Tipos de API Keys:**
-- **Admin**: Acceso completo a todos los endpoints
-- **Student**: Acceso a endpoints de estudiantes (propio perfil)
-- **Company**: Acceso a búsqueda de estudiantes y gestión de vacantes
-- **Anonymous**: Acceso limitado a endpoints públicos
+**Tipos de API Keys y Permisos por Rol:**
+- **Admin**: Acceso completo a todos los endpoints y funcionalidades
+- **Student**: Acceso a endpoints de estudiantes (consulta y modificación del propio perfil)
+- **Company**: Acceso a búsqueda de estudiantes y gestión de perfiles públicos
+- **Anonymous**: Acceso limitado a endpoints públicos (consulta de perfiles públicos sin autenticación)
 
-### Ejemplos de Uso
+### 🔑 Gestión de API Keys
 
-**1. Crear un estudiante manualmente**
+#### Crear una nueva API Key
+```bash
+curl -X POST "http://localhost:8000/api/v1/auth/api-keys" \
+  -H "X-API-Key: YOUR_CURRENT_API_KEY" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "name": "Clave para aplicación móvil",
+    "description": "API key para la app móvil del estudiante",
+    "expires_days": 90,
+    "rate_limit": 500
+  }'
+```
+
+#### Listar mis API Keys
+```bash
+curl -X GET "http://localhost:8000/api/v1/auth/api-keys" \
+  -H "X-API-Key: YOUR_API_KEY"
+```
+
+#### Revocar una API Key
+```bash
+curl -X DELETE "http://localhost:8000/api/v1/auth/api-keys/{key_id}" \
+  -H "X-API-Key: YOUR_API_KEY"
+```
+
+#### Ver mi información y permisos
+```bash
+curl -X GET "http://localhost:8000/api/v1/auth/me" \
+  -H "X-API-Key: YOUR_API_KEY"
+```
+
+**Respuesta esperada:**
+```json
+{
+  "user_id": 123,
+  "name": "María García",
+  "email": "maria.garcia@estudiantes.unrc.edu.ar",
+  "role": "student",
+  "api_key": "stu_p6iaDFfLV_dNswLfYN_cyA_vDA_7mo2kL-ngCQm6XmXHrVKpF7Q6tv_fGdcgI1P-XQ",
+  "key_id": "p6iaDFfLV_dNswLfYN_cyA",
+  "expires_at": "2026-10-15T10:30:00Z",
+  "scopes": ["read:own_profile", "write:own_profile", "read:jobs"]
+}
+```
+
+### Configuración Técnica (Sección Técnica)
+
+Para desarrolladores que necesiten entender la arquitectura en profundidad, consulte la sección **"Documentación Técnica"** que se encuentra más adelante en este documento.
+
+### Ejemplos de Uso Prácticos
+
+#### 1. Crear un estudiante manualmente
 
 ```bash
 curl -X POST "http://localhost:8000/api/v1/students/" \
@@ -704,7 +826,7 @@ curl -X POST "http://localhost:8000/api/v1/students/" \
   }'
 ```
 
-**2. Subir y analizar currículum**
+#### 2. Subir y analizar currículum
 
 ```bash
 curl -X POST "http://localhost:8000/api/v1/students/upload_resume" \
@@ -713,21 +835,21 @@ curl -X POST "http://localhost:8000/api/v1/students/upload_resume" \
   -F 'file=@curriculum.pdf'
 ```
 
-**3. Buscar estudiantes por habilidades**
+#### 3. Buscar estudiantes por habilidades
 
 ```bash
 curl -X GET "http://localhost:8000/api/v1/students/search/skills?skills=Python&skills=Machine%20Learning&min_matches=1&limit=10" \
   -H "X-API-Key: COMPANY_KEY"
 ```
 
-**4. Obtener estadísticas (solo admin)**
+#### 4. Obtener estadísticas (solo admin)
 
 ```bash
 curl -X GET "http://localhost:8000/api/v1/students/stats" \
   -H "X-API-Key: ADMIN_KEY"
 ```
 
-**5. Actualizar habilidades de un estudiante**
+#### 5. Actualizar habilidades de un estudiante
 
 ```bash
 curl -X PATCH "http://localhost:8000/api/v1/students/123/skills" \
@@ -739,6 +861,37 @@ curl -X PATCH "http://localhost:8000/api/v1/students/123/skills" \
     "projects": ["Sistema de gestión estudiantil", "App móvil de delivery"]
   }'
 ```
+
+#### 6. Buscar empleos en OCC.com.mx
+
+```bash
+curl -X POST "http://localhost:8000/job-scraping/search" \
+  -H "X-API-Key: STUDENT_KEY" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "keyword": "Python Developer",
+    "location": "Córdoba",
+    "salary_min": 80000,
+    "work_mode": "remoto",
+    "job_type": "tiempo-completo",
+    "experience_level": "semi-senior",
+    "sort_by": "date",
+    "page": 1
+  }'
+```
+
+**Parámetros de búsqueda de empleos:**
+
+| Parámetro | Tipo | Requerido | Valores | Descripción |
+|-----------|------|-----------|---------|-------------|
+| `keyword` | string | ✅ Sí | Cualquier texto | Palabra clave de búsqueda (ej: "Python", "Developer", etc.) |
+| `location` | string | ❌ No | Ciudad/región | Ubicación geográfica para filtrar empleos |
+| `salary_min` | integer | ❌ No | Número | Salario mínimo esperado en pesos |
+| `work_mode` | string | ❌ No | `presencial`, `remoto`, `hibrido` | Modalidad de trabajo |
+| `job_type` | string | ❌ No | `tiempo-completo`, `medio-tiempo`, `freelance` | Tipo de contrato/jornada |
+| `experience_level` | string | ❌ No | `junior`, `semi-senior`, `senior` | Nivel de experiencia requerida |
+| `sort_by` | string | ❌ No | `relevance`, `date`, `salary` | Ordenamiento de resultados (defecto: `relevance`) |
+| `page` | integer | ❌ No | Número ≥ 1 | Número de página (defecto: 1) |
 
 ### Respuestas de la API
 
