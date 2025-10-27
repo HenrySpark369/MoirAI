@@ -462,6 +462,6 @@ Para obtener una API Key:
 
 Para soporte técnico:
 - **Documentación API**: http://localhost:8000/docs
-- **Email**: contacto@ing.unrc.edu.ar
+- **Email**: contacto@ing.unrc.edu.mx
 - **Issues**: GitHub del proyecto
 - **Logs**: Revisar logs de aplicación para errores detallados

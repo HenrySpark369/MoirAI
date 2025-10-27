@@ -59,7 +59,7 @@ POST /api/v1/auth/register
 {
   "user_id": 123,
   "name": "María García",
-  "email": "maria.garcia@estudiantes.unrc.edu.ar",
+  "email": "maria.garcia@estudiantes.unrc.edu.mx",
   "role": "student",
   "api_key": "p6iaDFfLV_dNswLfYN_cyA_vDA_7mo2kL-ngCQm6XmXHrVKpF7Q6tv_fGdcgI1P-XQ",
   "key_id": "p6iaDFfLV_dNswLfYN_cyA",
@@ -95,7 +95,7 @@ curl -X POST "http://localhost:8000/api/v1/auth/register" \
   -H "Content-Type: application/json" \
   -d '{
     "name": "Juan Pérez",
-    "email": "juan.perez@estudiantes.unrc.edu.ar", 
+    "email": "juan.perez@estudiantes.unrc.edu.mx", 
     "role": "student",
     "program": "Licenciatura en Informática"
   }'

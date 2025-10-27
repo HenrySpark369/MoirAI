@@ -15,7 +15,7 @@ JSEARCH_API_KEY=<clave_api_jsearch>
 POSTGRES_DB=moirai_db
 POSTGRES_USER=moirai_user
 POSTGRES_PASSWORD=<password_seguro>
-PGADMIN_EMAIL=admin@unrc.edu.ar
+PGADMIN_EMAIL=admin@unrc.edu.mx
 PGADMIN_PASSWORD=<password_admin_seguro>
 ```
 
