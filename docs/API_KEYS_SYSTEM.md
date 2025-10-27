@@ -72,19 +72,19 @@ POST /api/v1/auth/register
 ```bash
 # Crear nueva API key
 POST /api/v1/auth/api-keys
-Authorization: x-api-key: [tu_api_key_actual]
+Authorization: X-API-Key: [tu_api_key_actual]
 
 # Listar mis API keys
 GET /api/v1/auth/api-keys
-Authorization: x-api-key: [tu_api_key_actual]
+Authorization: X-API-Key: [tu_api_key_actual]
 
 # Revocar API key
 DELETE /api/v1/auth/api-keys/{key_id}
-Authorization: x-api-key: [tu_api_key_actual]
+Authorization: X-API-Key: [tu_api_key_actual]
 
 # Ver mi información
 GET /api/v1/auth/me
-Authorization: x-api-key: [tu_api_key_actual]
+Authorization: X-API-Key: [tu_api_key_actual]
 ```
 
 ## 🔧 **Cómo Usar**
@@ -104,13 +104,13 @@ curl -X POST "http://localhost:8000/api/v1/auth/register" \
 ### 2. **Usar la API Key Generada**
 ```bash
 curl -X GET "http://localhost:8000/api/v1/students/stats" \
-  -H "x-api-key: p6iaDFfLV_dNswLfYN_cyA_vDA_7mo2kL-ngCQm6XmXHrVKpF7Q6tv_fGdcgI1P-XQ"
+  -H "X-API-Key: p6iaDFfLV_dNswLfYN_cyA_vDA_7mo2kL-ngCQm6XmXHrVKpF7Q6tv_fGdcgI1P-XQ"
 ```
 
 ### 3. **Crear API Keys Adicionales**
 ```bash
 curl -X POST "http://localhost:8000/api/v1/auth/api-keys" \
-  -H "x-api-key: [tu_api_key_actual]" \
+  -H "X-API-Key: [tu_api_key_actual]" \
   -H "Content-Type: application/json" \
   -d '{
     "name": "Clave para aplicación móvil",
