@@ -21,6 +21,7 @@ import {
   Logout,
 } from '@mui/icons-material';
 import { useAuthStore } from '../store/authStore';
+import Header from './Header';
 
 const DRAWER_WIDTH = 240;
 
@@ -55,15 +56,45 @@ const Layout = () => {
           </ListItemIcon>
           <ListItemText primary="Profile" />
         </ListItem>
+        <ListItem component="button" onClick={() => navigate('/students')}>
+          <ListItemIcon>
+            <Person />
+          </ListItemIcon>
+          <ListItemText primary="Students" />
+        </ListItem>
+        <ListItem component="button" onClick={() => navigate('/job-scraping')}>
+          <ListItemIcon>
+            <Dashboard />
+          </ListItemIcon>
+          <ListItemText primary="Job Scraping" />
+        </ListItem>
+        <ListItem component="button" onClick={() => navigate('/auth')}>
+          <ListItemIcon>
+            <AdminPanelSettings />
+          </ListItemIcon>
+          <ListItemText primary="Authentication" />
+        </ListItem>
+        <ListItem component="button" onClick={() => navigate('/jobs')}>
+          <ListItemIcon>
+            <Dashboard />
+          </ListItemIcon>
+          <ListItemText primary="Jobs" />
+        </ListItem>
+        <ListItem component="button" onClick={() => navigate('/companies')}>
+          <ListItemIcon>
+            <Person />
+          </ListItemIcon>
+          <ListItemText primary="Companies" />
+        </ListItem>
         {user?.role === 'admin' && (
-          <ListItem button onClick={() => navigate('/admin')}>
+          <ListItem component="button" onClick={() => navigate('/admin')}>
             <ListItemIcon>
               <AdminPanelSettings />
             </ListItemIcon>
             <ListItemText primary="Admin Panel" />
           </ListItem>
         )}
-        <ListItem button onClick={handleLogout}>
+        <ListItem component="button" onClick={handleLogout}>
           <ListItemIcon>
             <Logout />
           </ListItemIcon>
@@ -75,25 +106,7 @@ const Layout = () => {
 
   return (
     <Box sx={{ display: 'flex' }}>
-      <AppBar
-        position="fixed"
-        sx={{ zIndex: theme.zIndex.drawer + 1 }}
-      >
-        <Toolbar>
-          <IconButton
-            color="inherit"
-            edge="start"
-            onClick={handleDrawerToggle}
-            sx={{ mr: 2, display: { sm: 'none' } }}
-          >
-            <MenuIcon />
-          </IconButton>
-          <Typography variant="h6" noWrap component="div">
-            MoirAI Platform
-          </Typography>
-        </Toolbar>
-      </AppBar>
-
+      <Header />
       <Box
         component="nav"
         sx={{ width: { sm: DRAWER_WIDTH }, flexShrink: { sm: 0 } }}

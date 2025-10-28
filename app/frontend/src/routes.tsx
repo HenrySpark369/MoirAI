@@ -8,6 +8,11 @@ import DashboardPage from './pages/Dashboard';
 import ProfilePage from './pages/Profile';
 import AdminPage from './pages/Admin';
 import NotFoundPage from './pages/NotFound';
+import Students from './pages/Students';
+import JobScraping from './pages/JobScraping';
+import Auth from './pages/Auth';
+import Jobs from './pages/Jobs';
+import Companies from './pages/Companies';
 
 const PrivateRoute = ({ children }: { children: React.ReactNode }) => {
   const token = useAuthStore((state) => state.token);
@@ -37,6 +42,11 @@ const AppRoutes = () => {
         <Route path="profile" element={<ProfilePage />} />
         <Route path="admin" element={<AdminPage />} />
       </Route>
+      <Route path="/students" element={<Students />} />
+      <Route path="/job-scraping" element={<JobScraping />} />
+      <Route path="/auth" element={<Auth />} />
+      <Route path="/jobs" element={<Jobs />} />
+      <Route path="/companies" element={<Companies />} />
 
       {/* 404 route */}
       <Route path="*" element={<NotFoundPage />} />

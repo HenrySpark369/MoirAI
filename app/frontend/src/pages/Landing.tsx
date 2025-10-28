@@ -1,6 +1,7 @@
 import { Box, Button, Container, Grid, Typography } from '@mui/material';
-import { Link } from 'react-router-dom';
+import { Link as RouterLink } from 'react-router-dom';
 import { styled } from '@mui/system';
+import Header from '../components/Header';
 
 const HeroButton = styled(Button)(() => ({
   borderRadius: '50px',
@@ -14,7 +15,7 @@ const LandingPage = () => {
     <Box
       sx={{
         minHeight: '100vh',
-        backgroundColor: '#FFFFFF', // Solid white background
+        backgroundColor: '#FFFFFF',
         color: '#333333',
         display: 'flex',
         flexDirection: 'column',
@@ -22,55 +23,7 @@ const LandingPage = () => {
         overflowX: 'hidden',
       }}
     >
-      {/* Header/Navigation */}
-      <Box
-        sx={{
-          py: 2,
-          px: 4,
-          display: 'flex',
-          justifyContent: 'space-between',
-          alignItems: 'center',
-          backgroundColor: '#631333', // Deep red for header
-          color: 'white',
-          boxShadow: '0px 4px 6px rgba(0, 0, 0, 0.1)',
-        }}
-      >
-        <Typography variant="h4" component="h1" sx={{ fontWeight: 700 }}>
-          MoirAI
-        </Typography>
-        <Box>
-          <HeroButton
-            component={Link}
-            to="/login"
-            variant="outlined"
-            sx={{
-              borderColor: 'white',
-              color: 'white',
-              mr: 2,
-              '&:hover': {
-                backgroundColor: 'rgba(255, 255, 255, 0.2)',
-              },
-            }}
-          >
-            Iniciar Sesión
-          </HeroButton>
-          <HeroButton
-            component={Link}
-            to="/register"
-            variant="contained"
-            sx={{
-              backgroundColor: 'white',
-              color: '#631333',
-              '&:hover': {
-                backgroundColor: '#F5F5F5',
-              },
-            }}
-          >
-            Registrarse
-          </HeroButton>
-        </Box>
-      </Box>
-
+      <Header />
       {/* Hero Section */}
       <Container maxWidth="lg" sx={{ mt: 8, mb: 12, textAlign: 'center' }}>
         <Typography
@@ -81,7 +34,7 @@ const LandingPage = () => {
             mb: 4,
             fontSize: { xs: '2.5rem', md: '3.5rem' },
             lineHeight: 1.2,
-            color: '#333333', // Dark gray text color
+            color: '#333333',
           }}
         >
           Conectamos Talento Universitario con Oportunidades Laborales
@@ -90,7 +43,7 @@ const LandingPage = () => {
           Plataforma de matching laboral impulsada por IA para estudiantes de la UNRC
         </Typography>
         <HeroButton
-          component={Link}
+          component={RouterLink}
           to="/register"
           variant="contained"
           sx={{
@@ -105,7 +58,7 @@ const LandingPage = () => {
           Comienza Ahora
         </HeroButton>
         <HeroButton
-          component={Link}
+          component={RouterLink}
           to="/about"
           variant="outlined"
           sx={{
@@ -186,7 +139,7 @@ const LandingPage = () => {
           ¿Listo para dar el siguiente paso?
         </Typography>
         <HeroButton
-          component={Link}
+          component={RouterLink}
           to="/register"
           variant="contained"
           sx={{
@@ -226,15 +179,15 @@ const LandingPage = () => {
                 Enlaces
               </Typography>
               <Box sx={{ '& > *': { mr: 2 } }}>
-                <Link to="/about" style={{ color: 'white' }}>
+                <RouterLink to="/about" style={{ color: 'white' }}>
                   Sobre Nosotros
-                </Link>
-                <Link to="/privacy" style={{ color: 'white' }}>
+                </RouterLink>
+                <RouterLink to="/privacy" style={{ color: 'white' }}>
                   Privacidad
-                </Link>
-                <Link to="/terms" style={{ color: 'white' }}>
+                </RouterLink>
+                <RouterLink to="/terms" style={{ color: 'white' }}>
                   Términos
-                </Link>
+                </RouterLink>
               </Box>
             </Grid>
           </Grid>
