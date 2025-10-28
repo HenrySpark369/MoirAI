@@ -13,7 +13,7 @@ class Settings(BaseSettings):
     # Base configuration
     PROJECT_NAME: str = "MoirAI - UNRC Job Matching Platform"
     VERSION: str = "1.0.0"
-    API_V1_STR: str = "/api/v1"
+    API_V1_STR: str = "/api"  # Cambiado para coincidir con el frontend
     
     # Database
     DATABASE_URL: str = Field(

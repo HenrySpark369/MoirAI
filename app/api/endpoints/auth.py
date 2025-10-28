@@ -10,7 +10,7 @@ import json
 from app.core.database import get_session
 from app.models import Student, Company, ApiKey, AuditLog
 from app.schemas import (
-    UserRegister, UserLoginResponse, ApiKeyCreate, ApiKeyCreatedResponse,
+    UserRegister, UserLoginResponse, UserResponse, ApiKeyCreate, ApiKeyCreatedResponse,
     ApiKeyResponse, ApiKeysList, UserContext, BaseResponse
 )
 from app.services.api_key_service import api_key_service
@@ -30,13 +30,13 @@ async def register_user(
     Crea el perfil del usuario según su rol y genera una API key personal.
     """
     # Verificar si el email ya existe
-    existing_student = session.exec(
+    existing_student = session.execute(
         select(Student).where(Student.email == user_data.email)
-    ).first()
+    ).scalar_one_or_none()
     
-    existing_company = session.exec(
+    existing_company = session.execute(
         select(Company).where(Company.email == user_data.email)
-    ).first()
+    ).scalar_one_or_none()
     
     if existing_student or existing_company:
         raise HTTPException(
@@ -47,10 +47,14 @@ async def register_user(
     # Crear usuario según el rol
     user_id = None
     
+    # Hash de la contraseña
+    password_hash = AuthService.get_password_hash(user_data.password)
+    
     if user_data.role == "student":
         student = Student(
             name=user_data.name,
             email=user_data.email,
+            password_hash=password_hash,
             program=user_data.program,
             consent_data_processing=True,
             skills="[]",
@@ -66,6 +70,7 @@ async def register_user(
         company = Company(
             name=user_data.name,
             email=user_data.email,
+            password_hash=password_hash,
             industry=user_data.industry,
             size=user_data.company_size,
             location=user_data.location,
@@ -110,15 +115,26 @@ async def register_user(
     session.add(audit_log)
     session.commit()
     
-    return UserLoginResponse(
-        user_id=user_id,
+    # Generar token JWT
+    token_data = {
+        "sub": user_data.email,
+        "role": user_data.role,
+        "user_id": user_id
+    }
+    access_token = AuthService.create_access_token(token_data)
+
+    # Construir respuesta
+    user_response = UserResponse(
+        id=user_id,
         name=user_data.name,
         email=user_data.email,
-        role=user_data.role,
-        api_key=api_key_response.api_key,
-        key_id=api_key_response.key_info.key_id,
-        expires_at=api_key_response.key_info.expires_at,
-        scopes=api_key_response.key_info.scopes
+        role=user_data.role
+    )
+
+    return UserLoginResponse(
+        token=access_token,
+        user=user_response,
+        api_key=api_key_response.key
     )
 
 

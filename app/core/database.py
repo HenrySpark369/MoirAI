@@ -13,12 +13,12 @@ engine = create_engine(
 )
 
 
-def create_db_and_tables():
+async def create_db_and_tables():
     """Crear todas las tablas de la base de datos"""
     SQLModel.metadata.create_all(engine)
 
 
-def get_session():
+async def get_session():
     """Dependency para obtener sesión de base de datos"""
-    with Session(engine) as session:
+    async with Session(engine) as session:
         yield session

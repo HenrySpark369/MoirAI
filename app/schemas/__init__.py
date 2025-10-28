@@ -215,6 +215,7 @@ class UserRegister(BaseModel):
     """Esquema para registro de usuario"""
     name: str = Field(..., min_length=1, max_length=100)
     email: EmailStr
+    password: str = Field(..., min_length=8, description="Contraseña del usuario")
     role: str = Field(..., pattern="^(student|company|admin)$")
     # Campos específicos por rol
     program: Optional[str] = Field(None, max_length=100, description="Para estudiantes")
@@ -223,14 +224,18 @@ class UserRegister(BaseModel):
     location: Optional[str] = Field(None, max_length=100, description="Para empresas")
 
 
-class UserLoginResponse(BaseModel):
-    """Respuesta de login exitoso"""
-    user_id: int
+class UserResponse(BaseModel):
+    """Datos del usuario"""
+    id: int
     name: str
     email: str
     role: str
-    api_key: str
-    key_id: str
+
+class UserLoginResponse(BaseModel):
+    """Respuesta de login exitoso"""
+    token: str = Field(..., description="JWT token para autenticación")
+    user: UserResponse = Field(..., description="Datos del usuario")
+    api_key: str = Field(..., description="API key para acceso a endpoints")
     expires_at: Optional[datetime] = None
     scopes: List[str] = []
 

@@ -13,6 +13,7 @@ class Student(SQLModel, table=True):
     id: Optional[int] = Field(default=None, primary_key=True)
     name: str = Field(max_length=100, description="Nombre completo del estudiante")
     email: str = Field(unique=True, max_length=100, description="Email institucional")
+    password_hash: str = Field(description="Hash de la contraseña")
     program: Optional[str] = Field(max_length=100, description="Programa académico")
     
     # Datos de privacidad y consentimiento (LFPDPPP)
@@ -38,6 +39,7 @@ class Company(SQLModel, table=True):
     id: Optional[int] = Field(default=None, primary_key=True)
     name: str = Field(max_length=100, description="Nombre de la empresa")
     email: str = Field(unique=True, max_length=100, description="Email de contacto")
+    password_hash: str = Field(description="Hash de la contraseña")
     industry: Optional[str] = Field(max_length=50, description="Sector industrial")
     size: Optional[str] = Field(max_length=20, description="Tamaño de empresa (startup, pequeña, mediana, grande)")
     location: Optional[str] = Field(max_length=100, description="Ubicación principal")
