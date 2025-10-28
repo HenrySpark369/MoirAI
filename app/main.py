@@ -23,7 +23,7 @@ app = FastAPI(
     description="""
     **MoirAI - Plataforma de Matching Laboral UNRC**
     
-    API RESTful para conectar estudiantes de la Universidad Nacional de Río Cuarto 
+    API RESTful para conectar estudiantes de la Universidad Nacional Rosario Castellanos 
     con oportunidades laborales mediante análisis inteligente de perfiles y matchmaking automatizado.
     
     ## Características principales:
@@ -53,8 +53,8 @@ app = FastAPI(
     """,
     contact={
         "name": "UNRC - Ciencia de Datos para Negocios",
-        "url": "https://www.ing.unrc.edu.ar/",
-        "email": "contacto@ing.unrc.edu.ar"
+        "url": "https://www.ing.unrc.edu.mx/",
+        "email": "contacto@ing.unrc.edu.mx"
     },
     license_info={
         "name": "Apache License, Version 2.0",
@@ -186,7 +186,7 @@ async def api_info():
             "admin": "/api/v1/admin - Panel administrativo"
         },
         "documentation": "/docs",
-        "contact": "contacto@ing.unrc.edu.ar"
+        "contact": "contacto@ing.unrc.edu.mx"
     }
 
 
@@ -215,7 +215,7 @@ async def compliance_info():
             "Ley Federal de Protección de Datos Personales en Posesión de Particulares (LFPDPPP)",
             "ISO/IEC 27001 - Gestión de Seguridad de la Información"
         ],
-        "contact_dpo": "dpo@unrc.edu.ar",
+        "contact_dpo": "dpo@unrc.edu.mx",
         "last_updated": "2025-01-15",
         "notice": "Esta información es de referencia. Consulte documentos legales oficiales para términos vinculantes."
     }

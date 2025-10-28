@@ -41,7 +41,7 @@ brew install git
 ### 1. Clonar y Preparar Proyecto
 ```bash
 # Clonar repositorio
-git clone https://github.com/unrc/moirai.git
+git clone https://github.com/HenrySpark369/MoirAI.git
 cd moirai
 
 # Crear entorno virtual
@@ -378,4 +378,4 @@ Si encuentra problemas durante la instalación:
 1. **Verificar logs**: Revisar output de uvicorn
 2. **Consultar documentación**: README.md principal
 3. **Reportar issues**: GitHub Issues del proyecto
-4. **Contacto**: contacto@ing.unrc.edu.ar
+4. **Contacto**: contacto@ing.unrc.edu.mx

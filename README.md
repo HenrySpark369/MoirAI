@@ -616,7 +616,7 @@ El sistema permite buscar empleos en OCC.com.mx, registrar aplicaciones y config
 
 ## 📄 Licencia
 
-Este proyecto está licenciado bajo la Licencia MIT - vea el archivo [LICENSE](LICENSE) para detalles.
+Este proyecto está licenciado bajo la Licencia Apache 2.0 - vea el archivo [LICENSE](LICENSE) para detalles.
 
 ## 🙏 Agradecimientos
 
@@ -797,7 +797,7 @@ curl -X GET "http://localhost:8000/api/v1/auth/me" \
 {
   "user_id": 123,
   "name": "María García",
-  "email": "maria.garcia@estudiantes.unrc.edu.ar",
+  "email": "maria.garcia@estudiantes.unrc.edu.mx",
   "role": "student",
   "api_key": "stu_p6iaDFfLV_dNswLfYN_cyA_vDA_7mo2kL-ngCQm6XmXHrVKpF7Q6tv_fGdcgI1P-XQ",
   "key_id": "p6iaDFfLV_dNswLfYN_cyA",
@@ -820,7 +820,7 @@ curl -X POST "http://localhost:8000/api/v1/students/" \
   -H "Content-Type: application/json" \
   -d '{
     "name": "Juan Pérez",
-    "email": "juan.perez@estudiantes.unrc.edu.ar",
+    "email": "juan.perez@estudiantes.unrc.edu.mx",
     "program": "Ingeniería en Sistemas",
     "consent_data_processing": true
   }'
@@ -831,7 +831,7 @@ curl -X POST "http://localhost:8000/api/v1/students/" \
 ```bash
 curl -X POST "http://localhost:8000/api/v1/students/upload_resume" \
   -H "X-API-Key: STUDENT_KEY" \
-  -F 'meta={"name":"María García","email":"maria.garcia@estudiantes.unrc.edu.ar","program":"Licenciatura en Informática"}' \
+  -F 'meta={"name":"María García","email":"maria.garcia@estudiantes.unrc.edu.mx","program":"Licenciatura en Informática"}' \
   -F 'file=@curriculum.pdf'
 ```
 
@@ -900,7 +900,7 @@ curl -X POST "http://localhost:8000/job-scraping/search" \
 {
   "id": 123,
   "name": "Juan Pérez",
-  "email": "juan.perez@estudiantes.unrc.edu.ar",
+  "email": "juan.perez@estudiantes.unrc.edu.mx",
   "program": "Ingeniería en Sistemas",
   "skills": ["Python", "JavaScript", "SQL"],
   "soft_skills": ["Trabajo en equipo", "Liderazgo"],
@@ -948,4 +948,4 @@ Las contribuciones son bienvenidas. Por favor, sigue estos pasos:
 
 ## Licencia
 
-Este proyecto está bajo la Licencia MIT. Consulta el archivo `LICENSE` para más detalles.
+Este proyecto está bajo la Licencia Apache 2.0. Consulta el archivo `LICENSE` para más detalles.
