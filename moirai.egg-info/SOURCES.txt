@@ -1,0 +1,16 @@
+LICENSE
+README.md
+pyproject.toml
+setup.cfg
+app/__init__.py
+app/main.py
+app/models/__init__.py
+app/models/job_scraping.py
+app/models/user.py
+app/providers/__init__.py
+app/schemas/__init__.py
+moirai.egg-info/PKG-INFO
+moirai.egg-info/SOURCES.txt
+moirai.egg-info/dependency_links.txt
+moirai.egg-info/top_level.txt
+tests/test_nlp_service.py

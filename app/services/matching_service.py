@@ -130,10 +130,24 @@ class MatchingService:
         student_skills = json.loads(student.skills or "[]")
         student_projects = json.loads(student.projects or "[]")
         
-        # Usar el servicio NLP para calcular score base
+        # --- Nuevo: definir pesos para nlp_service, priorizando proyectos (experiencia)
+        # Pesos base: projects tiene mayor importancia (experiencia)
+        weights = {"skills": 0.35, "projects": 0.65}
+        # Ajuste dinámico: si el estudiante tiene muchos proyectos, aumentar peso de projects
+        num_projects = len([p for p in student_projects if p])
+        if num_projects >= 3:
+            weights["projects"] += 0.10
+            weights["skills"] -= 0.10
+        # Normalizar por si acaso
+        total_w = weights["skills"] + weights["projects"]
+        if total_w > 0:
+            weights["skills"] /= total_w
+            weights["projects"] /= total_w
+
+        # Usar el servicio NLP para calcular score base (pasa los pesos)
         job_description = f"{job.title} {job.description or ''}"
         base_score, match_details = nlp_service.calculate_match_score(
-            student_skills, student_projects, job_description
+            student_skills, student_projects, job_description, weights=weights
         )
         
         # Aplicar factores de boost
@@ -172,6 +186,7 @@ class MatchingService:
         return final_score, {
             **match_details,
             "base_score": base_score,
+            "weights_used_for_nlp": weights,
             "boost_applied": total_boost,
             "boost_details": boost_details,
             "final_score": final_score

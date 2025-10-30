@@ -1,3 +1,36 @@
+# MoirAI — instrucciones de desarrollo y tests
+
+Pequeñas instrucciones para ejecutar los tests y trabajar localmente con el paquete `app`.
+
+Requisitos (macOS): Python 3.9+ y pip. Se recomienda crear un virtualenv.
+
+Instalación rápida (editable):
+
+```zsh
+# crear entorno (opcional)
+python -m venv .venv
+source .venv/bin/activate
+
+# instalar dependencias listadas en requirements.txt
+pip install -r requirements.txt
+
+# instalar el paquete en modo editable para que `app` sea importable
+pip install -e .
+```
+
+Ejecutar tests:
+
+```zsh
+# si instalaste el paquete: pytest
+pytest -q
+
+# alternativa si no instalaste el paquete (usa PYTHONPATH):
+PYTHONPATH=. pytest -q
+```
+
+Notas:
+- `pyproject.toml` y `setup.cfg` permiten instalar localmente con `pip install -e .`.
+- Añade `scikit-learn` y `numpy` en `requirements.txt` para obtener TF-IDF real si lo deseas (ya están incluidos en este repositorio).
 # MoirAI - Plataforma de Matching Laboral UNRC
 
 **API RESTful inteligente para conectar estudiantes de la Universidad Nacional Rosario Castellanos con oportunidades laborales mediante análisis NLP y algoritmos de matchmaking.**
