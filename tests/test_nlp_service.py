@@ -1,4 +1,3 @@
-import pytest
 
 from app.services.nlp_service import NLPService
 
