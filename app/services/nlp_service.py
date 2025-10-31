@@ -113,10 +113,6 @@ class NLPService:
                 unique.append(m)
         return unique
                 continue
-            it_clean = _clean_text(it)
-            # coincidencia por frase completa o tokens
-            if it_clean in txt:
-                matches.append(it)
             else:
 
     def calculate_match_score(
