@@ -118,11 +118,6 @@ class NLPService:
             if it_clean in txt:
                 matches.append(it)
             else:
-                for tok in it_clean.split():
-                    if tok and tok in txt:
-                        matches.append(it)
-                        break
-        return matches
 
     def calculate_match_score(
         self,
