@@ -125,38 +125,79 @@ class NLPService:
     ) -> Tuple[float, Dict]:
         """
         Devuelve (base_score [0..1], details).
-        - student_skills: lista de skills (strings)
-        - student_projects: lista de descripciones de proyectos (strings)
-        - job_description: texto del job (title + description)
-        - weights: opcional para ajustar importancias {"skills":0.6, "projects":0.4}
+        - Valida y trunca inputs para proteger contra entradas maliciosas/excesivas.
+        - Weights opcional para ajustar importancias {"skills":0.6, "projects":0.4}
         """
+        # -------- Validación y truncado de inputs ----------
+        if student_skills is None:
+            student_skills = []
+        if student_projects is None:
+            student_projects = []
+
+        # Forzar listas de strings y truncar cada elemento para evitar DoS/entradas gigantes
+        student_skills = [str(s)[:MAX_SKILL_LEN].strip() for s in student_skills if s]
+        student_projects = [str(p)[:MAX_PROJECT_LEN].strip() for p in student_projects if p]
+        job_text_raw = str(job_description or "")[:MAX_JOB_DESC_LEN]
+
+        # Si no hay datos para comparar, devolver resultado vacío rápido
+        if not job_text_raw and not student_skills and not student_projects:
+            details_empty = {
+                "skill_similarity": 0.0,
+                "project_similarity": 0.0,
+                "weights_used": {"skills": 0.0, "projects": 0.0},
+                "matching_skills": [],
+                "matching_projects": []
+            }
+            return 0.0, details_empty
+
+        # -------- Pesos (validate/normalize) ----------
         w = self.default_weights.copy()
         if weights:
-            w.update(weights)
-        # normalizar
+            # proteger contra valores no numéricos y sólo aceptar claves esperadas
+            for k in ("skills", "projects"):
+                if k in weights:
+                    try:
+                        w[k] = float(weights[k])
+                    except Exception:
+                        # ignorar valores inválidos y conservar default
+                        pass
+        # Normalizar para sumar 1.0 (proteger contra división por 0)
         total = max(1e-9, w.get("skills", 0) + w.get("projects", 0))
         w["skills"] = w.get("skills", 0) / total
         w["projects"] = w.get("projects", 0) / total
 
+        # -------- Preparar textos para similitud ----------
         skills_text = self._list_to_text(student_skills)
         projects_text = self._list_to_text(student_projects)
-        job_text = _clean_text(job_description or "")
+        job_clean = _clean_text(job_text_raw)
 
-        skill_sim = self._tfidf_cosine(skills_text, job_text) if skills_text else 0.0
-        project_sim = self._tfidf_cosine(projects_text, job_text) if projects_text else 0.0
+        # -------- Calcular similitudes (TF-IDF o fallback) ----------
+        skill_sim = self._tfidf_cosine(skills_text, job_clean) if skills_text else 0.0
+        project_sim = self._tfidf_cosine(projects_text, job_clean) if projects_text else 0.0
 
         base_score = (skill_sim * w["skills"]) + (project_sim * w["projects"])
         base_score = max(0.0, min(base_score, 1.0))
 
-        matching_skills = self._matching_items(student_skills, job_text)
-        matching_projects = self._matching_items(student_projects, job_text)
+        # -------- Matching por items (deduplicado dentro de la función) ----------
+        matching_skills = self._matching_items(student_skills, job_clean)
+        matching_projects = self._matching_items(student_projects, job_clean)
+
+        # -------- Truncar elementos devueltos para evitar fuga de texto largo ----------
+        def _truncate_return_list(lst):
+            out = []
+            for it in (lst or []):
+                s = str(it) or ""
+                if len(s) > MAX_RETURN_ITEM_LEN:
+                    s = s[:MAX_RETURN_ITEM_LEN] + "..."
+                out.append(s)
+            return out
 
         details = {
-            "skill_similarity": round(skill_sim, 4),
-            "project_similarity": round(project_sim, 4),
+            "skill_similarity": round(float(skill_sim), 6),
+            "project_similarity": round(float(project_sim), 6),
             "weights_used": w,
-            "matching_skills": matching_skills,
-            "matching_projects": matching_projects
+            "matching_skills": _truncate_return_list(matching_skills),
+            "matching_projects": _truncate_return_list(matching_projects),
         }
 
         return base_score, details
