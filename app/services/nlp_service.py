@@ -37,7 +37,6 @@ def _clean_text(text: str) -> str:
     return txt
 
 # Asegúrate de que tfidf_config usa stop_words = None
-self.tfidf_config = {"ngram_range": (1, 2), "stop_words": None}
 
 
 class NLPService:
