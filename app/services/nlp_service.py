@@ -93,6 +93,27 @@ class NLPService:
             if not it:
                 continue
             it_clean = _clean_text(it)
+            if not it_clean:
+                continue
+            # coincidencia por frase completa
+            if it_clean in txt:
+                matches.append(it)
+                continue
+            # coincidencia por token (primer token que aparezca)
+            for tok in it_clean.split():
+                if tok and tok in txt:
+                    matches.append(it)
+                    break
+        # deduplicar preservando orden
+        seen = set()
+        unique = []
+        for m in matches:
+            if m not in seen:
+                seen.add(m)
+                unique.append(m)
+        return unique
+                continue
+            it_clean = _clean_text(it)
             # coincidencia por frase completa o tokens
             if it_clean in txt:
                 matches.append(it)
