@@ -30,7 +30,6 @@ def _clean_text(text: str) -> str:
     txt = "".join(c for c in txt if not unicodedata.combining(c))
 
     # Mantener solo letras, números y espacios
-    import re
     txt = re.sub(r"[^a-z0-9\s]", " ", txt)
     txt = re.sub(r"\s+", " ", txt).strip()
     return txt
