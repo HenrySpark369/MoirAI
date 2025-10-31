@@ -26,7 +26,6 @@ def _clean_text(text: str) -> str:
         txt = txt.replace(k, v)
 
     # Normalizar unicode y eliminar acentos
-    import unicodedata
     txt = unicodedata.normalize("NFKD", txt)
     txt = "".join(c for c in txt if not unicodedata.combining(c))
 
