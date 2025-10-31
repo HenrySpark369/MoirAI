@@ -3,12 +3,41 @@ import re
 import unicodedata
 
 
+# Reemplaza o añade al inicio del módulo (funciones y constantes):
+MAX_SKILL_LEN = 200
+MAX_PROJECT_LEN = 2000
+MAX_JOB_DESC_LEN = 50000
+MAX_RETURN_ITEM_LEN = 300
+
 def _clean_text(text: str) -> str:
-    txt = (text or "").lower()
+    if not text:
+        return ""
+    txt = str(text).strip().lower()
+
+    # Mapear tokens técnicos antes de quitar caracteres especiales
+    technical_map = {
+        "c++": "cpp",
+        "c#": "csharp",
+        "node.js": "nodejs",
+        "nodejs": "nodejs",
+        " r ": " r ",  # preservar token r
+    }
+    for k, v in technical_map.items():
+        txt = txt.replace(k, v)
+
+    # Normalizar unicode y eliminar acentos
+    import unicodedata
     txt = unicodedata.normalize("NFKD", txt)
     txt = "".join(c for c in txt if not unicodedata.combining(c))
+
+    # Mantener solo letras, números y espacios
+    import re
     txt = re.sub(r"[^a-z0-9\s]", " ", txt)
-    return re.sub(r"\s+", " ", txt).strip()
+    txt = re.sub(r"\s+", " ", txt).strip()
+    return txt
+
+# Asegúrate de que tfidf_config usa stop_words = None
+self.tfidf_config = {"ngram_range": (1, 2), "stop_words": None}
 
 
 class NLPService:
