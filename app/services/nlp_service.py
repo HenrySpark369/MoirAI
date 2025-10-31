@@ -64,26 +64,27 @@ class NLPService:
         b = _clean_text(b)
         if not a or not b:
             return 0.0
-
-        # Intentar importación lazy de sklearn para evitar problemas en entornos sin dependencias
+    
         try:
             from sklearn.feature_extraction.text import TfidfVectorizer
             from sklearn.metrics.pairwise import cosine_similarity
             vec = TfidfVectorizer(**self.tfidf_config).fit_transform([a, b])
             sim = cosine_similarity(vec[0:1], vec[1:2])[0][0]
-            return float(sim)
+            return max(0.0, min(float(sim), 1.0))
         except Exception:
-            # Fallback: coseno sobre conteos (bag-of-words)
+            # Fallback bag-of-words + coseno
+            import math
             a_tokens = a.split()
             b_tokens = b.split()
             vocab = list(set(a_tokens + b_tokens))
+            if not vocab:
+                return 0.0
             def vec_counts(tokens):
                 return [tokens.count(t) for t in vocab]
             va = vec_counts(a_tokens)
             vb = vec_counts(b_tokens)
-            dot = sum(x * y for x, y in zip(va, vb))
-            import math
-            denom = math.sqrt(sum(x * x for x in va)) * math.sqrt(sum(y * y for y in vb))
+            dot = sum(x*y for x,y in zip(va, vb))
+            denom = math.sqrt(sum(x*x for x in va)) * math.sqrt(sum(y*y for y in vb))
             return float(dot/denom) if denom else 0.0
 
     def _matching_items(self, items: List[str], text: str) -> List[str]:
