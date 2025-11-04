@@ -26,7 +26,7 @@ class AuthService:
     """Servicio de autenticación y autorización"""
     
     @staticmethod
-    async def get_current_user(
+    def get_current_user(
         request: Request,
         x_api_key: Optional[str] = Header(default=None),
         session: Session = Depends(get_session)
@@ -58,7 +58,7 @@ class AuthService:
             user_context = AuthService._check_static_api_keys(x_api_key)
         
         # Registrar actividad en log de auditoría
-        await AuthService._log_activity(
+        AuthService._log_activity(
             session=session,
             actor_role=user_context.role,
             actor_id=user_context.email or str(user_context.user_id),
@@ -121,7 +121,7 @@ class AuthService:
         return request.client.host if request.client else "unknown"
     
     @staticmethod
-    async def _log_activity(
+    def _log_activity(
         session: Session,
         actor_role: str,
         actor_id: Optional[str],
@@ -263,10 +263,7 @@ def get_current_user(
     session: Session = Depends(get_session)
 ) -> UserContext:
     """Función de conveniencia para obtener usuario actual"""
-    import asyncio
-    return asyncio.run(
-        auth_service.get_current_user(request, x_api_key, session)
-    )
+    return auth_service.get_current_user(request, x_api_key, session)
 
 
 # Aliases para compatibilidad con código existente

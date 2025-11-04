@@ -29,6 +29,9 @@ class Student(SQLModel, table=True):
     email: str = Field(unique=True, max_length=100, description="Email institucional")
     program: Optional[str] = Field(max_length=100, description="Programa académico")
     
+    # Password hash (opcional - para autenticación futura)
+    password_hash: Optional[str] = Field(default=None, max_length=255, description="Hash de contraseña")
+    
     # Datos de privacidad y consentimiento (LFPDPPP)
     consent_data_processing: bool = Field(default=True, description="Consentimiento para procesamiento de datos")
     consent_date: Optional[datetime] = Field(default_factory=datetime.utcnow)
@@ -55,6 +58,9 @@ class Company(SQLModel, table=True):
     industry: Optional[str] = Field(max_length=50, description="Sector industrial")
     size: Optional[str] = Field(max_length=20, description="Tamaño de empresa (startup, pequeña, mediana, grande)")
     location: Optional[str] = Field(max_length=100, description="Ubicación principal")
+    
+    # Password hash (opcional - para autenticación futura)
+    password_hash: Optional[str] = Field(default=None, max_length=255, description="Hash de contraseña")
     
     # Estado y verificación
     is_verified: bool = Field(default=False, description="Empresa verificada por UNRC")

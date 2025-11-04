@@ -20,7 +20,7 @@ router = APIRouter(prefix="/auth", tags=["authentication"])
 
 
 @router.post("/register", response_model=UserLoginResponse, status_code=201)
-async def register_user(
+def register_user(
     user_data: UserRegister,
     session: Session = Depends(get_session)
 ):
@@ -123,7 +123,7 @@ async def register_user(
 
 
 @router.post("/api-keys", response_model=ApiKeyCreatedResponse)
-async def create_api_key(
+def create_api_key(
     key_data: ApiKeyCreate,
     session: Session = Depends(get_session),
     current_user: UserContext = Depends(AuthService.get_current_user)
@@ -184,7 +184,7 @@ async def create_api_key(
 
 
 @router.get("/api-keys", response_model=ApiKeysList)
-async def list_api_keys(
+def list_api_keys(
     session: Session = Depends(get_session),
     current_user: UserContext = Depends(AuthService.get_current_user)
 ):
@@ -212,7 +212,7 @@ async def list_api_keys(
 
 
 @router.delete("/api-keys/{key_id}", response_model=BaseResponse)
-async def revoke_api_key(
+def revoke_api_key(
     key_id: str,
     session: Session = Depends(get_session),
     current_user: UserContext = Depends(AuthService.get_current_user)
@@ -259,7 +259,7 @@ async def revoke_api_key(
 
 
 @router.get("/me", response_model=dict)
-async def get_current_user_info(
+def get_current_user_info(
     current_user: UserContext = Depends(AuthService.get_current_user)
 ):
     """
@@ -282,7 +282,7 @@ async def get_current_user_info(
 
 
 @router.post("/cleanup-expired-keys", response_model=BaseResponse)
-async def cleanup_expired_keys(
+def cleanup_expired_keys(
     session: Session = Depends(get_session),
     current_user: UserContext = Depends(AuthService.get_current_user)
 ):

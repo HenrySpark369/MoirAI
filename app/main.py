@@ -88,7 +88,7 @@ app.add_middleware(
 
 # Event handlers
 @app.on_event("startup")
-async def startup_event():
+def startup_event():
     """Inicializar aplicación"""
     # Crear tablas de base de datos
     create_db_and_tables()
@@ -98,7 +98,7 @@ async def startup_event():
 
 
 @app.on_event("shutdown")
-async def shutdown_event():
+def shutdown_event():
     """Limpiar recursos al cerrar"""
     print(f"🛑 {settings.PROJECT_NAME} detenido")
 
