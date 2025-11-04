@@ -39,33 +39,30 @@ class TestDatabaseAsyncSyncConsistency:
 class TestPasswordHashMigration:
     """Issue 2: Verify password_hash fields have defaults if they exist"""
     
+    def _check_model_password_hash(self, model_name: str, models_content: str) -> None:
+        """Helper to check if a model's password_hash field is optional"""
+        # Find model definition
+        model_pattern = rf'class {model_name}\(.*?\):(.*?)(?=class\s|\Z)'
+        model_match = re.search(model_pattern, models_content, re.DOTALL)
+        
+        if model_match:
+            model_content = model_match.group(1)
+            if 'password_hash' in model_content.lower():
+                # Must have default or Optional
+                assert ('default=' in model_content or 'Optional' in model_content), \
+                    f"{model_name}: password_hash must be Optional or have a default value"
+    
     def test_student_model_password_hash_optional(self):
         """If Student has password_hash, it must be Optional with default"""
         models_file = Path(__file__).parent.parent / "app" / "models" / "__init__.py"
         content = models_file.read_text()
-        
-        # Find Student model
-        student_match = re.search(r'class Student\(.*?\):(.*?)(?=class\s|\Z)', content, re.DOTALL)
-        if student_match:
-            model_content = student_match.group(1)
-            if 'password_hash' in model_content.lower():
-                # Must have default or Optional
-                assert ('default=' in model_content or 'Optional' in model_content), \
-                    "password_hash must be Optional or have a default value"
+        self._check_model_password_hash("Student", content)
     
     def test_company_model_password_hash_optional(self):
         """If Company has password_hash, it must be Optional with default"""
         models_file = Path(__file__).parent.parent / "app" / "models" / "__init__.py"
         content = models_file.read_text()
-        
-        # Find Company model
-        company_match = re.search(r'class Company\(.*?\):(.*?)(?=class\s|\Z)', content, re.DOTALL)
-        if company_match:
-            model_content = company_match.group(1)
-            if 'password_hash' in model_content.lower():
-                # Must have default or Optional
-                assert ('default=' in model_content or 'Optional' in model_content), \
-                    "password_hash must be Optional or have a default value"
+        self._check_model_password_hash("Company", content)
 
 
 class TestAuthEndpointCorrectness:
@@ -108,13 +105,14 @@ class TestSecretsConfiguration:
         config_file = Path(__file__).parent.parent / "app" / "core" / "config.py"
         content = config_file.read_text()
         
-        # Check SECRET_KEY uses Field() for environment loading
-        secret_key_pattern = r'SECRET_KEY.*?Field\('
-        assert re.search(secret_key_pattern, content, re.DOTALL), \
+        # Check SECRET_KEY uses Field() for environment loading (more specific pattern)
+        secret_key_pattern = r'SECRET_KEY\s*:\s*str\s*=\s*Field\('
+        assert re.search(secret_key_pattern, content), \
             "SECRET_KEY should use Field() to load from environment"
         
-        # Should NOT have hardcoded values like SECRET_KEY = "some-secret-123"
-        hardcoded_pattern = r'SECRET_KEY\s*[:=]\s*["\'][a-zA-Z0-9_\-]{20,}'
+        # Should NOT have hardcoded values like SECRET_KEY: str = "some-secret-123"
+        # This pattern specifically looks for assignment to a string literal
+        hardcoded_pattern = r'SECRET_KEY\s*:\s*str\s*=\s*["\'][a-zA-Z0-9_\-]{20,}["\']'
         assert not re.search(hardcoded_pattern, content), \
             "SECRET_KEY appears to be hardcoded"
 
@@ -125,15 +123,18 @@ class TestAPICompatibility:
     def test_api_prefix_maintains_compatibility(self):
         """API_V1_STR should be /api/v1 for backward compatibility"""
         config_file = Path(__file__).parent.parent / "app" / "core" / "config.py"
-        content = content = config_file.read_text()
+        content = config_file.read_text()
         
         # Extract API_V1_STR value (handles both old and new pydantic syntax)
         # New syntax: API_V1_STR: str = "/api/v1"
+        api_match_new = re.search(r'API_V1_STR\s*:\s*str\s*=\s*["\']([^"\']+)["\']', content)
         # Old syntax: API_V1_STR = "/api/v1"
-        api_match = re.search(r'API_V1_STR\s*:\s*str\s*=\s*["\']([^"\']+)["\']|API_V1_STR\s*=\s*["\']([^"\']+)["\']', content)
+        api_match_old = re.search(r'API_V1_STR\s*=\s*["\']([^"\']+)["\']', content)
+        
+        api_match = api_match_new or api_match_old
         assert api_match, "API_V1_STR should be defined"
         
-        api_prefix = api_match.group(1) or api_match.group(2)
+        api_prefix = api_match.group(1)
         # Should be /api/v1 or configurable via env
         assert api_prefix == "/api/v1" or "Field(" in content, \
             f"API prefix is '{api_prefix}' which may break compatibility. Should be '/api/v1' or configurable."
