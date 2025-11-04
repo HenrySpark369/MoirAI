@@ -34,8 +34,6 @@ def _clean_text(text: str) -> str:
     txt = re.sub(r"\s+", " ", txt).strip()
     return txt
 
-# Asegúrate de que tfidf_config usa stop_words = None
-
 
 class NLPService:
     """
@@ -47,10 +45,10 @@ class NLPService:
     def __init__(self):
         # Por defecto consideramos proyectos como experiencia con más peso
         self.default_weights = {"skills": 0.35, "projects": 0.65}
-        # Config TF-IDF
+        # Config TF-IDF (stop_words=None para mantener todos los tokens técnicos)
         self.tfidf_config = {
             "ngram_range": (1, 2),
-            "stop_words": "spanish"
+            "stop_words": None
         }
 
     def _list_to_text(self, items: List[str]) -> str:
@@ -61,27 +59,43 @@ class NLPService:
         b = _clean_text(b)
         if not a or not b:
             return 0.0
-    
+
         try:
             from sklearn.feature_extraction.text import TfidfVectorizer
             from sklearn.metrics.pairwise import cosine_similarity
             vec = TfidfVectorizer(**self.tfidf_config).fit_transform([a, b])
             sim = cosine_similarity(vec[0:1], vec[1:2])[0][0]
             return max(0.0, min(float(sim), 1.0))
-        except Exception:
-            # Fallback bag-of-words + coseno
+        except ImportError:
+            # Fallback: TF-IDF MANUAL CON LOGARITMO (consistente)
             import math
             a_tokens = a.split()
             b_tokens = b.split()
             vocab = list(set(a_tokens + b_tokens))
             if not vocab:
                 return 0.0
-            def vec_counts(tokens):
-                return [tokens.count(t) for t in vocab]
-            va = vec_counts(a_tokens)
-            vb = vec_counts(b_tokens)
-            dot = sum(x*y for x,y in zip(va, vb))
-            denom = math.sqrt(sum(x*x for x in va)) * math.sqrt(sum(y*y for y in vb))
+            
+            # Calcular IDF manualmente con ln
+            n_docs = 2
+            idf = {}
+            for term in vocab:
+                df = (1 if term in a_tokens else 0) + (1 if term in b_tokens else 0)
+                idf[term] = math.log(n_docs / max(1, df))
+            
+            # TF-IDF vectors
+            def tfidf_vec(tokens):
+                vec = {}
+                for term in vocab:
+                    tf = tokens.count(term)
+                    vec[term] = tf * idf[term]
+                return vec
+            
+            va = tfidf_vec(a_tokens)
+            vb = tfidf_vec(b_tokens)
+            
+            # Coseno similarity
+            dot = sum(va[t] * vb[t] for t in vocab)
+            denom = math.sqrt(sum(va[t]**2 for t in vocab)) * math.sqrt(sum(vb[t]**2 for t in vocab))
             return float(dot/denom) if denom else 0.0
 
     def _matching_items(self, items: List[str], text: str) -> List[str]:
@@ -110,8 +124,6 @@ class NLPService:
                 seen.add(m)
                 unique.append(m)
         return unique
-                continue
-            else:
 
     def calculate_match_score(
         self,
@@ -202,4 +214,3 @@ class NLPService:
 
 # instancia compartida
 nlp_service = NLPService()
-
