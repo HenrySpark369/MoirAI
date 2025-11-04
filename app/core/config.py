@@ -22,9 +22,12 @@ class Settings(BaseSettings):
     )
     
     # Security
+    # IMPORTANT: SECRET_KEY must be set in environment variables (.env file)
+    # Generate a secure key using: python -c "import secrets; print(secrets.token_urlsafe(32))"
+    # Never commit the actual SECRET_KEY to version control
     SECRET_KEY: str = Field(
         ...,
-        description="Clave secreta para JWT tokens"
+        description="Clave secreta para JWT tokens - REQUERIDA en .env"
     )
     ACCESS_TOKEN_EXPIRE_MINUTES: int = 30
     ALGORITHM: str = "HS256"

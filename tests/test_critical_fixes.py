@@ -18,7 +18,7 @@ def session_fixture():
     """Create a test database session"""
     engine = create_engine(
         "sqlite:///:memory:",
-        connect_args={"check_same_thread": False},
+        connect_args={"check_same_thread": False},  # Consistent with production config
         poolclass=StaticPool,
     )
     SQLModel.metadata.create_all(engine)
