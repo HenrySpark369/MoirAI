@@ -29,8 +29,13 @@ class Settings(BaseSettings):
     ACCESS_TOKEN_EXPIRE_MINUTES: int = 30
     ALGORITHM: str = "HS256"
     
-    # CORS
-    BACKEND_CORS_ORIGINS: List[str] = ["http://localhost:3000", "http://localhost:8080"]
+    # CORS - URLs permitidas para el frontend (configurables via .env)
+    BACKEND_CORS_ORIGINS: List[str] = [
+        "http://localhost:3000", 
+        "http://localhost:8080",
+        "http://localhost:5173",  # Vite default port
+        "http://localhost:5174"   # Vite alternative port
+    ]
     
     # Job Search Providers
     JSEARCH_API_KEY: Optional[str] = None
