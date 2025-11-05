@@ -243,6 +243,10 @@ app.include_router(students.router, prefix=settings.API_V1_STR)
 from app.api.endpoints import job_scraping
 app.include_router(job_scraping.router, prefix=settings.API_V1_STR)
 
+# Gestión de empresas - ✅ IMPLEMENTADO
+from app.api.endpoints import companies
+app.include_router(companies.router, prefix=settings.API_V1_STR)
+
 # TODO: Incluir otros routers cuando estén implementados
 # app.include_router(jobs.router, prefix=settings.API_V1_STR)
 # app.include_router(companies.router, prefix=settings.API_V1_STR)

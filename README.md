@@ -361,12 +361,20 @@ POST   /api/v1/jobs                      # Publicar vacante (empresas)
 GET    /api/v1/jobs/{id}                 # Detalles de trabajo específico
 ```
 
-### Empresas (próximamente)
+### Empresas ✅ COMPLETAMENTE IMPLEMENTADO
 ```
-GET    /api/v1/companies/filter_students # Filtrar estudiantes por criterios
-GET    /api/v1/companies/featured_candidates # Candidatos destacados
-POST   /api/v1/companies                 # Registrar empresa
+POST   /api/v1/companies/                      # Crear empresa
+GET    /api/v1/companies/                      # Listar con filtros
+GET    /api/v1/companies/{id}                  # Obtener perfil
+GET    /api/v1/companies/{id}/search-students  # Buscar candidatos
+
+PUT    /api/v1/companies/{id}                  # Actualizar datos
+PATCH  /api/v1/companies/{id}/verify           # Verificar (admin)
+PATCH  /api/v1/companies/{id}/activate         # Activar/Desactivar
+DELETE /api/v1/companies/{id}                  # Eliminar
 ```
+
+Referencia: [Guía de Usuario](docs/COMPANIES_USER_GUIDE.md) | [API Reference](docs/COMPANIES_API_REFERENCE.md)
 
 ### Administración (próximamente)
 ```
