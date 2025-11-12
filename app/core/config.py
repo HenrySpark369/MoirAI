@@ -15,10 +15,28 @@ class Settings(BaseSettings):
     VERSION: str = "1.0.0"
     API_V1_STR: str = "/api/v1"
     
-    # Database
+    # Database - Core Configuration
     DATABASE_URL: str = Field(
         default="sqlite:///./moirai.db",
         description="URL de conexión a la base de datos"
+    )
+    
+    # Database - Connection Pooling (PostgreSQL)
+    DB_POOL_SIZE: int = Field(
+        default=20,
+        description="Número de conexiones a mantener en el pool"
+    )
+    DB_MAX_OVERFLOW: int = Field(
+        default=40,
+        description="Conexiones adicionales permitidas cuando pool está full"
+    )
+    DB_POOL_RECYCLE: int = Field(
+        default=3600,
+        description="Tiempo en segundos para reciclar conexiones"
+    )
+    DB_POOL_PRE_PING: bool = Field(
+        default=True,
+        description="Probar conexión antes de usarla"
     )
     
     # Security

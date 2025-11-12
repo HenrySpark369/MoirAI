@@ -10,7 +10,7 @@ import json
 from datetime import datetime, timedelta
 
 from app.core.database import get_session
-from app.models import Student, AuditLog
+from app.models import Student, AuditLog, Company
 from app.schemas import (
     StudentProfile, StudentCreate, StudentUpdate, StudentSkillsUpdate, ResumeUploadRequest,
     ResumeAnalysisResponse, UserContext, BaseResponse, PaginatedResponse,
@@ -884,11 +884,40 @@ async def search_students_by_skills(
     current_user: UserContext = Depends(AuthService.get_current_user)
 ):
     """
-    Buscar estudiantes por habilidades específicas
+    Buscar estudiantes por habilidades específicas (búsqueda integrada de matching)
     
     Historia de usuario: Como empresa, quiero buscar estudiantes que tengan
     habilidades específicas que necesito para mis proyectos.
+    
+    🔒 Autorización:
+    - Solo empresas verificadas y administradores
+    - Los estudiantes no pueden usar este endpoint
+    
+    📊 Respuesta:
+    - Lista de estudiantes públicos ordenados por número de coincidencias
+    - Cada estudiante incluye habilidades, proyectos y programa
+    
+    💡 Algoritmo:
+    - Búsqueda case-insensitive en habilidades técnicas y blandas
+    - Ordenamiento por relevancia (más coincidencias primero)
+    - Paginación mediante limit
     """
+    # Autorización: solo empresas verificadas y admins
+    if current_user.role not in ["company", "admin"]:
+        raise HTTPException(
+            status_code=403,
+            detail="Solo empresas verificadas pueden buscar por habilidades"
+        )
+    
+    # Si es empresa, verificar que está verificada
+    if current_user.role == "company":
+        company = session.get(Company, current_user.user_id)
+        if not company or not company.is_verified:
+            raise HTTPException(
+                status_code=403,
+                detail="La empresa debe estar verificada para buscar candidatos"
+            )
+    
     students = session.exec(
         select(Student).where(Student.is_active == True)
     ).all()
