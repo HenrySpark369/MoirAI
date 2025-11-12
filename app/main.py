@@ -247,9 +247,15 @@ app.include_router(job_scraping.router, prefix=settings.API_V1_STR)
 from app.api.endpoints import companies
 app.include_router(companies.router, prefix=settings.API_V1_STR)
 
-# TODO: Incluir otros routers cuando estén implementados
-# app.include_router(jobs.router, prefix=settings.API_V1_STR)
-# app.include_router(companies.router, prefix=settings.API_V1_STR)
+# Module 2: Encryption Integration - Job Postings con Encriptación - ✅ IMPLEMENTADO
+# Include jobs router (con autocomplete consolidado de suggestions)
+from app.api.endpoints import jobs
+app.include_router(jobs.router, prefix=settings.API_V1_STR)
+
+# NOTE: suggestions.py ha sido consolidado en jobs.py (autocomplete endpoints)
+# NOTE: matching.py ha sido consolidado en students.py (búsqueda por skills)
+
+# TODO: Otros routers opcionales
 # app.include_router(matching.router, prefix=settings.API_V1_STR)
 # app.include_router(admin.router, prefix=settings.API_V1_STR)
 
