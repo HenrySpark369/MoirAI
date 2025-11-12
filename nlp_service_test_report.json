@@ -1,0 +1,604 @@
+{
+  "summary": {
+    "total_test_groups": 6,
+    "tests": {
+      "clean_text": 12,
+      "list_to_text": 7,
+      "tfidf_cosine": 9,
+      "matching_items": 7,
+      "calculate_match_score": 7,
+      "security_edge_cases": 6
+    }
+  },
+  "detailed_results": [
+    {
+      "test_group": "clean_text",
+      "results": [
+        {
+          "input": "Python",
+          "output": "python",
+          "description": "Minúsculas básicas",
+          "length_before": 6,
+          "length_after": 6
+        },
+        {
+          "input": "C++",
+          "output": "cpp",
+          "description": "Lenguaje C++",
+          "length_before": 3,
+          "length_after": 3
+        },
+        {
+          "input": "C#",
+          "output": "csharp",
+          "description": "Lenguaje C#",
+          "length_before": 2,
+          "length_after": 6
+        },
+        {
+          "input": "Node.js",
+          "output": "nodejs",
+          "description": "Node.js",
+          "length_before": 7,
+          "length_after": 6
+        },
+        {
+          "input": "Café con Açúcar",
+          "output": "cafe con acucar",
+          "description": "Acentos y diacríticos",
+          "length_before": 15,
+          "length_after": 15
+        },
+        {
+          "input": "Machine Learning & AI/ML",
+          "output": "machine learning ai ml",
+          "description": "Caracteres especiales",
+          "length_before": 24,
+          "length_after": 22
+        },
+        {
+          "input": "  Python   Developer  ",
+          "output": "python developer",
+          "description": "Espacios múltiples",
+          "length_before": 22,
+          "length_after": 16
+        },
+        {
+          "input": "Python_Developer-2024!",
+          "output": "python developer 2024",
+          "description": "Símbolos y números",
+          "length_before": 22,
+          "length_after": 21
+        },
+        {
+          "input": "",
+          "output": "",
+          "description": "String vacío",
+          "length_before": 0,
+          "length_after": 0
+        },
+        {
+          "input": "   ",
+          "output": "",
+          "description": "Solo espacios",
+          "length_before": 3,
+          "length_after": 0
+        },
+        {
+          "input": "JAVA, C++, Python 3.11",
+          "output": "java cpp python 3 11",
+          "description": "Múltiples lenguajes",
+          "length_before": 22,
+          "length_after": 20
+        },
+        {
+          "input": "naïve résumé café",
+          "output": "naive resume cafe",
+          "description": "Múltiples acentos",
+          "length_before": 17,
+          "length_after": 17
+        }
+      ]
+    },
+    {
+      "test_group": "list_to_text",
+      "results": [
+        {
+          "input": [
+            "Python",
+            "Java",
+            "C++"
+          ],
+          "output": "python java cpp",
+          "description": "Lista de lenguajes",
+          "num_items": 3
+        },
+        {
+          "input": [
+            "Machine Learning",
+            "Data Science",
+            "AI"
+          ],
+          "output": "machine learning data science ai",
+          "description": "Conceptos técnicos",
+          "num_items": 3
+        },
+        {
+          "input": [
+            "  Python  ",
+            "  Java  "
+          ],
+          "output": "python java",
+          "description": "Strings con espacios",
+          "num_items": 2
+        },
+        {
+          "input": [],
+          "output": "",
+          "description": "Lista vacía",
+          "num_items": 0
+        },
+        {
+          "input": [
+            ""
+          ],
+          "output": "",
+          "description": "Lista con string vacío",
+          "num_items": 1
+        },
+        {
+          "input": [
+            "Python",
+            "",
+            "Java"
+          ],
+          "output": "python java",
+          "description": "Lista con strings mezclados",
+          "num_items": 3
+        },
+        {
+          "input": [
+            "Café",
+            "Naïve",
+            "Résumé"
+          ],
+          "output": "cafe naive resume",
+          "description": "Strings con acentos",
+          "num_items": 3
+        }
+      ]
+    },
+    {
+      "test_group": "tfidf_cosine",
+      "results": [
+        {
+          "text_a": "Python developer",
+          "text_b": "Python developer",
+          "score": 1.0,
+          "description": "Textos idénticos"
+        },
+        {
+          "text_a": "Python developer",
+          "text_b": "Python",
+          "score": 0.4494,
+          "description": "Similitud parcial alta"
+        },
+        {
+          "text_a": "Python developer",
+          "text_b": "Java developer",
+          "score": 0.202,
+          "description": "Similitud media"
+        },
+        {
+          "text_a": "Python development",
+          "text_b": "Java programming",
+          "score": 0.0,
+          "description": "Similitud baja"
+        },
+        {
+          "text_a": "",
+          "text_b": "Python",
+          "score": 0.0,
+          "description": "Texto A vacío"
+        },
+        {
+          "text_a": "Python",
+          "text_b": "",
+          "score": 0.0,
+          "description": "Texto B vacío"
+        },
+        {
+          "text_a": "",
+          "text_b": "",
+          "score": 0.0,
+          "description": "Ambos textos vacíos"
+        },
+        {
+          "text_a": "Machine learning with Python and scikit-learn",
+          "text_b": "Machine learning in Python using sklearn",
+          "score": 0.203,
+          "description": "Descripciones similares"
+        },
+        {
+          "text_a": "Frontend development with React and Vue.js",
+          "text_b": "Backend development with Django and FastAPI",
+          "score": 0.203,
+          "description": "Dominios diferentes"
+        }
+      ]
+    },
+    {
+      "test_group": "matching_items",
+      "results": [
+        {
+          "items": [
+            "Python",
+            "Java",
+            "C++"
+          ],
+          "text": "Buscamos un desarrollador con experiencia en Python y Java",
+          "matches": [
+            "Python",
+            "Java"
+          ],
+          "description": "Coincidencias por frase completa",
+          "match_count": 2
+        },
+        {
+          "items": [
+            "Machine Learning",
+            "Data Science"
+          ],
+          "text": "Se requiere experiencia en machine learning y análisis de datos",
+          "matches": [
+            "Machine Learning"
+          ],
+          "description": "Coincidencias parciales por tokens",
+          "match_count": 1
+        },
+        {
+          "items": [
+            "API REST",
+            "FastAPI",
+            "PostgreSQL"
+          ],
+          "text": "Desarrollador backend con FastAPI y PostgreSQL para APIs",
+          "matches": [
+            "API REST",
+            "FastAPI",
+            "PostgreSQL"
+          ],
+          "description": "Mezcla de coincidencias completas y parciales",
+          "match_count": 3
+        },
+        {
+          "items": [
+            "React",
+            "Vue",
+            "Angular"
+          ],
+          "text": "Frontend developer con experiencia en Node.js y TypeScript",
+          "matches": [],
+          "description": "Sin coincidencias",
+          "match_count": 0
+        },
+        {
+          "items": [],
+          "text": "Cualquier texto aquí",
+          "matches": [],
+          "description": "Lista vacía",
+          "match_count": 0
+        },
+        {
+          "items": [
+            "Python",
+            ""
+          ],
+          "text": "Buscamos Python developer",
+          "matches": [
+            "Python"
+          ],
+          "description": "Items con strings vacíos",
+          "match_count": 1
+        },
+        {
+          "items": [
+            "machine learning",
+            "MACHINE LEARNING",
+            "Machine Learning"
+          ],
+          "text": "Somos expertos en machine learning",
+          "matches": [
+            "machine learning",
+            "MACHINE LEARNING",
+            "Machine Learning"
+          ],
+          "description": "Variaciones de capitalización (normalizadas)",
+          "match_count": 3
+        }
+      ]
+    },
+    {
+      "test_group": "calculate_match_score",
+      "results": [
+        {
+          "description": "Caso completo: skills + projects + job description",
+          "skills": [
+            "Python",
+            "SQL",
+            "Machine Learning"
+          ],
+          "projects": [
+            "Sistema de recomendación con Python y sklearn",
+            "API REST con FastAPI y PostgreSQL"
+          ],
+          "job_desc": "Buscamos desarrollador Python para API REST con experiencia en BD y ML",
+          "weights": null,
+          "score": 0.1412,
+          "details": {
+            "skill_similarity": 0.043828,
+            "project_similarity": 0.193698,
+            "weights_used": {
+              "skills": 0.35,
+              "projects": 0.65
+            },
+            "matching_skills": [
+              "Python"
+            ],
+            "matching_projects": [
+              "Sistema de recomendación con Python y sklearn",
+              "API REST con FastAPI y PostgreSQL"
+            ]
+          }
+        },
+        {
+          "description": "Solo skills (sin proyectos)",
+          "skills": [
+            "Python",
+            "FastAPI"
+          ],
+          "projects": [],
+          "job_desc": "Desarrollador Python con experiencia en FastAPI",
+          "weights": null,
+          "score": 0.0789,
+          "details": {
+            "skill_similarity": 0.225555,
+            "project_similarity": 0.0,
+            "weights_used": {
+              "skills": 0.35,
+              "projects": 0.65
+            },
+            "matching_skills": [
+              "Python",
+              "FastAPI"
+            ],
+            "matching_projects": []
+          }
+        },
+        {
+          "description": "Solo proyectos (sin skills)",
+          "skills": [],
+          "projects": [
+            "Backend con FastAPI y PostgreSQL"
+          ],
+          "job_desc": "API REST con FastAPI y manejo de datos",
+          "weights": null,
+          "score": 0.1238,
+          "details": {
+            "skill_similarity": 0.0,
+            "project_similarity": 0.190484,
+            "weights_used": {
+              "skills": 0.35,
+              "projects": 0.65
+            },
+            "matching_skills": [],
+            "matching_projects": [
+              "Backend con FastAPI y PostgreSQL"
+            ]
+          }
+        },
+        {
+          "description": "Todos los campos vacíos",
+          "skills": [],
+          "projects": [],
+          "job_desc": "",
+          "weights": null,
+          "score": 0.0,
+          "details": {
+            "skill_similarity": 0.0,
+            "project_similarity": 0.0,
+            "weights_used": {
+              "skills": 0.0,
+              "projects": 0.0
+            },
+            "matching_skills": [],
+            "matching_projects": []
+          }
+        },
+        {
+          "description": "Con pesos customizados (favor a skills)",
+          "skills": [
+            "Python",
+            "Java"
+          ],
+          "projects": [
+            "Proyecto en Java"
+          ],
+          "job_desc": "Buscamos desarrollador Python",
+          "weights": {
+            "skills": 0.9,
+            "projects": 0.1
+          },
+          "score": 0.1356,
+          "details": {
+            "skill_similarity": 0.15064,
+            "project_similarity": 0.0,
+            "weights_used": {
+              "skills": 0.9,
+              "projects": 0.1
+            },
+            "matching_skills": [
+              "Python"
+            ],
+            "matching_projects": []
+          }
+        },
+        {
+          "description": "Con pesos customizados (favor a projects)",
+          "skills": [
+            "Python",
+            "Java"
+          ],
+          "projects": [
+            "Proyecto en Java"
+          ],
+          "job_desc": "Buscamos desarrollador Python",
+          "weights": {
+            "skills": 0.1,
+            "projects": 0.9
+          },
+          "score": 0.0151,
+          "details": {
+            "skill_similarity": 0.15064,
+            "project_similarity": 0.0,
+            "weights_used": {
+              "skills": 0.1,
+              "projects": 0.9
+            },
+            "matching_skills": [
+              "Python"
+            ],
+            "matching_projects": []
+          }
+        },
+        {
+          "description": "Tokens técnicos especiales (C++, C#, Node.js)",
+          "skills": [
+            "C++",
+            "Node.js",
+            "C#"
+          ],
+          "projects": [
+            "API con Node.js",
+            "Desktop app en C#"
+          ],
+          "job_desc": "Desarrollador full-stack con C++, Node.js y C#. Experiencia en APIs.",
+          "weights": null,
+          "score": 0.233,
+          "details": {
+            "skill_similarity": 0.391302,
+            "project_similarity": 0.147805,
+            "weights_used": {
+              "skills": 0.35,
+              "projects": 0.65
+            },
+            "matching_skills": [
+              "C++",
+              "Node.js",
+              "C#"
+            ],
+            "matching_projects": [
+              "API con Node.js",
+              "Desktop app en C#"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "test_group": "security_edge_cases",
+      "results": [
+        {
+          "description": "Skill muy largo (truncado a 200 chars)",
+          "score": 0.0,
+          "status": "✅ OK",
+          "details": {
+            "skill_similarity": 0.0,
+            "project_similarity": 0.0,
+            "weights_used": {
+              "skills": 0.35,
+              "projects": 0.65
+            },
+            "matching_skills": [],
+            "matching_projects": []
+          }
+        },
+        {
+          "description": "Project muy largo (truncado a 2000 chars)",
+          "score": 0.0,
+          "status": "✅ OK",
+          "details": {
+            "skill_similarity": 0.0,
+            "project_similarity": 0.0,
+            "weights_used": {
+              "skills": 0.35,
+              "projects": 0.65
+            },
+            "matching_skills": [],
+            "matching_projects": []
+          }
+        },
+        {
+          "description": "Job description muy larga (truncado a 50000 chars)",
+          "score": 0.0,
+          "status": "✅ OK",
+          "details": {
+            "skill_similarity": 0.0,
+            "project_similarity": 0.0,
+            "weights_used": {
+              "skills": 0.35,
+              "projects": 0.65
+            },
+            "matching_skills": [],
+            "matching_projects": []
+          }
+        },
+        {
+          "description": "None en skills y projects (debe convertir a [])",
+          "score": 0.0,
+          "status": "✅ OK",
+          "details": {
+            "skill_similarity": 0.0,
+            "project_similarity": 0.0,
+            "weights_used": {
+              "skills": 0.35,
+              "projects": 0.65
+            },
+            "matching_skills": [],
+            "matching_projects": []
+          }
+        },
+        {
+          "description": "Lista con None y strings vacíos (debe filtrar)",
+          "score": 0.0,
+          "status": "✅ OK",
+          "details": {
+            "skill_similarity": 0.0,
+            "project_similarity": 0.0,
+            "weights_used": {
+              "skills": 0.35,
+              "projects": 0.65
+            },
+            "matching_skills": [],
+            "matching_projects": []
+          }
+        },
+        {
+          "description": "Intentos de inyección (debe sanitizar)",
+          "score": 0.0,
+          "status": "✅ OK",
+          "details": {
+            "skill_similarity": 0.0,
+            "project_similarity": 0.0,
+            "weights_used": {
+              "skills": 0.35,
+              "projects": 0.65
+            },
+            "matching_skills": [],
+            "matching_projects": []
+          }
+        }
+      ]
+    }
+  ]
+}

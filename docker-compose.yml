@@ -1,0 +1,62 @@
+version: '3.8'
+
+services:
+  # Base de datos PostgreSQL
+  postgres:
+    image: postgres:15
+    environment:
+      POSTGRES_DB: ${POSTGRES_DB:-moirai_db}
+      POSTGRES_USER: ${POSTGRES_USER:-moirai_user}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    networks:
+      - moirai_network
+
+  # Redis para cache (futuro)
+  redis:
+    image: redis:7-alpine
+    ports:
+      - "6379:6379"
+    networks:
+      - moirai_network
+
+  # Aplicación FastAPI
+  api:
+    build: .
+    ports:
+      - "8000:8000"
+    environment:
+      - DATABASE_URL=${DATABASE_URL}
+      - SECRET_KEY=${SECRET_KEY}
+      - JSEARCH_API_KEY=${JSEARCH_API_KEY}
+    depends_on:
+      - postgres
+      - redis
+    volumes:
+      - ./app:/app/app  # Para desarrollo con hot reload
+    networks:
+      - moirai_network
+    command: uvicorn app.main:app --host 0.0.0.0 --port 8000 --reload
+
+  # pgAdmin para administración de BD (opcional)
+  pgadmin:
+    image: dpage/pgadmin4:latest
+    environment:
+      PGADMIN_DEFAULT_EMAIL: ${PGADMIN_EMAIL:-admin@unrc.edu.mx}
+      PGADMIN_DEFAULT_PASSWORD: ${PGADMIN_PASSWORD}
+    ports:
+      - "5050:80"
+    depends_on:
+      - postgres
+    networks:
+      - moirai_network
+
+volumes:
+  postgres_data:
+
+networks:
+  moirai_network:
+    driver: bridge
