@@ -3,6 +3,10 @@
  * Manejo de autenticación y login de usuarios
  */
 
+// Flag para prevenir submit duplicado
+let loginSubmitInProgress = false;
+let registerSubmitInProgress = false;
+
 document.addEventListener('DOMContentLoaded', () => {
     initLoginPage();
 });
@@ -39,12 +43,19 @@ function setupLoginForm() {
     form.addEventListener('submit', async (e) => {
         e.preventDefault();
 
+        // Fix: Prevenir envío duplicado
+        if (loginSubmitInProgress) {
+            return;
+        }
+
         // Validar formulario
         const validation = FormValidator.validateForm(form);
         if (!validation.valid) {
             notificationManager.error('Por favor completa todos los campos correctamente');
             return;
         }
+
+        loginSubmitInProgress = true;
 
         // Obtener datos
         const email = form.querySelector('[name="email"]').value;
@@ -89,6 +100,7 @@ function setupLoginForm() {
 
             submitBtn.disabled = false;
             submitBtn.textContent = originalText;
+            loginSubmitInProgress = false;
         }
     });
 
@@ -114,12 +126,19 @@ function setupRegisterForm() {
     form.addEventListener('submit', async (e) => {
         e.preventDefault();
 
+        // Fix: Prevenir envío duplicado
+        if (registerSubmitInProgress) {
+            return;
+        }
+
         // Validar formulario
         const validation = FormValidator.validateForm(form);
         if (!validation.valid) {
             notificationManager.error('Por favor completa todos los campos correctamente');
             return;
         }
+
+        registerSubmitInProgress = true;
 
         // Obtener datos
         const formData = FormValidator.getFormData(form);
@@ -165,6 +184,7 @@ function setupRegisterForm() {
 
             submitBtn.disabled = false;
             submitBtn.textContent = originalText;
+            registerSubmitInProgress = false;
         }
     });
 }

@@ -190,8 +190,14 @@ async function handleCVUpload(file) {
         return;
     }
 
+    // Fix: Prevenir uploads duplicados
+    if (uploadInProgress) {
+        notificationManager.warning('Ya hay un upload en proceso');
+        return;
+    }
+
     uploadInProgress = true;
-    notificationManager.loading(`Subiendo CV... 0%`);
+    notificationManager.loading(`Subiendo CV...`);
 
     try {
         // Crear FormData
@@ -199,8 +205,14 @@ async function handleCVUpload(file) {
         formData.append('file', file);
         formData.append('student_id', currentUser.id);
 
-        // Subir archivo
-        const response = await apiClient.uploadFile(`/students/${currentUser.id}/upload-resume`, file);
+        // Usar XMLHttpRequest para obtener progress
+        const response = await uploadFileWithProgress(
+            `/students/${currentUser.id}/upload-resume`,
+            file,
+            (percentComplete) => {
+                notificationManager.loading(`Subiendo CV... ${Math.round(percentComplete)}%`);
+            }
+        );
 
         // Procesar respuesta
         currentUser.cv_file = response.file_path;
@@ -229,6 +241,61 @@ async function handleCVUpload(file) {
         notificationManager.error(error.message || 'Error al subir CV');
         uploadInProgress = false;
     }
+}
+
+/**
+ * Upload de archivo con progress (Fix: progress bar real)
+ */
+function uploadFileWithProgress(url, file, onProgress) {
+    return new Promise((resolve, reject) => {
+        const xhr = new XMLHttpRequest();
+        const token = localStorage.getItem('moirai_token');
+
+        // Setup xhr
+        xhr.upload.addEventListener('progress', (e) => {
+            if (e.lengthComputable) {
+                const percentComplete = (e.loaded / e.total) * 100;
+                onProgress(percentComplete);
+            }
+        });
+
+        xhr.addEventListener('load', () => {
+            if (xhr.status >= 200 && xhr.status < 300) {
+                try {
+                    const response = JSON.parse(xhr.responseText);
+                    resolve(response);
+                } catch (e) {
+                    reject(new Error('Invalid response format'));
+                }
+            } else {
+                try {
+                    const error = JSON.parse(xhr.responseText);
+                    reject(new Error(error.message || 'Upload failed'));
+                } catch (e) {
+                    reject(new Error(`Upload failed with status ${xhr.status}`));
+                }
+            }
+        });
+
+        xhr.addEventListener('error', () => {
+            reject(new Error('Network error during upload'));
+        });
+
+        xhr.addEventListener('abort', () => {
+            reject(new Error('Upload cancelled'));
+        });
+
+        // Preparar y enviar
+        const formData = new FormData();
+        formData.append('file', file);
+        formData.append('student_id', currentUser.id);
+
+        xhr.open('POST', `${window.API_BASE_URL}${url}`, true);
+        if (token) {
+            xhr.setRequestHeader('Authorization', `Bearer ${token}`);
+        }
+        xhr.send(formData);
+    });
 }
 
 /**

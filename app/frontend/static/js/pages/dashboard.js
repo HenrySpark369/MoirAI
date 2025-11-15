@@ -10,6 +10,32 @@ let dashboardData = {
     stats: {}
 };
 
+// Flag para prevenir envíos duplicados
+let isInitializing = false;
+
+// Rate limiter para acciones
+class RateLimiter {
+    constructor(maxRequests = 5, windowMs = 10000) {
+        this.maxRequests = maxRequests;
+        this.windowMs = windowMs;
+        this.requests = [];
+    }
+    
+    isAllowed() {
+        const now = Date.now();
+        this.requests = this.requests.filter(t => now - t < this.windowMs);
+        
+        if (this.requests.length >= this.maxRequests) {
+            return false;
+        }
+        
+        this.requests.push(now);
+        return true;
+    }
+}
+
+const applicationLimiter = new RateLimiter(3, 5000);
+
 document.addEventListener('DOMContentLoaded', () => {
     initDashboard();
 });
@@ -18,6 +44,10 @@ document.addEventListener('DOMContentLoaded', () => {
  * Inicializar dashboard
  */
 async function initDashboard() {
+    // Prevenir inicializaciones duplicadas
+    if (isInitializing) return;
+    isInitializing = true;
+
     // Proteger ruta
     if (!authManager.isAuthenticated()) {
         window.location.href = '/login?redirect=/dashboard';
@@ -40,9 +70,29 @@ async function initDashboard() {
 
     } catch (error) {
         notificationManager.hideLoading();
+        
+        // Verificar si es error de autenticación
+        if (error.status === 401 || error.message?.includes('Unauthorized')) {
+            handleTokenExpired();
+            return;
+        }
+        
         notificationManager.error('Error al cargar el dashboard');
         console.error(error);
+    } finally {
+        isInitializing = false;
     }
+}
+
+/**
+ * Manejar token expirado
+ */
+function handleTokenExpired() {
+    authManager.logout();
+    notificationManager.error('Tu sesión expiró. Por favor, inicia sesión nuevamente.');
+    setTimeout(() => {
+        window.location.href = '/login?expired=true';
+    }, 2000);
 }
 
 /**
@@ -330,7 +380,7 @@ async function viewJobDetail(jobId) {
                     <button class="btn btn-primary" onclick="applyToJob(${jobId}); this.closest('.modal').remove()">
                         <i class="fas fa-paper-plane"></i> Aplicar Ahora
                     </button>
-                    <button class="btn btn-secondary" onclick="this.closest('.modal').remove()">
+                    <button class="btn btn-secondary" onclick="closeModal(this)">
                         Cerrar
                     </button>
                 </div>
@@ -338,14 +388,31 @@ async function viewJobDetail(jobId) {
         `;
 
         document.body.appendChild(modal);
-        modal.style.display = 'flex';
+        
+        // Fix: Prevenir scroll en background cuando modal está abierto
+        document.body.style.overflow = 'hidden';
+        
+        // Botón close
+        const closeBtn = modal.querySelector('.close-modal');
+        closeBtn.addEventListener('click', () => {
+            closeModalWindow(modal);
+        });
 
         // Cerrar al hacer clic fuera
         modal.addEventListener('click', (e) => {
             if (e.target === modal) {
-                modal.remove();
+                closeModalWindow(modal);
             }
         });
+        
+        // Cerrar con Escape
+        const escapeHandler = (e) => {
+            if (e.key === 'Escape') {
+                closeModalWindow(modal);
+                document.removeEventListener('keydown', escapeHandler);
+            }
+        };
+        document.addEventListener('keydown', escapeHandler);
 
     } catch (error) {
         notificationManager.error('Error al cargar detalles del empleo');
@@ -354,9 +421,24 @@ async function viewJobDetail(jobId) {
 }
 
 /**
+ * Cerrar modal y restaurar scroll
+ */
+function closeModalWindow(modal) {
+    // Fix: Restaurar scroll cuando se cierra modal
+    document.body.style.overflow = 'auto';
+    modal.remove();
+}
+
+/**
  * Aplicar a un empleo
  */
 async function applyToJob(jobId) {
+    // Fix: Rate limiting para prevenir envíos duplicados
+    if (!applicationLimiter.isAllowed()) {
+        notificationManager.warning('Espera un momento antes de enviar otra aplicación');
+        return;
+    }
+
     try {
         const userId = currentUser.id;
 
@@ -370,14 +452,18 @@ async function applyToJob(jobId) {
         notificationManager.hideLoading();
         notificationManager.success('¡Aplicación enviada exitosamente!');
 
-        // Recargar aplicaciones
-        await loadApplications();
+        // Recargar aplicaciones con delay
+        setTimeout(() => {
+            loadApplications();
+        }, 500);
 
     } catch (error) {
         notificationManager.hideLoading();
 
         if (error.message?.includes('already applied')) {
             notificationManager.warning('Ya has aplicado a este empleo');
+        } else if (error.status === 401) {
+            handleTokenExpired();
         } else {
             notificationManager.error('Error al enviar aplicación');
         }
