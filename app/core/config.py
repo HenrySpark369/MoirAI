@@ -26,6 +26,7 @@ class Settings(BaseSettings):
         ...,
         description="Clave secreta para JWT tokens"
     )
+    ENCRYPTION_KEY: Optional[str] = None
     ACCESS_TOKEN_EXPIRE_MINUTES: int = 30
     ALGORITHM: str = "HS256"
     
