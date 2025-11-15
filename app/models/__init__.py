@@ -5,6 +5,7 @@ Modelos de datos para MoirAI
 from datetime import datetime
 from typing import Optional
 from sqlmodel import SQLModel, Field
+import hashlib
 
 # Importar modelos específicos
 from .user import User, UserCreate, UserRead, UserUpdate
@@ -26,7 +27,10 @@ class Student(SQLModel, table=True):
     
     id: Optional[int] = Field(default=None, primary_key=True)
     name: str = Field(max_length=100, description="Nombre completo del estudiante")
-    email: str = Field(unique=True, max_length=100, description="Email institucional")
+    email: str = Field(unique=True, max_length=100, description="Email institucional (encriptado)")
+    email_hash: str = Field(default="", max_length=64, description="Hash SHA256 del email para búsquedas")
+    phone: Optional[str] = Field(default=None, max_length=255, description="Teléfono (encriptado)")
+    phone_hash: Optional[str] = Field(default=None, max_length=64, description="Hash SHA256 del teléfono para búsquedas")
     program: Optional[str] = Field(max_length=100, description="Programa académico")
     
     # Datos de privacidad y consentimiento (LFPDPPP)
@@ -44,6 +48,72 @@ class Student(SQLModel, table=True):
     updated_at: Optional[datetime] = None
     last_active: Optional[datetime] = None
     is_active: bool = Field(default=True)
+    
+    # ============================================================
+    # MÉTODOS DE ENCRIPTACIÓN/DESENCRIPTACIÓN
+    # ============================================================
+    
+    def set_email(self, email: str) -> None:
+        """
+        Establecer email (encriptado automáticamente)
+        
+        Args:
+            email: Email en texto plano
+        """
+        from app.utils.encryption import EncryptionService
+        encryption_service = EncryptionService()
+        
+        email_lower = email.lower().strip()
+        self.email = encryption_service.encrypt(email_lower)
+        # Generar hash para búsquedas
+        self.email_hash = hashlib.sha256(email_lower.encode()).hexdigest()
+    
+    def get_email(self) -> str:
+        """
+        Obtener email desencriptado
+        
+        Returns:
+            Email en texto plano
+        """
+        from app.utils.encryption import EncryptionService
+        
+        if self.email:
+            encryption_service = EncryptionService()
+            return encryption_service.decrypt(self.email)
+        return ""
+    
+    def set_phone(self, phone: Optional[str]) -> None:
+        """
+        Establecer teléfono (encriptado automáticamente)
+        
+        Args:
+            phone: Teléfono en texto plano (puede ser None)
+        """
+        from app.utils.encryption import EncryptionService
+        
+        if phone:
+            encryption_service = EncryptionService()
+            phone_lower = phone.lower().strip()
+            self.phone = encryption_service.encrypt(phone_lower)
+            # Generar hash para búsquedas
+            self.phone_hash = hashlib.sha256(phone_lower.encode()).hexdigest()
+        else:
+            self.phone = None
+            self.phone_hash = None
+    
+    def get_phone(self) -> Optional[str]:
+        """
+        Obtener teléfono desencriptado
+        
+        Returns:
+            Teléfono en texto plano o None
+        """
+        from app.utils.encryption import EncryptionService
+        
+        if self.phone:
+            encryption_service = EncryptionService()
+            return encryption_service.decrypt(self.phone)
+        return None
 
 
 class Company(SQLModel, table=True):
@@ -51,7 +121,8 @@ class Company(SQLModel, table=True):
     
     id: Optional[int] = Field(default=None, primary_key=True)
     name: str = Field(max_length=100, description="Nombre de la empresa")
-    email: str = Field(unique=True, max_length=100, description="Email de contacto")
+    email: str = Field(unique=True, max_length=100, description="Email de contacto (encriptado)")
+    email_hash: str = Field(default="", max_length=64, description="Hash SHA256 del email para búsquedas")
     industry: Optional[str] = Field(max_length=50, description="Sector industrial")
     size: Optional[str] = Field(max_length=20, description="Tamaño de empresa (startup, pequeña, mediana, grande)")
     location: Optional[str] = Field(max_length=100, description="Ubicación principal")
@@ -63,6 +134,39 @@ class Company(SQLModel, table=True):
     # Metadatos
     created_at: datetime = Field(default_factory=datetime.utcnow)
     updated_at: Optional[datetime] = None
+    
+    # ============================================================
+    # MÉTODOS DE ENCRIPTACIÓN/DESENCRIPTACIÓN
+    # ============================================================
+    
+    def set_email(self, email: str) -> None:
+        """
+        Establecer email (encriptado automáticamente)
+        
+        Args:
+            email: Email en texto plano
+        """
+        from app.utils.encryption import EncryptionService
+        encryption_service = EncryptionService()
+        
+        email_lower = email.lower().strip()
+        self.email = encryption_service.encrypt(email_lower)
+        # Generar hash para búsquedas
+        self.email_hash = hashlib.sha256(email_lower.encode()).hexdigest()
+    
+    def get_email(self) -> str:
+        """
+        Obtener email desencriptado
+        
+        Returns:
+            Email en texto plano
+        """
+        from app.utils.encryption import EncryptionService
+        
+        if self.email:
+            encryption_service = EncryptionService()
+            return encryption_service.decrypt(self.email)
+        return ""
 
 
 class JobPosition(SQLModel, table=True):

@@ -47,6 +47,12 @@ class Settings(BaseSettings):
     ACCESS_TOKEN_EXPIRE_MINUTES: int = 30
     ALGORITHM: str = "HS256"
     
+    # Encryption
+    ENCRYPTION_KEY: Optional[str] = Field(
+        default=None,
+        description="Clave Fernet para encriptar campos sensibles (auto-generada si no se proporciona)"
+    )
+    
     # CORS
     BACKEND_CORS_ORIGINS: List[str] = ["http://localhost:3000", "http://localhost:8080"]
     

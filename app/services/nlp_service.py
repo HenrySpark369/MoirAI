@@ -1,6 +1,7 @@
 from typing import List, Tuple, Dict
 import re
 import unicodedata
+from app.core.config import settings
 
 
 # Reemplaza o añade al inicio del módulo (funciones y constantes):
@@ -210,6 +211,104 @@ class NLPService:
         }
 
         return base_score, details
+
+    def analyze_resume(self, resume_text: str) -> Dict:
+        """
+        Analizar un currículum y extraer habilidades, habilidades blandas y proyectos.
+        
+        Args:
+            resume_text: Texto del currículum
+            
+        Returns:
+            Dict con:
+            - skills: Lista de habilidades técnicas extraídas
+            - soft_skills: Lista de habilidades blandas extraídas
+            - projects: Lista de proyectos/experiencias extraídas
+            - confidence: Puntuación de confianza del análisis (0-1)
+        """
+        if not resume_text or len(resume_text.strip()) < 50:
+            return {
+                "skills": [],
+                "soft_skills": [],
+                "projects": [],
+                "confidence": 0.0
+            }
+        
+        resume_clean = _clean_text(resume_text)
+        
+        # Diccionarios de palabras clave comunes
+        technical_skills = {
+            "python", "java", "javascript", "typescript", "csharp", "cpp", "c", "rust", "go", "kotlin",
+            "ruby", "php", "swift", "objective-c", "scala", "r", "matlab", "sql", "nosql", "mongodb",
+            "postgresql", "mysql", "redis", "elasticsearch", "kafka", "rabbitmq",
+            "react", "vue", "angular", "svelte", "fastapi", "django", "flask", "spring", "dotnet",
+            "aws", "azure", "gcp", "docker", "kubernetes", "terraform", "jenkins", "gitlab", "github",
+            "git", "linux", "windows", "macos", "bash", "shell", "html", "css", "xml", "json",
+            "rest", "graphql", "api", "microservices", "cloud", "devops", "ci/cd",
+            "machine learning", "deep learning", "tensorflow", "pytorch", "keras", "scikit-learn",
+            "nlp", "computer vision", "data science", "analytics", "excel", "tableau", "power bi"
+        }
+        
+        soft_skills = {
+            "comunicación", "communication", "liderazgo", "leadership", "trabajo en equipo", "teamwork",
+            "problem solving", "crítico", "critical thinking", "creatividad", "creativity",
+            "adaptabilidad", "adaptability", "responsabilidad", "responsibility", "iniciativa",
+            "iniciative", "presentation", "presentación", "negociación", "negotiation",
+            "inteligencia emocional", "emotional intelligence", "gestión del tiempo", "time management",
+            "análisis", "analysis", "resolución de conflictos", "conflict resolution",
+            "organización", "organization", "proactividad", "proactivity"
+        }
+        
+        project_keywords = {
+            "proyecto", "project", "desarrollo de", "desarrollé", "designed", "diseñé",
+            "implementé", "implemented", "contribuí", "contributed", "creé", "created",
+            "lideré", "led", "participé", "participated", "producto", "product",
+            "aplicación", "application", "sistema", "system", "plataforma", "platform",
+            "solución", "solution", "herramienta", "tool", "framework", "librería", "library"
+        }
+        
+        # Extraer habilidades técnicas
+        extracted_skills = []
+        for skill in technical_skills:
+            if skill in resume_clean:
+                extracted_skills.append(skill)
+        
+        # Extraer habilidades blandas
+        extracted_soft_skills = []
+        for skill in soft_skills:
+            if skill in resume_clean:
+                extracted_soft_skills.append(skill)
+        
+        # Extraer proyectos (buscar frases con palabras clave de proyectos)
+        extracted_projects = []
+        # Dividir en oraciones simples
+        sentences = resume_text.split('. ')
+        for sentence in sentences:
+            sentence_clean = _clean_text(sentence)
+            # Si la oración contiene palabras clave de proyectos
+            if any(keyword in sentence_clean for keyword in project_keywords):
+                # Extraer primeros 200 caracteres de la oración
+                project_desc = sentence.strip()
+                if len(project_desc) > MAX_PROJECT_LEN:
+                    project_desc = project_desc[:MAX_PROJECT_LEN] + "..."
+                if project_desc:
+                    extracted_projects.append(project_desc)
+        
+        # Limitar resultados
+        extracted_skills = extracted_skills[:settings.MAX_SKILLS_EXTRACTED]
+        extracted_soft_skills = extracted_soft_skills[:settings.MAX_SOFT_SKILLS_EXTRACTED]
+        extracted_projects = extracted_projects[:settings.MAX_PROJECTS_EXTRACTED]
+        
+        # Calcular confianza basada en cantidad de elementos encontrados
+        total_found = len(extracted_skills) + len(extracted_soft_skills) + len(extracted_projects)
+        confidence = min(1.0, total_found / 10.0)  # Máximo 100% con 10 elementos
+        
+        return {
+            "skills": extracted_skills,
+            "soft_skills": extracted_soft_skills,
+            "projects": extracted_projects,
+            "confidence": round(confidence, 2)
+        }
 
 
 # instancia compartida

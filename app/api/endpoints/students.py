@@ -7,6 +7,7 @@ from typing import List, Optional
 from fastapi import APIRouter, Depends, HTTPException, UploadFile, File, Form, Query
 from sqlmodel import Session, select, func
 import json
+import hashlib
 from datetime import datetime, timedelta
 
 from app.core.database import get_session
@@ -161,9 +162,10 @@ async def upload_resume(
             detail=f"Metadatos inválidos: {str(e)}"
         )
     
-    # Verificar si ya existe estudiante con ese email
+    # Verificar si ya existe estudiante con ese email (usando hash para comparación segura)
+    email_hash = hashlib.sha256(student_data.email.lower().encode()).hexdigest()
     existing = session.exec(
-        select(Student).where(Student.email == student_data.email)
+        select(Student).where(Student.email_hash == email_hash)
     ).first()
     
     if existing:
@@ -210,7 +212,6 @@ async def upload_resume(
     # Crear estudiante
     student = Student(
         name=student_data.name,
-        email=student_data.email,
         program=student_data.program,
         consent_data_processing=True,
         profile_text=resume_text[:20000],  # Limitar texto almacenado
@@ -218,6 +219,9 @@ async def upload_resume(
         soft_skills=json.dumps(analysis["soft_skills"]),
         projects=json.dumps(analysis["projects"])
     )
+    
+    # Usar set_email() para encriptar automáticamente
+    student.set_email(student_data.email)
     
     session.add(student)
     session.commit()

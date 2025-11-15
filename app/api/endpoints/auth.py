@@ -6,6 +6,7 @@ from typing import List
 from fastapi import APIRouter, Depends, HTTPException, status
 from sqlmodel import Session, select
 import json
+import hashlib
 
 from app.core.database import get_session
 from app.models import Student, Company, ApiKey, AuditLog
@@ -29,13 +30,16 @@ async def register_user(
     
     Crea el perfil del usuario según su rol y genera una API key personal.
     """
-    # Verificar si el email ya existe
+    # Generar hash del email para búsqueda
+    email_hash = hashlib.sha256(user_data.email.lower().strip().encode()).hexdigest()
+    
+    # Verificar si el email ya existe (usando email_hash)
     existing_student = session.exec(
-        select(Student).where(Student.email == user_data.email)
+        select(Student).where(Student.email_hash == email_hash)
     ).first()
     
     existing_company = session.exec(
-        select(Company).where(Company.email == user_data.email)
+        select(Company).where(Company.email_hash == email_hash)
     ).first()
     
     if existing_student or existing_company:
@@ -50,13 +54,14 @@ async def register_user(
     if user_data.role == "student":
         student = Student(
             name=user_data.name,
-            email=user_data.email,
             program=user_data.program,
             consent_data_processing=True,
             skills="[]",
             soft_skills="[]", 
             projects="[]"
         )
+        # Usar set_email para encriptar automáticamente
+        student.set_email(user_data.email)
         session.add(student)
         session.commit()
         session.refresh(student)
@@ -65,12 +70,13 @@ async def register_user(
     elif user_data.role == "company":
         company = Company(
             name=user_data.name,
-            email=user_data.email,
             industry=user_data.industry,
             size=user_data.company_size,
             location=user_data.location,
             is_verified=False  # Requiere verificación manual
         )
+        # Usar set_email para encriptar automáticamente
+        company.set_email(user_data.email)
         session.add(company)
         session.commit()
         session.refresh(company)

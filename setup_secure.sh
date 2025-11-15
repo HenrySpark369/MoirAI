@@ -36,16 +36,22 @@ if [ ! -f ".env" ]; then
     echo "🔑 Generando SECRET_KEY segura..."
     SECRET_KEY=$($PYTHON_CMD -c "import secrets; print(secrets.token_urlsafe(32))")
     
-    # Reemplazar SECRET_KEY en .env
+    # Generar ENCRYPTION_KEY segura
+    echo "🔐 Generando ENCRYPTION_KEY segura para encriptación..."
+    ENCRYPTION_KEY=$($PYTHON_CMD -c "from app.utils.encryption import EncryptionService; print(EncryptionService.generate_key())")
+    
+    # Reemplazar SECRET_KEY y ENCRYPTION_KEY en .env
     if [[ "$OSTYPE" == "darwin"* ]]; then
         # macOS
         sed -i '' "s/your-super-secret-key-change-in-production/$SECRET_KEY/" .env
+        sed -i '' "s/your-encryption-key-change-in-production/$ENCRYPTION_KEY/" .env
     else
         # Linux
         sed -i "s/your-super-secret-key-change-in-production/$SECRET_KEY/" .env
+        sed -i "s/your-encryption-key-change-in-production/$ENCRYPTION_KEY/" .env
     fi
     
-    echo "✅ Archivo .env creado con SECRET_KEY segura"
+    echo "✅ Archivo .env creado con SECRET_KEY y ENCRYPTION_KEY seguras"
     echo "⚠️  IMPORTANTE: Revise y configure las demás variables en .env"
 else
     echo "ℹ️  El archivo .env ya existe"
@@ -93,3 +99,5 @@ echo "- Nunca commite archivos .env al repositorio"
 echo "- Use contraseñas fuertes en producción"
 echo "- Habilite HTTPS en producción"
 echo "- Configure firewall apropiadamente"
+echo "- La ENCRYPTION_KEY se usa para encriptar campos sensibles (emails, teléfonos)"
+echo "- En caso de perder la ENCRYPTION_KEY, no podrá desencriptar datos existentes"

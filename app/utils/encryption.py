@@ -42,13 +42,22 @@ class EncryptionService:
 
         Args:
             encryption_key: Clave Fernet en base64. Si no se proporciona,
-                          se intenta obtener de variable de entorno ENCRYPTION_KEY
+                          se intenta obtener de variable de entorno ENCRYPTION_KEY o settings
         """
         if encryption_key:
             self.key = encryption_key.encode() if isinstance(encryption_key, str) else encryption_key
         else:
-            # Intentar obtener de variable de entorno
+            # Intentar obtener de variable de entorno primero
             env_key = os.getenv("ENCRYPTION_KEY")
+            
+            # Si no está en env, intentar obtener de settings
+            if not env_key:
+                try:
+                    from app.core.config import settings
+                    env_key = settings.ENCRYPTION_KEY
+                except Exception as import_error:
+                    logger.debug(f"No se pudo cargar settings: {import_error}")
+            
             if not env_key:
                 logger.warning(
                     "⚠️ ENCRYPTION_KEY no configurada. "
@@ -383,4 +392,5 @@ def get_encryption_service() -> EncryptionService:
 
 
 # Para uso directo si se necesita en tests o scripts
+# La instancia se crea al momento de usar, asegurando que la clave esté disponible
 encryption_service = EncryptionService()
