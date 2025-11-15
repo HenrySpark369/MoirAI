@@ -18,11 +18,13 @@ FastAPI app con todos los endpoints y configuración
 """
 from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import JSONResponse
+from fastapi.responses import JSONResponse, FileResponse
 from fastapi.exceptions import RequestValidationError
+from fastapi.staticfiles import StaticFiles
 from starlette.exceptions import HTTPException as StarletteHTTPException
 import uvicorn
 from datetime import datetime
+from pathlib import Path
 
 from app.core.config import settings
 from app.core.database import create_db_and_tables
@@ -85,6 +87,11 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
+# Configurar archivos estáticos
+static_path = Path(__file__).parent / "frontend" / "static"
+if static_path.exists():
+    app.mount("/static", StaticFiles(directory=str(static_path)), name="static")
+
 
 # Event handlers
 @app.on_event("startup")
@@ -95,6 +102,35 @@ async def startup_event():
     print(f"🚀 {settings.PROJECT_NAME} iniciado correctamente")
     print(f"📊 Base de datos: {settings.DATABASE_URL}")
     print(f"🔐 Audit logging: {'✅' if settings.ENABLE_AUDIT_LOGGING else '❌'}")
+    print(f"🌐 Landing page disponible en: http://localhost:8000/")
+
+# Configurar archivos estáticos
+static_path = Path(__file__).parent / "frontend" / "static"
+if static_path.exists():
+    app.mount("/static", StaticFiles(directory=str(static_path)), name="static")
+
+
+# Endpoint para servir la landing page
+@app.get("/landing", tags=["frontend"])
+@app.get("/", tags=["frontend"], include_in_schema=False)
+async def landing_page():
+    """Servir la página de inicio (landing page)"""
+    template_path = Path(__file__).parent / "frontend" / "templates" / "index.html"
+    if template_path.exists():
+        return FileResponse(str(template_path), media_type="text/html")
+    return {"message": "Landing page not found"}
+
+
+# Event handlers
+@app.on_event("startup")
+async def startup_event():
+    """Inicializar aplicación"""
+    # Crear tablas de base de datos
+    create_db_and_tables()
+    print(f"🚀 {settings.PROJECT_NAME} iniciado correctamente")
+    print(f"📊 Base de datos: {settings.DATABASE_URL}")
+    print(f"🔐 Audit logging: {'✅' if settings.ENABLE_AUDIT_LOGGING else '❌'}")
+    print(f"🌐 Landing page disponible en: http://localhost:8000/landing")
 
 
 @app.on_event("shutdown")
@@ -153,9 +189,14 @@ async def general_exception_handler(request: Request, exc: Exception):
 
 
 # Endpoints principales
-@app.get("/", tags=["root"])
-async def root():
-    """Endpoint raíz con información de la API"""
+@app.get("/", tags=["frontend"], include_in_schema=False)
+@app.get("/landing", tags=["frontend"])
+async def landing_page():
+    """Servir la página de inicio (landing page)"""
+    template_path = Path(__file__).parent / "frontend" / "templates" / "index.html"
+    if template_path.exists():
+        return FileResponse(str(template_path), media_type="text/html")
+    # Si no existe el archivo, mostrar mensaje JSON
     return {
         "message": f"Bienvenido a {settings.PROJECT_NAME}",
         "version": settings.VERSION,
@@ -164,6 +205,47 @@ async def root():
         "docs_url": "/docs",
         "openapi_url": "/openapi.json"
     }
+
+
+@app.get("/admin/dashboard", tags=["admin"], include_in_schema=False)
+@app.get("/admin", tags=["admin"], include_in_schema=False)
+async def admin_dashboard():
+    """Servir el dashboard administrativo"""
+    template_path = Path(__file__).parent / "frontend" / "templates" / "admin" / "dashboard.html"
+    if template_path.exists():
+        return FileResponse(str(template_path), media_type="text/html")
+    return {
+        "message": "Admin dashboard not found",
+        "status": "error"
+    }
+
+
+# Sub-sites Pages
+@app.get("/oportunidades", tags=["listings"], include_in_schema=False)
+async def oportunidades_page():
+    """Servir la página de oportunidades (empleos)"""
+    template_path = Path(__file__).parent / "frontend" / "templates" / "oportunidades.html"
+    if template_path.exists():
+        return FileResponse(str(template_path), media_type="text/html")
+    return {"message": "Página de oportunidades no encontrada", "status": "error"}
+
+
+@app.get("/empresas", tags=["listings"], include_in_schema=False)
+async def empresas_page():
+    """Servir la página de empresas"""
+    template_path = Path(__file__).parent / "frontend" / "templates" / "empresas.html"
+    if template_path.exists():
+        return FileResponse(str(template_path), media_type="text/html")
+    return {"message": "Página de empresas no encontrada", "status": "error"}
+
+
+@app.get("/estudiantes", tags=["listings"], include_in_schema=False)
+async def estudiantes_page():
+    """Servir la página de estudiantes"""
+    template_path = Path(__file__).parent / "frontend" / "templates" / "estudiantes.html"
+    if template_path.exists():
+        return FileResponse(str(template_path), media_type="text/html")
+    return {"message": "Página de estudiantes no encontrada", "status": "error"}
 
 
 @app.get("/health", tags=["health"])
