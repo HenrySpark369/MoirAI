@@ -963,3 +963,354 @@ async def search_students_by_skills(
     )
     
     return result
+
+
+# ============================================================================
+# PHASE 2: NEW STUDENT ENDPOINTS
+# ============================================================================
+
+@router.get("/my-applications", response_model=List[dict])
+async def get_my_applications(
+    status: Optional[str] = Query(None),
+    limit: int = Query(20),
+    offset: int = Query(0),
+    current_user: UserContext = Depends(AuthService.get_current_user),
+    session: Session = Depends(get_session)
+):
+    """
+    Obtener todas las aplicaciones del estudiante actual
+    
+    Parámetros:
+    - status: Filtrar por estado (pending, accepted, rejected, withdrawn)
+    - limit: Número de resultados por página (default: 20)
+    - offset: Número de registros a saltar (default: 0)
+    
+    Retorna:
+    - Lista de aplicaciones con detalles del empleador
+    - Información de scoring de compatibilidad
+    - Estado y fecha de aplicación
+    """
+    try:
+        # Verificar que es estudiante
+        if current_user.role != "student":
+            raise HTTPException(
+                status_code=403,
+                detail="Solo estudiantes pueden ver sus aplicaciones"
+            )
+        
+        # Buscar estudiante
+        student = session.exec(
+            select(Student).where(Student.email_hash == hashlib.sha256(current_user.email.encode()).hexdigest())
+        ).first()
+        
+        if not student:
+            raise HTTPException(status_code=404, detail="Perfil de estudiante no encontrado")
+        
+        # Construir query de aplicaciones
+        from app.models import JobApplicationDB
+        query = select(JobApplicationDB).where(JobApplicationDB.user_id == student.id)
+        
+        # Filtrar por estado si se proporciona
+        if status:
+            query = query.where(JobApplicationDB.status == status)
+        
+        # Aplicar paginación
+        applications = session.exec(query.offset(offset).limit(limit)).all()
+        
+        # Enriquecer con detalles de empleos
+        result = []
+        for app in applications:
+            from app.models import JobPosition
+            job = session.get(JobPosition, app.job_position_id)
+            if job:
+                result.append({
+                    "id": app.id,
+                    "job_id": job.id,
+                    "job_title": job.title,
+                    "company": job.company,
+                    "location": job.location,
+                    "status": app.status,
+                    "applied_date": app.application_date,
+                    "updated_date": app.updated_at,
+                    "match_score": getattr(app, 'match_score', None)
+                })
+        
+        _log_audit_action(
+            session, "GET_APPLICATIONS", f"student_id:{student.id}",
+            current_user, details=f"Obtenidas {len(result)} aplicaciones"
+        )
+        
+        return result
+    
+    except HTTPException:
+        raise
+    except Exception as e:
+        print(f"Error getting applications: {e}")
+        _log_audit_action(
+            session, "GET_APPLICATIONS", f"student_id:{current_user.user_id}",
+            current_user, success=False, error_message=str(e)
+        )
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@router.post("/my-applications/{app_id}/withdraw", response_model=BaseResponse)
+async def withdraw_application(
+    app_id: int,
+    current_user: UserContext = Depends(AuthService.get_current_user),
+    session: Session = Depends(get_session)
+):
+    """
+    Retirar una aplicación a un empleo
+    
+    Parámetro:
+    - app_id: ID de la aplicación a retirar
+    
+    Retorna:
+    - Confirmación del retiro
+    """
+    try:
+        # Verificar que es estudiante
+        if current_user.role != "student":
+            raise HTTPException(
+                status_code=403,
+                detail="Solo estudiantes pueden retirar aplicaciones"
+            )
+        
+        # Buscar aplicación
+        from app.models import JobApplicationDB
+        app = session.get(JobApplicationDB, app_id)
+        
+        if not app:
+            raise HTTPException(status_code=404, detail="Aplicación no encontrada")
+        
+        # Verificar que pertenece al usuario actual
+        student = session.exec(
+            select(Student).where(Student.email_hash == hashlib.sha256(current_user.email.encode()).hexdigest())
+        ).first()
+        
+        if app.user_id != student.id:
+            raise HTTPException(status_code=403, detail="No tienes permiso para retirar esta aplicación")
+        
+        # Cambiar estado a withdrawn
+        app.status = "withdrawn"
+        app.updated_at = datetime.utcnow()
+        session.add(app)
+        session.commit()
+        
+        _log_audit_action(
+            session, "WITHDRAW_APPLICATION", f"app_id:{app_id}",
+            current_user, details="Aplicación retirada exitosamente"
+        )
+        
+        return BaseResponse(
+            success=True,
+            message="Aplicación retirada exitosamente"
+        )
+    
+    except HTTPException:
+        raise
+    except Exception as e:
+        print(f"Error withdrawing application: {e}")
+        _log_audit_action(
+            session, "WITHDRAW_APPLICATION", f"app_id:{app_id}",
+            current_user, success=False, error_message=str(e)
+        )
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@router.get("/profile", response_model=StudentProfile)
+async def get_student_profile(
+    current_user: UserContext = Depends(AuthService.get_current_user),
+    session: Session = Depends(get_session)
+):
+    """
+    Obtener el perfil completo del estudiante actual
+    
+    Retorna:
+    - Información personal del estudiante
+    - Habilidades técnicas y blandas
+    - Proyectos realizados
+    - Fechas de creación y última actividad
+    """
+    try:
+        # Verificar que es estudiante
+        if current_user.role != "student":
+            raise HTTPException(
+                status_code=403,
+                detail="Solo estudiantes pueden acceder a sus perfiles"
+            )
+        
+        # Buscar estudiante
+        student = session.exec(
+            select(Student).where(Student.email_hash == hashlib.sha256(current_user.email.encode()).hexdigest())
+        ).first()
+        
+        if not student:
+            raise HTTPException(status_code=404, detail="Perfil de estudiante no encontrado")
+        
+        profile = _convert_to_student_profile(student)
+        
+        _log_audit_action(
+            session, "GET_PROFILE", f"student_id:{student.id}",
+            current_user, details="Perfil obtenido exitosamente"
+        )
+        
+        return profile
+    
+    except HTTPException:
+        raise
+    except Exception as e:
+        print(f"Error getting profile: {e}")
+        _log_audit_action(
+            session, "GET_PROFILE", f"student_id:{current_user.user_id}",
+            current_user, success=False, error_message=str(e)
+        )
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@router.patch("/profile", response_model=StudentProfile)
+async def update_student_profile(
+    profile_data: StudentUpdate,
+    current_user: UserContext = Depends(AuthService.get_current_user),
+    session: Session = Depends(get_session)
+):
+    """
+    Actualizar el perfil del estudiante actual
+    
+    Campos actualizables:
+    - name: Nombre completo
+    - program: Programa académico
+    
+    Retorna:
+    - Perfil actualizado
+    """
+    try:
+        # Verificar que es estudiante
+        if current_user.role != "student":
+            raise HTTPException(
+                status_code=403,
+                detail="Solo estudiantes pueden actualizar sus perfiles"
+            )
+        
+        # Buscar estudiante
+        student = session.exec(
+            select(Student).where(Student.email_hash == hashlib.sha256(current_user.email.encode()).hexdigest())
+        ).first()
+        
+        if not student:
+            raise HTTPException(status_code=404, detail="Perfil de estudiante no encontrado")
+        
+        # Actualizar campos
+        if profile_data.name:
+            student.name = profile_data.name
+        if profile_data.program:
+            student.program = profile_data.program
+        
+        student.updated_at = datetime.utcnow()
+        session.add(student)
+        session.commit()
+        session.refresh(student)
+        
+        profile = _convert_to_student_profile(student)
+        
+        _log_audit_action(
+            session, "UPDATE_PROFILE", f"student_id:{student.id}",
+            current_user, details="Perfil actualizado exitosamente"
+        )
+        
+        return profile
+    
+    except HTTPException:
+        raise
+    except Exception as e:
+        print(f"Error updating profile: {e}")
+        _log_audit_action(
+            session, "UPDATE_PROFILE", f"student_id:{current_user.user_id}",
+            current_user, success=False, error_message=str(e)
+        )
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@router.get("/recommendations", response_model=List[dict])
+async def get_student_recommendations(
+    limit: int = Query(10),
+    current_user: UserContext = Depends(AuthService.get_current_user),
+    session: Session = Depends(get_session)
+):
+    """
+    Obtener recomendaciones de empleos personalizadas para el estudiante
+    
+    Parámetros:
+    - limit: Número máximo de recomendaciones (default: 10)
+    
+    Retorna:
+    - Lista de empleos recomendados ordenados por score de compatibilidad
+    - Score de matching incluido en cada recomendación
+    """
+    try:
+        # Verificar que es estudiante
+        if current_user.role != "student":
+            raise HTTPException(
+                status_code=403,
+                detail="Solo estudiantes pueden obtener recomendaciones"
+            )
+        
+        # Buscar estudiante
+        student = session.exec(
+            select(Student).where(Student.email_hash == hashlib.sha256(current_user.email.encode()).hexdigest())
+        ).first()
+        
+        if not student:
+            raise HTTPException(status_code=404, detail="Perfil de estudiante no encontrado")
+        
+        # Obtener habilidades del estudiante
+        student_skills = json.loads(student.skills or "[]")
+        
+        # Buscar empleos activos
+        from app.models import JobPosition
+        all_jobs = session.exec(
+            select(JobPosition).where(JobPosition.is_active == True)
+        ).all()
+        
+        # Calcular scores de compatibilidad y ordenar
+        scored_jobs = []
+        for job in all_jobs:
+            job_skills = json.loads(job.skills or "[]") if job.skills else []
+            
+            # Calcular score basado en coincidencia de skills
+            matches = sum(1 for skill in student_skills if any(skill.lower() in js.lower() or js.lower() in skill.lower() for js in job_skills))
+            score = (matches / len(job_skills)) * 100 if job_skills else 50
+            
+            scored_jobs.append({
+                "id": job.id,
+                "title": job.title,
+                "company": job.company,
+                "location": job.location,
+                "description": job.description[:200] + "..." if len(job.description) > 200 else job.description,
+                "match_score": round(score, 2),
+                "job_type": job.job_type,
+                "publication_date": job.publication_date
+            })
+        
+        # Ordenar por score descendente
+        scored_jobs.sort(key=lambda x: x["match_score"], reverse=True)
+        
+        # Limitar resultados
+        recommendations = scored_jobs[:limit]
+        
+        _log_audit_action(
+            session, "GET_RECOMMENDATIONS", f"student_id:{student.id}",
+            current_user, details=f"Obtenidas {len(recommendations)} recomendaciones"
+        )
+        
+        return recommendations
+    
+    except HTTPException:
+        raise
+    except Exception as e:
+        print(f"Error getting recommendations: {e}")
+        _log_audit_action(
+            session, "GET_RECOMMENDATIONS", f"student_id:{current_user.user_id}",
+            current_user, success=False, error_message=str(e)
+        )
+        raise HTTPException(status_code=500, detail=str(e))

@@ -6,11 +6,11 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <meta name="description" content="MoirAI Admin Dashboard - Control Panel">
     <title>MoirAI - Admin Dashboard</title>
+    <link rel="stylesheet" href="/static/css/styles.css">
     <link rel="stylesheet" href="/static/css/admin-styles.css">
+    <link rel="stylesheet" href="/static/css/notifications.css">
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
-    <link
-        href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=Poppins:wght@600;700;800&display=swap"
-        rel="stylesheet">
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=Poppins:wght@600;700;800&display=swap" rel="stylesheet">
 </head>
 
 <body>
@@ -851,24 +851,157 @@
             </div>
         </section>
 
-        <!-- Analytics Section -->
+        <!-- Analytics Section (Integrated) -->
         <section id="analytics" class="content-section">
             <div class="section-header">
-                <h1>Análisis y Reportes</h1>
+                <h1>Análisis y Reportes Avanzados</h1>
+                <div class="header-actions">
+                    <button class="btn btn-primary" id="refreshAnalytics">
+                        <i class="fas fa-sync-alt"></i> Actualizar
+                    </button>
+                </div>
             </div>
 
-            <div class="analytics-grid">
-                <div class="chart-card large">
-                    <h3>Tendencia de Registros</h3>
-                    <canvas id="trendsChart"></canvas>
+            <!-- Error Message -->
+            <div id="error-message" class="error-message" style="display: none;"></div>
+
+            <!-- Date Range Filter -->
+            <div class="date-range">
+                <div class="date-input-group">
+                    <label for="start-date">Desde:</label>
+                    <input type="date" id="start-date" class="filter-input">
                 </div>
-                <div class="chart-card">
-                    <h3>Distribución por Carrera</h3>
-                    <canvas id="majorChart"></canvas>
+                <div class="date-input-group">
+                    <label for="end-date">Hasta:</label>
+                    <input type="date" id="end-date" class="filter-input">
                 </div>
-                <div class="chart-card">
-                    <h3>Tasa de Conversión</h3>
-                    <canvas id="conversionChart"></canvas>
+                <button class="btn btn-primary">Actualizar</button>
+            </div>
+
+            <!-- Loading State -->
+            <div id="loading-state" class="loading-state" style="display: none;">
+                <div class="spinner"></div>
+                <p>Cargando analítica...</p>
+            </div>
+
+            <!-- Analytics Content -->
+            <div id="analytics-content">
+                <!-- KPI Cards -->
+                <div id="kpi-grid" class="kpi-grid">
+                    <div class="kpi-card">
+                        <div class="kpi-header">
+                            <h3>Estudiantes</h3>
+                            <span class="kpi-icon"><i class="fas fa-graduation-cap"></i></span>
+                        </div>
+                        <div class="kpi-value" id="kpi-students">0</div>
+                        <div class="kpi-change positive">
+                            <i class="fas fa-arrow-up"></i> <span id="kpi-students-change">0%</span> este mes
+                        </div>
+                    </div>
+
+                    <div class="kpi-card">
+                        <div class="kpi-header">
+                            <h3>Empresas</h3>
+                            <span class="kpi-icon"><i class="fas fa-building"></i></span>
+                        </div>
+                        <div class="kpi-value" id="kpi-companies">0</div>
+                        <div class="kpi-change positive">
+                            <i class="fas fa-arrow-up"></i> <span id="kpi-companies-change">0%</span> este mes
+                        </div>
+                    </div>
+
+                    <div class="kpi-card">
+                        <div class="kpi-header">
+                            <h3>Empleos</h3>
+                            <span class="kpi-icon"><i class="fas fa-briefcase"></i></span>
+                        </div>
+                        <div class="kpi-value" id="kpi-jobs">0</div>
+                        <div class="kpi-change positive">
+                            <i class="fas fa-arrow-up"></i> <span id="kpi-jobs-change">0%</span> este mes
+                        </div>
+                    </div>
+
+                    <div class="kpi-card">
+                        <div class="kpi-header">
+                            <h3>Aplicaciones</h3>
+                            <span class="kpi-icon"><i class="fas fa-file-alt"></i></span>
+                        </div>
+                        <div class="kpi-value" id="kpi-applications">0</div>
+                        <div class="kpi-change positive">
+                            <i class="fas fa-arrow-up"></i> <span id="kpi-applications-change">0%</span> este mes
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Charts Section -->
+                <div id="charts-section" class="charts-section">
+                    <div class="chart-card">
+                        <h3>Tendencia de Estudiantes</h3>
+                        <canvas id="students-chart" height="250"></canvas>
+                    </div>
+                    <div class="chart-card">
+                        <h3>Tendencia de Empleos</h3>
+                        <canvas id="jobs-chart" height="250"></canvas>
+                    </div>
+                    <div class="chart-card">
+                        <h3>Aplicaciones por Período</h3>
+                        <canvas id="applications-chart" height="250"></canvas>
+                    </div>
+                    <div class="chart-card">
+                        <h3>Tasa de Éxito</h3>
+                        <canvas id="success-rate-chart" height="250"></canvas>
+                    </div>
+                </div>
+
+                <!-- Tables Section -->
+                <div id="tables-section" class="tables-section">
+                    <div class="chart-card">
+                        <h3>Top 5 Empresas</h3>
+                        <table class="data-table">
+                            <thead>
+                                <tr>
+                                    <th>Ranking</th>
+                                    <th>Empresa</th>
+                                    <th>Empleos</th>
+                                </tr>
+                            </thead>
+                            <tbody id="top-companies">
+                                <tr><td colspan="3" style="text-align: center; color: #999;">Cargando...</td></tr>
+                            </tbody>
+                        </table>
+                    </div>
+
+                    <div class="chart-card">
+                        <h3>Top 5 Habilidades</h3>
+                        <table class="data-table">
+                            <thead>
+                                <tr>
+                                    <th>Ranking</th>
+                                    <th>Habilidad</th>
+                                    <th>Demanda</th>
+                                </tr>
+                            </thead>
+                            <tbody id="top-skills">
+                                <tr><td colspan="3" style="text-align: center; color: #999;">Cargando...</td></tr>
+                            </tbody>
+                        </table>
+                    </div>
+
+                    <div class="chart-card">
+                        <h3>Top 5 Ubicaciones</h3>
+                        <table class="data-table">
+                            <thead>
+                                <tr>
+                                    <th>Ranking</th>
+                                    <th>Ubicación</th>
+                                    <th>Empleos</th>
+                                </tr>
+                            </thead>
+                            <tbody id="top-locations">
+                                <tr><td colspan="3" style="text-align: center; color: #999;">Cargando...</td></tr>
+                            </tbody>
+                        </table>
+                    </div>
                 </div>
             </div>
         </section>
@@ -938,6 +1071,9 @@
 
     <!-- Charts Script -->
     <script src="/static/js/charts.js"></script>
+
+    <!-- Admin Analytics Module (Integrated Mode) -->
+    <script src="/static/js/pages/admin-analytics.js"></script>
 
     <!-- Admin Dashboard Script -->
     <script src="/static/js/admin-dashboard.js"></script>

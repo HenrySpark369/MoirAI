@@ -1,7 +1,11 @@
 /**
  * MoirAI Admin Dashboard - JavaScript
  * Handles navigation, data management, and interactions
+ * Integrates AdminAnalyticsPage module
  */
+
+// Global analytics instance
+let dashboardAnalytics = null;
 
 document.addEventListener('DOMContentLoaded', function () {
     initializeNavigation();
@@ -55,7 +59,27 @@ function switchSection(sectionId) {
 
     // Load data if needed
     if (sectionId === 'analytics') {
-        initializeCharts();
+        initializeAnalytics();
+    }
+}
+
+/**
+ * Initialize Analytics Module (Integrated Mode)
+ * This is called when user switches to analytics section
+ */
+function initializeAnalytics() {
+    if (!dashboardAnalytics) {
+        // Create analytics instance in integrated mode
+        dashboardAnalytics = new AdminAnalyticsPage('#analytics');
+        dashboardAnalytics.initialize(true).catch(error => {
+            console.error('Error initializing analytics in dashboard:', error);
+            showNotification('Error al cargar analítica', 'error');
+        });
+    } else if (dashboardAnalytics.initialized) {
+        // Reload analytics data
+        dashboardAnalytics.loadAnalytics(true).catch(error => {
+            console.error('Error reloading analytics:', error);
+        });
     }
 }
 

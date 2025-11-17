@@ -58,6 +58,10 @@ class NavbarManager {
         if (path === '/applications') return 'applications';
         if (path === '/buscar-candidatos') return 'buscar-candidatos';
         if (path === '/mis-vacantes') return 'mis-vacantes';
+        if (path === '/company/mis-vacantes') return 'mis-vacantes';
+        if (path === '/admin/users') return 'admin-users';
+        if (path === '/admin/analytics') return 'admin-analytics';
+        if (path === '/admin/settings') return 'admin-settings';
         if (path === '/login') return 'login';
         if (path === '/registro') return 'registro';
         return 'other';

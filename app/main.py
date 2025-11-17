@@ -237,6 +237,35 @@ async def buscar_candidatos_page():
     return {"message": "Página de búsqueda de candidatos no encontrada", "status": "error"}
 
 
+@app.get("/mis-vacantes", tags=["frontend"], include_in_schema=False)
+@app.get("/company/mis-vacantes", tags=["frontend"], include_in_schema=False)
+async def mis_vacantes_page():
+    """Servir la página de mis vacantes (para empresas)"""
+    template_path = Path(__file__).parent / "frontend" / "templates" / "company" / "mis-vacantes.html"
+    if template_path.exists():
+        return FileResponse(str(template_path), media_type="text/html")
+    return {"message": "Página de mis vacantes no encontrada", "status": "error"}
+
+
+@app.get("/admin/users", tags=["frontend"], include_in_schema=False)
+async def admin_users_page():
+    """Servir la página de gestión de usuarios (para administradores)"""
+    template_path = Path(__file__).parent / "frontend" / "templates" / "admin" / "users.html"
+    if template_path.exists():
+        return FileResponse(str(template_path), media_type="text/html")
+    return {"message": "Página de gestión de usuarios no encontrada", "status": "error"}
+
+
+@app.get("/admin/analytics", tags=["frontend"], include_in_schema=False)
+async def admin_analytics_page():
+    """Servir la página de analítica (para administradores)"""
+    template_path = Path(__file__).parent / "frontend" / "templates" / "admin" / "analytics.html"
+    if template_path.exists():
+        return FileResponse(str(template_path), media_type="text/html")
+    return {"message": "Página de analítica no encontrada", "status": "error"}
+
+
+
 @app.get("/applications", tags=["frontend"], include_in_schema=False)
 async def applications_page():
     """Servir la página de aplicaciones (para estudiantes)"""
@@ -277,7 +306,7 @@ async def empresas_page():
 @app.get("/estudiantes", tags=["listings"], include_in_schema=False)
 async def estudiantes_page():
     """Servir la página de estudiantes"""
-    template_path = Path(__file__).parent / "frontend" / "templates" / "estudiantes.html"
+    template_path = Path(__file__).parent / "frontend" / "templates" / "student" / "estudiantes.html"
     if template_path.exists():
         return FileResponse(str(template_path), media_type="text/html")
     return {"message": "Página de estudiantes no encontrada", "status": "error"}
@@ -368,6 +397,10 @@ app.include_router(companies.router, prefix=settings.API_V1_STR)
 # Include jobs router (con autocomplete consolidado de suggestions)
 from app.api.endpoints import jobs
 app.include_router(jobs.router, prefix=settings.API_V1_STR)
+
+# Phase 2: Admin endpoints - ✅ IMPLEMENTED
+from app.api.endpoints import admin
+app.include_router(admin.router, prefix=settings.API_V1_STR)
 
 # NOTE: suggestions.py ha sido consolidado en jobs.py (autocomplete endpoints)
 # NOTE: matching.py ha sido consolidado en students.py (búsqueda por skills)

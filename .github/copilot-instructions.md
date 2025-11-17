@@ -57,6 +57,12 @@
 -   Cumplimiento Regulatorio (Adherencia)
     -   La arquitectura y los procesos deben adherirse a la LFPDPPP y los estándares ISO/IEC 27001.
 
+#	Documentación y Desarrollo
+	-	Refactoriza lo necesario de lo que ya exista antes de crear nuevos scripts
+	-	Lee primero tu estructura de archivos y código existente
+	-	Evita mantener codigo duplicado y deprecado
+	-	Evita crear nuevos scripts si puedes integrar en los existentes
+
 #	Buenas Prácticas Ciberseguridad para la Anonimización de Datos
 ##	Evaluación y Clasificación de Datos
 	-	Realizar inventario exhaustivo de activos de datos en la organización

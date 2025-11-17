@@ -744,3 +744,337 @@ async def delete_company(
             status_code=500,
             detail=f"Error eliminando empresa: {str(e)}"
         )
+
+
+# ============================================================================
+# PHASE 2: NEW COMPANY ENDPOINTS
+# ============================================================================
+
+@router.get("/posted", response_model=List[dict])
+async def get_company_posted_jobs(
+    offset: int = Query(0),
+    limit: int = Query(20),
+    current_user: UserContext = Depends(AuthService.get_current_user),
+    session: Session = Depends(get_session)
+):
+    """
+    Obtener todos los empleos publicados por la empresa actual
+    
+    Parámetros:
+    - offset: Número de registros a saltar (default: 0)
+    - limit: Número de resultados por página (default: 20)
+    
+    Retorna:
+    - Lista de empleos publicados por la empresa
+    - Incluye cantidad de aplicantes y vistas
+    - Ordenado por fecha de creación descendente
+    """
+    try:
+        # Verificar que es empresa
+        if current_user.role != "company":
+            raise HTTPException(
+                status_code=403,
+                detail="Solo empresas pueden ver sus empleos publicados"
+            )
+        
+        # Buscar empleos de la empresa
+        from app.models import JobPosition
+        from app.models import JobApplicationDB
+        
+        jobs = session.exec(
+            select(JobPosition)
+            .where(JobPosition.company_id == current_user.user_id)
+            .order_by(JobPosition.created_at.desc())
+            .offset(offset)
+            .limit(limit)
+        ).all()
+        
+        # Enriquecer con estadísticas
+        result = []
+        for job in jobs:
+            applicant_count = session.exec(
+                select(func.count(JobApplicationDB.id))
+                .where(JobApplicationDB.job_position_id == job.id)
+            ).one()
+            
+            result.append({
+                "id": job.id,
+                "title": job.title,
+                "company": job.company,
+                "location": job.location,
+                "status": "open" if job.is_active else "closed",
+                "applicant_count": applicant_count,
+                "views_count": getattr(job, 'views_count', 0),
+                "created_at": job.created_at,
+                "expires_at": job.expires_at
+            })
+        
+        _log_audit_action(
+            session, "GET_COMPANY_JOBS", f"company_id:{current_user.user_id}",
+            current_user, details=f"Obtenidos {len(result)} empleos publicados"
+        )
+        
+        return result
+    
+    except HTTPException:
+        raise
+    except Exception as e:
+        print(f"Error getting company jobs: {e}")
+        _log_audit_action(
+            session, "GET_COMPANY_JOBS", f"company_id:{current_user.user_id}",
+            current_user, success=False, error_message=str(e)
+        )
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@router.post("/create", response_model=dict, status_code=201)
+async def create_job_posting(
+    job_data: dict,
+    current_user: UserContext = Depends(AuthService.get_current_user),
+    session: Session = Depends(get_session)
+):
+    """
+    Crear nuevo empleo/vacante para la empresa
+    
+    Campos requeridos en job_data:
+    - title: Título del puesto (str)
+    - description: Descripción completa (str, min 10 caracteres)
+    - location: Ubicación (str)
+    
+    Campos opcionales:
+    - requirements: Requisitos técnicos (str)
+    - salary_range: Rango salarial (str)
+    - job_type: Tipo de trabajo (full-time, part-time, etc.)
+    - work_mode: Modalidad (presencial, remoto, híbrido)
+    - skills: Lista de habilidades requeridas (list)
+    
+    Retorna:
+    - Empleo creado con ID y timestamps
+    """
+    try:
+        # Verificar que es empresa
+        if current_user.role != "company":
+            raise HTTPException(
+                status_code=403,
+                detail="Solo empresas pueden crear empleos"
+            )
+        
+        from app.models import JobPosition
+        
+        # Validar campos requeridos
+        if not job_data.get("title"):
+            raise HTTPException(status_code=400, detail="Campo 'title' es requerido")
+        if not job_data.get("description"):
+            raise HTTPException(status_code=400, detail="Campo 'description' es requerido")
+        if len(job_data.get("description", "")) < 10:
+            raise HTTPException(status_code=400, detail="La descripción debe tener al menos 10 caracteres")
+        if not job_data.get("location"):
+            raise HTTPException(status_code=400, detail="Campo 'location' es requerido")
+        
+        # Obtener empresa
+        company = session.get(Company, current_user.user_id)
+        if not company:
+            raise HTTPException(status_code=404, detail="Empresa no encontrada")
+        
+        # Crear empleo
+        job = JobPosition(
+            title=job_data.get("title"),
+            company=company.name,
+            company_id=company.id,
+            location=job_data.get("location"),
+            description=job_data.get("description"),
+            requirements=job_data.get("requirements"),
+            salary_range=job_data.get("salary_range"),
+            job_type=job_data.get("job_type", "full-time"),
+            work_mode=job_data.get("work_mode"),
+            skills=json.dumps(job_data.get("skills", [])),
+            is_active=True,
+            publication_date=datetime.utcnow(),
+            source="internal"
+        )
+        
+        session.add(job)
+        session.commit()
+        session.refresh(job)
+        
+        _log_audit_action(
+            session, "CREATE_JOB", f"job_id:{job.id}",
+            current_user, details=f"Empleo '{job.title}' creado exitosamente"
+        )
+        
+        return {
+            "id": job.id,
+            "title": job.title,
+            "company": job.company,
+            "location": job.location,
+            "status": "open",
+            "created_at": job.created_at,
+            "message": "Empleo creado exitosamente"
+        }
+    
+    except HTTPException:
+        raise
+    except Exception as e:
+        print(f"Error creating job: {e}")
+        _log_audit_action(
+            session, "CREATE_JOB", f"company_id:{current_user.user_id}",
+            current_user, success=False, error_message=str(e)
+        )
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@router.get("/{job_id}/applicants", response_model=List[dict])
+async def get_job_applicants(
+    job_id: int,
+    sort_by: str = Query("match_score"),
+    current_user: UserContext = Depends(AuthService.get_current_user),
+    session: Session = Depends(get_session)
+):
+    """
+    Obtener todos los candidatos que han aplicado a un empleo
+    
+    Parámetros:
+    - job_id: ID del empleo
+    - sort_by: Campo para ordenar (match_score, date, name)
+    
+    Retorna:
+    - Lista de candidatos con información personal y score de compatibilidad
+    - Ordenado según parámetro sort_by
+    """
+    try:
+        # Verificar que es empresa
+        if current_user.role != "company":
+            raise HTTPException(
+                status_code=403,
+                detail="Solo empresas pueden ver candidatos"
+            )
+        
+        from app.models import JobPosition, JobApplicationDB
+        
+        # Verificar que el empleo pertenece a la empresa
+        job = session.get(JobPosition, job_id)
+        if not job or job.company_id != current_user.user_id:
+            raise HTTPException(status_code=404, detail="Empleo no encontrado")
+        
+        # Obtener aplicaciones
+        applications = session.exec(
+            select(JobApplicationDB)
+            .where(JobApplicationDB.job_position_id == job_id)
+        ).all()
+        
+        # Enriquecer con información del candidato
+        applicants = []
+        for app in applications:
+            student = session.get(Student, app.user_id)
+            if student:
+                applicants.append({
+                    "application_id": app.id,
+                    "student_id": student.id,
+                    "name": student.name,
+                    "program": student.program,
+                    "skills": json.loads(student.skills or "[]"),
+                    "soft_skills": json.loads(student.soft_skills or "[]"),
+                    "status": app.status,
+                    "applied_date": app.application_date,
+                    "match_score": getattr(app, 'match_score', 0)
+                })
+        
+        # Ordenar según parámetro
+        if sort_by == "date":
+            applicants.sort(key=lambda x: x["applied_date"], reverse=True)
+        elif sort_by == "name":
+            applicants.sort(key=lambda x: x["name"])
+        else:  # match_score
+            applicants.sort(key=lambda x: x["match_score"], reverse=True)
+        
+        _log_audit_action(
+            session, "GET_JOB_APPLICANTS", f"job_id:{job_id}",
+            current_user, details=f"Obtenidos {len(applicants)} candidatos"
+        )
+        
+        return applicants
+    
+    except HTTPException:
+        raise
+    except Exception as e:
+        print(f"Error getting applicants: {e}")
+        _log_audit_action(
+            session, "GET_JOB_APPLICANTS", f"job_id:{job_id}",
+            current_user, success=False, error_message=str(e)
+        )
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@router.patch("/{job_id}/applicants/{app_id}/status", response_model=BaseResponse)
+async def update_application_status(
+    job_id: int,
+    app_id: int,
+    status_data: dict,
+    current_user: UserContext = Depends(AuthService.get_current_user),
+    session: Session = Depends(get_session)
+):
+    """
+    Actualizar el estado de una aplicación
+    
+    Parámetros:
+    - job_id: ID del empleo
+    - app_id: ID de la aplicación
+    - status_data: {"status": "accepted" | "rejected" | "pending"}
+    
+    Retorna:
+    - Confirmación de actualización
+    """
+    try:
+        # Verificar que es empresa
+        if current_user.role != "company":
+            raise HTTPException(
+                status_code=403,
+                detail="Solo empresas pueden actualizar estados de aplicaciones"
+            )
+        
+        from app.models import JobPosition, JobApplicationDB
+        
+        # Verificar que el empleo pertenece a la empresa
+        job = session.get(JobPosition, job_id)
+        if not job or job.company_id != current_user.user_id:
+            raise HTTPException(status_code=404, detail="Empleo no encontrado")
+        
+        # Buscar aplicación
+        app = session.get(JobApplicationDB, app_id)
+        if not app or app.job_position_id != job_id:
+            raise HTTPException(status_code=404, detail="Aplicación no encontrada")
+        
+        # Validar nuevo estado
+        valid_statuses = ["pending", "accepted", "rejected", "withdrawn"]
+        new_status = status_data.get("status")
+        if new_status not in valid_statuses:
+            raise HTTPException(
+                status_code=400,
+                detail=f"Estado debe ser uno de: {', '.join(valid_statuses)}"
+            )
+        
+        # Actualizar estado
+        app.status = new_status
+        app.updated_at = datetime.utcnow()
+        session.add(app)
+        session.commit()
+        
+        _log_audit_action(
+            session, "UPDATE_APPLICATION_STATUS", f"app_id:{app_id}",
+            current_user, details=f"Estado actualizado a '{new_status}'"
+        )
+        
+        return BaseResponse(
+            success=True,
+            message=f"Estado actualizado a '{new_status}' exitosamente"
+        )
+    
+    except HTTPException:
+        raise
+    except Exception as e:
+        print(f"Error updating application status: {e}")
+        _log_audit_action(
+            session, "UPDATE_APPLICATION_STATUS", f"app_id:{app_id}",
+            current_user, success=False, error_message=str(e)
+        )
+        raise HTTPException(status_code=500, detail=str(e))
