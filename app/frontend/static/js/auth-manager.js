@@ -68,21 +68,50 @@ class AuthManager {
   /**
    * Login con email y contraseña
    * ✅ CORRECCIÓN: Mapea correctamente api_key de la respuesta
+   * ✅ Si no viene api_key, usa la guardada del registro
    */
   async login(email, password) {
     try {
+      console.log('📍 Iniciando login...');
+      
       const response = await this.api.post('/auth/login', {
         email,
         password
       })
 
-      // ✅ CORRECCIÓN: Verificar api_key (no token)
-      if (!response.api_key) {
-        throw new Error('No se recibió API key de autenticación')
+      console.log('📍 Respuesta del login:', {
+        user_id: response.user_id,
+        email: response.email,
+        role: response.role,
+        api_key_presente: !!response.api_key,
+        api_key_vacio: response.api_key === '',
+        api_key_length: response.api_key?.length || 0
+      });
+
+      // ✅ CORRECCIÓN: Verificar api_key o usar la del registro
+      let apiKey = response.api_key;
+      
+      // Si no viene api_key en la respuesta, usar la guardada del registro
+      if (!apiKey || apiKey === '' || apiKey === undefined) {
+        console.log('⚠️ api_key vacío o no presente, buscando en localStorage...');
+        apiKey = localStorage.getItem('api_key');
+        
+        console.log('📍 localStorage api_key:', {
+          presente: !!apiKey,
+          length: apiKey?.length || 0
+        });
+        
+        // Si tampoco está en localStorage, error
+        if (!apiKey) {
+          console.error('❌ No se encontró API key en respuesta ni en localStorage');
+          throw new Error('No se recibió API key de autenticación. Por favor, vuelve a registrarte.')
+        }
       }
 
+      console.log('✅ API key obtenida, usando para autenticación');
+
       // ✅ CORRECCIÓN: Usar api_key en lugar de token
-      this.api.setToken(response.api_key)
+      this.api.setToken(apiKey)
       
       this.currentUser = {
         user_id: response.user_id,
@@ -91,11 +120,19 @@ class AuthManager {
         role: response.role
       }
 
+      // ✅ ACTUALIZACIÓN: Guardar en localStorage
+      localStorage.setItem('api_key', apiKey)
+      localStorage.setItem('user_id', response.user_id.toString())
+      localStorage.setItem('user_role', response.role)
+      localStorage.setItem('user_email', response.email)
+
+      console.log('✅ Datos guardados en localStorage');
+
       this.notifyListeners()
       return response
 
     } catch (error) {
-      console.error('Error en login:', error)
+      console.error('❌ Error en login:', error)
       throw {
         message: error.message || 'Error al iniciar sesión',
         code: error.status,

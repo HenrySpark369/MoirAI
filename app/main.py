@@ -110,17 +110,6 @@ if static_path.exists():
     app.mount("/static", StaticFiles(directory=str(static_path)), name="static")
 
 
-# Endpoint para servir la landing page
-@app.get("/landing", tags=["frontend"])
-@app.get("/", tags=["frontend"], include_in_schema=False)
-async def landing_page():
-    """Servir la página de inicio (landing page)"""
-    template_path = Path(__file__).parent / "frontend" / "templates" / "index.html"
-    if template_path.exists():
-        return FileResponse(str(template_path), media_type="text/html")
-    return {"message": "Landing page not found"}
-
-
 # Event handlers
 @app.on_event("startup")
 async def startup_event():
@@ -130,7 +119,7 @@ async def startup_event():
     print(f"🚀 {settings.PROJECT_NAME} iniciado correctamente")
     print(f"📊 Base de datos: {settings.DATABASE_URL}")
     print(f"🔐 Audit logging: {'✅' if settings.ENABLE_AUDIT_LOGGING else '❌'}")
-    print(f"🌐 Landing page disponible en: http://localhost:8000/landing")
+    print(f"🌐 Landing page disponible en: http://localhost:8000/")
 
 
 @app.on_event("shutdown")
@@ -218,6 +207,52 @@ async def admin_dashboard():
         "message": "Admin dashboard not found",
         "status": "error"
     }
+
+
+# Dashboard routes para roles autenticados
+@app.get("/dashboard", tags=["frontend"], include_in_schema=False)
+async def dashboard_page():
+    """Servir el dashboard del usuario (estudiante/empresa)"""
+    template_path = Path(__file__).parent / "frontend" / "templates" / "dashboard.html"
+    if template_path.exists():
+        return FileResponse(str(template_path), media_type="text/html")
+    return {"message": "Dashboard no encontrado", "status": "error"}
+
+
+@app.get("/profile", tags=["frontend"], include_in_schema=False)
+async def profile_page():
+    """Servir la página de perfil del usuario"""
+    template_path = Path(__file__).parent / "frontend" / "templates" / "profile.html"
+    if template_path.exists():
+        return FileResponse(str(template_path), media_type="text/html")
+    return {"message": "Página de perfil no encontrada", "status": "error"}
+
+
+@app.get("/buscar-candidatos", tags=["frontend"], include_in_schema=False)
+async def buscar_candidatos_page():
+    """Servir la página de búsqueda de candidatos (para empresas)"""
+    template_path = Path(__file__).parent / "frontend" / "templates" / "buscar-candidatos.html"
+    if template_path.exists():
+        return FileResponse(str(template_path), media_type="text/html")
+    return {"message": "Página de búsqueda de candidatos no encontrada", "status": "error"}
+
+
+@app.get("/applications", tags=["frontend"], include_in_schema=False)
+async def applications_page():
+    """Servir la página de aplicaciones (para estudiantes)"""
+    template_path = Path(__file__).parent / "frontend" / "templates" / "applications.html"
+    if template_path.exists():
+        return FileResponse(str(template_path), media_type="text/html")
+    return {"message": "Página de aplicaciones no encontrada", "status": "error"}
+
+
+@app.get("/login", tags=["frontend"], include_in_schema=False)
+async def login_page():
+    """Servir la página de login"""
+    template_path = Path(__file__).parent / "frontend" / "templates" / "login.html"
+    if template_path.exists():
+        return FileResponse(str(template_path), media_type="text/html")
+    return {"message": "Página de login no encontrada", "status": "error"}
 
 
 # Sub-sites Pages

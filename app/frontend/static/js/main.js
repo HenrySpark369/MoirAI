@@ -7,6 +7,7 @@ document.addEventListener('DOMContentLoaded', function () {
     initializeModals();
     initializeNavigation();
     initializeFormHandlers();
+    initializePasswordToggles();
 });
 
 /**
@@ -41,12 +42,39 @@ function initializeModals() {
         }
     });
 
-    // Initialize register tabs
+    // Initialize register tabs with role-specific fields
     const registerTabs = document.querySelectorAll('.register-tab');
     registerTabs.forEach(tab => {
         tab.addEventListener('click', function () {
+            const role = this.getAttribute('data-tab');
+            
+            // Update active tab
             registerTabs.forEach(t => t.classList.remove('active'));
             this.classList.add('active');
+            
+            // Update hidden role field
+            const roleInput = document.querySelector('input[name="role"]');
+            if (roleInput) {
+                roleInput.value = role;
+            }
+            
+            // Show/hide conditional fields
+            const studentProgram = document.getElementById('student-program');
+            const companyIndustry = document.getElementById('company-industry');
+            const companySize = document.getElementById('company-size');
+            const companyLocation = document.getElementById('company-location');
+            
+            if (role === 'student') {
+                if (studentProgram) studentProgram.style.display = 'block';
+                if (companyIndustry) companyIndustry.style.display = 'none';
+                if (companySize) companySize.style.display = 'none';
+                if (companyLocation) companyLocation.style.display = 'none';
+            } else if (role === 'company') {
+                if (studentProgram) studentProgram.style.display = 'none';
+                if (companyIndustry) companyIndustry.style.display = 'block';
+                if (companySize) companySize.style.display = 'block';
+                if (companyLocation) companyLocation.style.display = 'block';
+            }
         });
     });
 }
@@ -187,36 +215,86 @@ async function handleContactFormSubmit(e) {
 async function handleRegisterFormSubmit(e) {
     e.preventDefault();
 
-    const formData = new FormData(this);
+    const form = this;
+    const formData = new FormData(form);
     const data = Object.fromEntries(formData);
 
     try {
-        const submitButton = this.querySelector('button[type="submit"]');
+        const submitButton = form.querySelector('button[type="submit"]');
         const originalText = submitButton.textContent;
         submitButton.textContent = 'Registrando...';
         submitButton.disabled = true;
 
-        // Simulated registration
+        // Remover field de términos antes de enviar (no es del API)
+        delete data.terms;
+
+        // Validar que los campos requeridos estén presentes
+        if (!data.name || !data.email || !data.password || !data.role) {
+            throw new Error('Por favor completa todos los campos requeridos');
+        }
+
+        // Enviar registro
         const response = await fetch('/api/v1/auth/register', {
             method: 'POST',
             headers: {
                 'Content-Type': 'application/json'
             },
             body: JSON.stringify(data)
-        }).catch(() => {
-            return { ok: true };
         });
 
-        showNotification('¡Registro exitoso! Bienvenido a MoirAI', 'success');
-        this.reset();
-        document.getElementById('register-modal').style.display = 'none';
+        // Manejar respuestas no exitosas
+        if (!response.ok) {
+            let errorMessage = 'Error al registrarse';
+            
+            try {
+                const errorData = await response.json();
+                
+                // Mapear errores HTTP a mensajes amigables
+                if (response.status === 409) {
+                    errorMessage = errorData.detail || 'Este email ya está registrado';
+                } else if (response.status === 400) {
+                    errorMessage = errorData.detail || 'Datos inválidos. Por favor verifica los campos';
+                } else if (response.status === 422) {
+                    errorMessage = errorData.detail || 'Validación fallida. Verifica los datos';
+                } else {
+                    errorMessage = errorData.detail || `Error ${response.status}: ${response.statusText}`;
+                }
+            } catch (parseError) {
+                // Si no se puede parsear JSON, usar status text
+                errorMessage = `Error ${response.status}: ${response.statusText}`;
+            }
+            
+            throw new Error(errorMessage);
+        }
+
+        const responseData = await response.json();
+        
+        // Guardar API key en localStorage
+        if (responseData.api_key) {
+            localStorage.setItem('api_key', responseData.api_key);
+            localStorage.setItem('user_id', responseData.user_id);
+            localStorage.setItem('user_role', responseData.role);
+        }
+
+        showNotification('¡Registro exitoso! Redirigiendo...', 'success');
+        form.reset();
+        
+        // Cerrar modal
+        const modal = document.getElementById('register-modal');
+        if (modal) modal.style.display = 'none';
+
+        // Redirigir al dashboard después de 2 segundos
+        setTimeout(() => {
+            window.location.href = '/dashboard';
+        }, 2000);
 
         submitButton.textContent = originalText;
         submitButton.disabled = false;
     } catch (error) {
         console.error('Error registering:', error);
-        showNotification('Error en el registro. Por favor intenta de nuevo.', 'error');
-        const submitButton = this.querySelector('button[type="submit"]');
+        showNotification(error.message || 'Error en el registro. Por favor intenta de nuevo.', 'error');
+        const submitButton = form.querySelector('button[type="submit"]');
+        submitButton.textContent = originalText || 'Crear Cuenta Gratis';
         submitButton.disabled = false;
     }
 }
@@ -360,6 +438,31 @@ createScrollToTopButton();
 /**
  * Add animation styles to page
  */
+/**
+ * Initialize password toggle functionality
+ */
+function initializePasswordToggles() {
+    const passwordToggles = document.querySelectorAll('.password-toggle');
+    
+    passwordToggles.forEach(toggle => {
+        toggle.addEventListener('click', function (e) {
+            e.preventDefault();
+            const input = this.closest('.password-input-group').querySelector('input');
+            const icon = this.querySelector('i');
+            
+            if (input.type === 'password') {
+                input.type = 'text';
+                icon.classList.remove('fa-eye');
+                icon.classList.add('fa-eye-slash');
+            } else {
+                input.type = 'password';
+                icon.classList.remove('fa-eye-slash');
+                icon.classList.add('fa-eye');
+            }
+        });
+    });
+}
+
 function addAnimationStyles() {
     const style = document.createElement('style');
     style.textContent = `

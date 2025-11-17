@@ -23,7 +23,7 @@
                 </a>
             </div>
 
-            <div class="nav-menu">
+            <div class="nav-menu" id="nav-menu">
                 <ul class="nav-list">
                     <li class="nav-item">
                         <a href="/dashboard" class="nav-link active">
@@ -31,18 +31,7 @@
                             <span>Dashboard</span>
                         </a>
                     </li>
-                    <li class="nav-item">
-                        <a href="/oportunidades" class="nav-link">
-                            <i class="fas fa-briefcase"></i>
-                            <span>Oportunidades</span>
-                        </a>
-                    </li>
-                    <li class="nav-item">
-                        <a href="/profile" class="nav-link">
-                            <i class="fas fa-user"></i>
-                            <span>Mi Perfil</span>
-                        </a>
-                    </li>
+                    <!-- Menú dinámico según rol -->
                 </ul>
             </div>
 
@@ -67,70 +56,102 @@
         <!-- Stats Section -->
         <section class="stats-section">
             <div class="container">
-                <div class="stats-grid">
-                    <div class="stat-card">
-                        <div class="stat-icon">
-                            <i class="fas fa-briefcase"></i>
-                        </div>
-                        <div class="stat-content">
-                            <h3>Aplicaciones</h3>
-                            <p class="stat-number" id="applications-count">0</p>
-                        </div>
-                    </div>
-
-                    <div class="stat-card">
-                        <div class="stat-icon">
-                            <i class="fas fa-star"></i>
-                        </div>
-                        <div class="stat-content">
-                            <h3>Score Match</h3>
-                            <p class="stat-number" id="match-score">0%</p>
-                        </div>
-                    </div>
-
-                    <div class="stat-card">
-                        <div class="stat-icon">
-                            <i class="fas fa-lightbulb"></i>
-                        </div>
-                        <div class="stat-content">
-                            <h3>Recomendaciones</h3>
-                            <p class="stat-number" id="recommendations-count">0</p>
-                        </div>
-                    </div>
-
-                    <div class="stat-card">
-                        <div class="stat-icon">
-                            <i class="fas fa-file-pdf"></i>
-                        </div>
-                        <div class="stat-content">
-                            <h3>CV Actualizado</h3>
-                            <p class="stat-text" id="cv-status">No</p>
-                        </div>
-                    </div>
+                <div class="stats-grid" id="stats-container">
+                    <!-- Cargado dinámicamente según rol -->
                 </div>
             </div>
         </section>
 
-        <!-- Recommendations Section -->
-        <section class="recommendations-section">
-            <div class="container">
-                <h2>Empleos Recomendados Para Ti</h2>
-                <p class="section-subtitle">Basado en tu perfil y habilidades</p>
-                <div id="recommendations-container">
-                    <!-- Cargado dinámicamente -->
+        <!-- Estudiante Content -->
+        <div id="student-content" style="display:none;">
+            <!-- Recommendations Section -->
+            <section class="recommendations-section">
+                <div class="container">
+                    <h2>Empleos Recomendados Para Ti</h2>
+                    <p class="section-subtitle">Basado en tu perfil y habilidades</p>
+                    <div id="recommendations-container">
+                        <!-- Cargado dinámicamente -->
+                    </div>
                 </div>
-            </div>
-        </section>
+            </section>
 
-        <!-- Applications Section -->
-        <section class="applications-section">
-            <div class="container">
-                <h2>Mis Aplicaciones</h2>
-                <div id="applications-container">
-                    <!-- Cargado dinámicamente -->
+            <!-- Applications Section -->
+            <section class="applications-section">
+                <div class="container">
+                    <h2>Mis Aplicaciones</h2>
+                    <div id="applications-container">
+                        <!-- Cargado dinámicamente -->
+                    </div>
                 </div>
-            </div>
-        </section>
+            </section>
+        </div>
+
+        <!-- Empresa Content -->
+        <div id="company-content" style="display:none;">
+            <!-- Candidates Search Section -->
+            <section class="candidates-search-section">
+                <div class="container">
+                    <h2>Búsqueda de Candidatos</h2>
+                    <p class="section-subtitle">Encontrá el talento que necesitas</p>
+                    <div id="search-candidates-container">
+                        <!-- Formulario de búsqueda dinámico -->
+                    </div>
+                </div>
+            </section>
+
+            <!-- Posted Jobs Section -->
+            <section class="posted-jobs-section">
+                <div class="container">
+                    <h2>Mis Vacantes Publicadas</h2>
+                    <div id="posted-jobs-container">
+                        <!-- Cargado dinámicamente -->
+                    </div>
+                </div>
+            </section>
+
+            <!-- Candidates Viewed Section -->
+            <section class="candidates-viewed-section">
+                <div class="container">
+                    <h2>Candidatos Destacados</h2>
+                    <div id="top-candidates-container">
+                        <!-- Cargado dinámicamente -->
+                    </div>
+                </div>
+            </section>
+        </div>
+
+        <!-- Admin Content -->
+        <div id="admin-content" style="display:none;">
+            <!-- KPIs Section -->
+            <section class="kpis-section">
+                <div class="container">
+                    <h2>Indicadores de Desempeño (KPIs)</h2>
+                    <div class="kpis-grid" id="kpis-container">
+                        <!-- Cargado dinámicamente -->
+                    </div>
+                </div>
+            </section>
+
+            <!-- System Monitoring Section -->
+            <section class="monitoring-section">
+                <div class="container">
+                    <h2>Monitoreo de Servicios</h2>
+                    <div id="monitoring-container">
+                        <!-- Cargado dinámicamente -->
+                    </div>
+                </div>
+            </section>
+
+            <!-- Activity Log Section -->
+            <section class="activity-log-section">
+                <div class="container">
+                    <h2>Registro de Actividades</h2>
+                    <div id="activity-log-container">
+                        <!-- Cargado dinámicamente -->
+                    </div>
+                </div>
+            </section>
+        </div>
     </main>
 
     <!-- Footer -->
@@ -182,7 +203,9 @@
     <script src="/static/js/auth-manager.js"></script>
     <script src="/static/js/notification-manager.js"></script>
     <script src="/static/js/utils/storage-manager.js"></script>
+    <script src="/static/js/pages/dashboard-role-adapter.js"></script>
     <script src="/static/js/pages/dashboard.js"></script>
 </body>
 
 </html>
+

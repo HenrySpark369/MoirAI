@@ -16,6 +16,7 @@ from app.schemas import (
     ApiKeyResponse, ApiKeysList, UserContext, BaseResponse, LoginRequest
 )
 from app.services.api_key_service import api_key_service
+from app.services.auth_service import auth_service
 from app.middleware.auth import AuthService
 
 router = APIRouter(prefix="/auth", tags=["authentication"])
@@ -29,136 +30,92 @@ async def register_user(
     """
     Registrar nuevo usuario y generar API key automáticamente
     
-    Crea el perfil del usuario según su rol y genera una API key personal.
+    Valida los datos, crea el perfil según el rol y genera una API key personal.
+    Lógica unificada para estudiantes y empresas.
     """
     try:
-        # Generar hash del email para búsqueda
-        email_hash = hashlib.sha256(user_data.email.lower().strip().encode()).hexdigest()
-        
-        # Verificar si el email ya existe (usando email_hash)
-        existing_student = session.exec(
-            select(Student).where(Student.email_hash == email_hash)
-        ).first()
-        
-        existing_company = session.exec(
-            select(Company).where(Company.email_hash == email_hash)
-        ).first()
-        
-        if existing_student or existing_company:
-            raise HTTPException(
-                status_code=409,
-                detail="Ya existe un usuario registrado con ese email"
-            )
-        
         # Validar rol
         if user_data.role not in ["student", "company"]:
             raise HTTPException(
                 status_code=400,
-                detail="El rol debe ser 'student' o 'company'. Los administradores se crean manualmente."
+                detail="El rol debe ser 'student' o 'company'"
             )
         
-        # Crear usuario según el rol
-        user_id = None
+        # Crear usuario (se valida internamente si email existe)
+        user_id, user_type = auth_service.create_user(
+            session=session,
+            name=user_data.name,
+            email=user_data.email,
+            password=user_data.password,
+            role=user_data.role,
+            program=getattr(user_data, "program", None),
+            industry=getattr(user_data, "industry", None),
+            company_size=getattr(user_data, "company_size", None),
+            location=getattr(user_data, "location", None)
+        )
         
-        if user_data.role == "student":
-            from app.utils.encryption import EncryptionService
-            encryption_service = EncryptionService()
-            
-            # Generar hash de contraseña (SHA256 simple para MVP - ver TODO abajo)
-            hashed_pw = hashlib.sha256(user_data.password.encode()).hexdigest()
-            
-            student = Student(
-                name=user_data.name,
-                program=user_data.program or "",
-                consent_data_processing=True,
-                skills="[]",
-                soft_skills="[]", 
-                projects="[]",
-                email_hash=email_hash,
-                hashed_password=hashed_pw,
-                cv_uploaded=False
-            )
-            # Encriptar email directamente antes de agregar a sesión
-            email_lower = user_data.email.lower().strip()
-            student.email = encryption_service.encrypt(email_lower)
-            
-            session.add(student)
-            session.flush()
-            session.commit()
-            session.refresh(student)
-            user_id = student.id
-            
-        elif user_data.role == "company":
-            from app.utils.encryption import EncryptionService
-            encryption_service = EncryptionService()
-            
-            # Generar hash de contraseña (SHA256 simple para MVP - ver TODO abajo)
-            hashed_pw = hashlib.sha256(user_data.password.encode()).hexdigest()
-            
-            company = Company(
-                name=user_data.name,
-                industry=user_data.industry or "",
-                size=user_data.company_size or "",
-                location=user_data.location or "",
-                is_verified=False,  # Requiere verificación manual
-                email_hash=email_hash,
-                hashed_password=hashed_pw
-            )
-            # Encriptar email directamente antes de agregar a sesión
-            email_lower = user_data.email.lower().strip()
-            company.email = encryption_service.encrypt(email_lower)
-            
-            session.add(company)
-            session.flush()
-            session.commit()
-            session.refresh(company)
-            user_id = company.id
+        # Obtener usuario para acceder a datos encriptados
+        user, _ = auth_service.find_user_by_email(session, user_data.email)
         
         # Generar API key automática
         api_key_data = ApiKeyCreate(
             name=f"Clave principal - {user_data.name}",
             description="API key generada automáticamente al registrarse",
-            expires_days=365  # Expira en 1 año
+            expires_days=365
         )
         
         api_key_response = api_key_service.create_api_key(
             session=session,
             user_id=user_id,
-            user_type=user_data.role,
+            user_type=user_type,
             user_email=user_data.email,
             key_data=api_key_data
         )
         
         # Registrar en auditoría
-        audit_log = AuditLog(
-            actor_role=user_data.role,
+        auth_service.log_audit(
+            session=session,
+            actor_role=user_type,
             actor_id=user_data.email,
             action="register_user",
             resource=f"user_id:{user_id}",
             success=True,
-            details=f"Nuevo usuario {user_data.role} registrado"
+            details=f"Nuevo usuario {user_type} registrado"
         )
-        session.add(audit_log)
-        session.commit()
         
         return UserLoginResponse(
             user_id=user_id,
             name=user_data.name,
             email=user_data.email,
-            role=user_data.role,
+            role=user_type,
             api_key=api_key_response.api_key,
             key_id=api_key_response.key_info.key_id,
             expires_at=api_key_response.key_info.expires_at,
             scopes=api_key_response.key_info.scopes
         )
         
+    except ValueError as e:
+        # Errores de validación de negocio
+        if "email" in str(e).lower():
+            raise HTTPException(status_code=409, detail=str(e))
+        raise HTTPException(status_code=400, detail=str(e))
     except HTTPException:
         raise
     except Exception as e:
-        # Registrar error en log
         print(f"❌ Error en registro: {type(e).__name__}: {str(e)}")
         import traceback
         traceback.print_exc()
+        
+        # Registrar error en auditoría
+        auth_service.log_audit(
+            session=session,
+            actor_role=user_data.role,
+            actor_id=user_data.email,
+            action="register_user",
+            resource="registration_attempt",
+            success=False,
+            error_message=str(e)
+        )
         
         raise HTTPException(
             status_code=500,
@@ -174,102 +131,127 @@ async def login_user(
     """
     Login con email y contraseña.
     
-    Valida las credenciales del usuario y retorna su API key.
-    Si el usuario no tiene API key activa, genera una nueva.
+    Valida las credenciales del usuario y retorna su API key principal.
+    Lógica unificada para estudiantes y empresas (evita duplicación y conflictos).
     """
-    email_hash = hashlib.sha256(credentials.email.lower().strip().encode()).hexdigest()
-    
-    # Buscar estudiante
-    student = session.exec(
-        select(Student).where(Student.email_hash == email_hash)
-    ).first()
-    
-    user_id = None
-    user_type = None
-    user_email = None
-    user_name = None
-    
-    if student:
-        user_id = student.id
-        user_type = "student"
-        user_email = student.get_email()
-        user_name = student.name
-    else:
-        # Buscar empresa
-        company = session.exec(
-            select(Company).where(Company.email_hash == email_hash)
-        ).first()
+    try:
+        # Buscar usuario en ambos tipos
+        user, user_type = auth_service.find_user_by_email(session, credentials.email)
         
-        if company:
-            user_id = company.id
-            user_type = "company"
-            user_email = company.get_email()
-            user_name = company.name
-    
-    # Si no encontró usuario
-    if not user_id:
-        raise HTTPException(
-            status_code=401,
-            detail="Email o contraseña incorrectos"
-        )
-    
-    # Buscar API key existente válida (no expirada)
-    api_key = session.exec(
-        select(ApiKey).where(
-            ApiKey.user_id == user_id,
-            ApiKey.expires_at > datetime.utcnow(),
-            ApiKey.is_active == True
-        ).order_by(ApiKey.created_at.desc())
-    ).first()
-    
-    # Si no hay API key válida, crear una nueva
-    if not api_key:
-        api_key_data = ApiKeyCreate(
-            name=f"Login - {user_name}",
-            description="API key generada al login",
-            expires_days=30
-        )
+        # Si no encontró usuario
+        if not user or not user_type:
+            auth_service.log_audit(
+                session=session,
+                actor_role="unknown",
+                actor_id=credentials.email,
+                action="login_attempt",
+                resource="auth",
+                success=False,
+                error_message="Usuario no encontrado"
+            )
+            raise HTTPException(
+                status_code=401,
+                detail="Email o contraseña incorrectos"
+            )
         
-        api_key_response = api_key_service.create_api_key(
+        # Validar contraseña
+        if not auth_service.validate_password(user, credentials.password):
+            auth_service.log_audit(
+                session=session,
+                actor_role=user_type,
+                actor_id=credentials.email,
+                action="login_attempt",
+                resource="auth",
+                success=False,
+                error_message="Contraseña incorrecta"
+            )
+            raise HTTPException(
+                status_code=401,
+                detail="Email o contraseña incorrectos"
+            )
+        
+        # Obtener o crear API key principal del usuario
+        api_key_record = auth_service.ensure_user_has_api_key(
             session=session,
-            user_id=user_id,
+            user_id=user.id,
             user_type=user_type,
-            user_email=user_email,
-            key_data=api_key_data
+            user_email=credentials.email,
+            user_name=user.name
         )
         
-        api_key_str = api_key_response.api_key
-        expires_at = api_key_response.key_info.expires_at
-    else:
-        # Retornar API key existente
-        api_key_str = api_key.key_prefix + "*" * 20  # No revelar completa en login
-        expires_at = api_key.expires_at
-        api_key_response = None
-    
-    # Registrar en auditoría
-    audit_log = AuditLog(
-        actor_role=user_type,
-        actor_id=user_email,
-        action="login",
-        resource=f"user_id:{user_id}",
-        success=True,
-        details=f"Login exitoso para {user_type}"
-    )
-    session.add(audit_log)
-    session.commit()
-    
-    return UserLoginResponse(
-        user_id=user_id,
-        name=user_name,
-        email=user_email,
-        role=user_type,
-        api_key=api_key_str,
-        key_id=getattr(api_key_response.key_info if api_key_response else api_key, 'key_id', None),
-        expires_at=expires_at,
-        scopes=["read:own", "write:own", "read:jobs", "write:applications"] if user_type == "student" 
-               else ["read:own", "write:own", "read:students"] if user_type == "company"
-               else ["admin:all"]
-    )
+        # ✅ SOLUCIÓN DEFINITIVA: Generar NUEVA API key en cada login
+        # Esto garantiza que siempre hay una clave disponible para retornar
+        # Las claves antiguas siguen siendo válidas (no se revocan)
+        api_key_data = ApiKeyCreate(
+            name=f"Sesión - {user.name} - {datetime.utcnow().strftime('%Y-%m-%d %H:%M')}",
+            description="API key generada en login",
+            expires_days=365
+        )
+        
+        try:
+            api_key_response = api_key_service.create_api_key(
+                session=session,
+                user_id=user.id,
+                user_type=user_type,
+                user_email=credentials.email,
+                key_data=api_key_data
+            )
+            api_key_full = api_key_response.api_key
+            key_id = api_key_response.key_info.key_id
+            expires_at = api_key_response.key_info.expires_at
+            
+        except Exception as e:
+            print(f"⚠️ Error generando clave en login: {e}")
+            # Fallback: usar la clave existente
+            api_key_full = ""
+            key_id = api_key_record.key_id
+            expires_at = api_key_record.expires_at
+        
+        # Registrar login exitoso en auditoría
+        auth_service.log_audit(
+            session=session,
+            actor_role=user_type,
+            actor_id=credentials.email,
+            action="login",
+            resource=f"user_id:{user.id}",
+            success=True,
+            details=f"Login exitoso para {user_type}"
+        )
+        
+        # Retornar confirmación de login
+        # ✅ AHORA SIEMPRE retorna api_key válida
+        return UserLoginResponse(
+            user_id=user.id,
+            name=user.name,
+            email=credentials.email,
+            role=user_type,
+            api_key=api_key_full,  # ✅ Siempre tiene valor
+            key_id=key_id,
+            expires_at=expires_at,
+            scopes=json.loads(api_key_record.scopes) if api_key_record.scopes else []
+        )
+        
+    except HTTPException:
+        raise
+    except Exception as e:
+        print(f"❌ Error en login: {type(e).__name__}: {str(e)}")
+        import traceback
+        traceback.print_exc()
+        
+        auth_service.log_audit(
+            session=session,
+            actor_role="unknown",
+            actor_id=credentials.email,
+            action="login_attempt",
+            resource="auth",
+            success=False,
+            error_message=str(e)
+        )
+        
+        raise HTTPException(
+            status_code=500,
+            detail=f"Error en login: {str(e)}"
+        )
 
 
 @router.post("/logout", response_model=BaseResponse, status_code=200)
@@ -280,8 +262,9 @@ async def logout_user(
     """
     Logout del usuario.
     
-    Revoca la API key actual del usuario (opcional).
-    En esta versión, simplemente registra el logout para auditoría.
+    Registra el logout para auditoría. La API key sigue siendo válida
+    para futuras sesiones (reutilizable).
+    Lógica unificada para estudiantes y empresas.
     """
     if current_user.role == "anonymous":
         raise HTTPException(
@@ -289,22 +272,40 @@ async def logout_user(
             detail="No hay sesión activa"
         )
     
-    # Registrar en auditoría
-    audit_log = AuditLog(
-        actor_role=current_user.role,
-        actor_id=current_user.email or str(current_user.user_id),
-        action="logout",
-        resource="auth",
-        success=True,
-        details="Logout exitoso"
-    )
-    session.add(audit_log)
-    session.commit()
-    
-    return BaseResponse(
-        success=True,
-        message="Sesión cerrada exitosamente"
-    )
+    try:
+        # Registrar logout en auditoría usando servicio unificado
+        auth_service.log_audit(
+            session=session,
+            actor_role=current_user.role,
+            actor_id=current_user.email or str(current_user.user_id),
+            action="logout",
+            resource="auth",
+            success=True,
+            details=f"Logout exitoso para {current_user.role}"
+        )
+        
+        return BaseResponse(
+            success=True,
+            message="Sesión cerrada exitosamente"
+        )
+        
+    except Exception as e:
+        print(f"❌ Error en logout: {type(e).__name__}: {str(e)}")
+        
+        auth_service.log_audit(
+            session=session,
+            actor_role=current_user.role,
+            actor_id=current_user.email or str(current_user.user_id),
+            action="logout",
+            resource="auth",
+            success=False,
+            error_message=str(e)
+        )
+        
+        raise HTTPException(
+            status_code=500,
+            detail=f"Error en logout: {str(e)}"
+        )
 
 
 @router.api_route("/authenticate", methods=["POST"])
