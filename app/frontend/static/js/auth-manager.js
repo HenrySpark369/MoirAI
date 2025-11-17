@@ -25,24 +25,32 @@ class AuthManager {
 
   /**
    * Registro de nuevo usuario
+   * ✅ CORRECCIÓN: Mapea correctamente api_key de la respuesta
    */
   async register(userData) {
     try {
       const response = await this.api.post('/auth/register', {
+        // ✅ Backend espera estructura correcta
+        name: userData.name || `${userData.firstName} ${userData.lastName}`.trim(),
         email: userData.email,
         password: userData.password,
-        first_name: userData.firstName,
-        last_name: userData.lastName,
-        user_type: userData.userType || 'student'
+        role: userData.role || userData.userType || 'student',
+        program: userData.program,              // Para estudiantes
+        industry: userData.industry,            // Para empresas
+        company_size: userData.companySize,     // Para empresas
+        location: userData.location             // Para empresas
       })
 
-      if (response.token) {
-        this.api.setToken(response.token)
+      // ✅ CORRECCIÓN: Mapear api_key correctamente (no token)
+      if (response.api_key) {
+        this.api.setToken(response.api_key)
       }
 
-      this.currentUser = response.user || {
+      this.currentUser = {
+        user_id: response.user_id,
         email: userData.email,
-        first_name: userData.firstName
+        name: userData.name || `${userData.firstName} ${userData.lastName}`.trim(),
+        role: response.role || userData.role || 'student'
       }
 
       this.notifyListeners()
@@ -58,7 +66,8 @@ class AuthManager {
   }
 
   /**
-   * Login
+   * Login con email y contraseña
+   * ✅ CORRECCIÓN: Mapea correctamente api_key de la respuesta
    */
   async login(email, password) {
     try {
@@ -67,12 +76,20 @@ class AuthManager {
         password
       })
 
-      if (!response.token) {
-        throw new Error('No se recibió token de autenticación')
+      // ✅ CORRECCIÓN: Verificar api_key (no token)
+      if (!response.api_key) {
+        throw new Error('No se recibió API key de autenticación')
       }
 
-      this.api.setToken(response.token)
-      this.currentUser = response.user || { email }
+      // ✅ CORRECCIÓN: Usar api_key en lugar de token
+      this.api.setToken(response.api_key)
+      
+      this.currentUser = {
+        user_id: response.user_id,
+        email: response.email,
+        name: response.name,
+        role: response.role
+      }
 
       this.notifyListeners()
       return response

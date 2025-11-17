@@ -12,28 +12,31 @@ class ApiClient {
 
   /**
    * Cargar token del localStorage si existe
+   * ✅ CORRECCIÓN: Ahora busca en 'api_key' en lugar de 'auth_token'
    */
   loadToken() {
-    const token = localStorage.getItem('auth_token')
+    const token = localStorage.getItem('api_key')
     if (token) {
       this.setToken(token)
     }
   }
 
   /**
-   * Guardar y usar un nuevo token
+   * Guardar y usar un nuevo token (API key)
+   * ✅ CORRECCIÓN: Almacena en 'api_key'
    */
   setToken(token) {
     this.token = token
     if (token) {
-      localStorage.setItem('auth_token', token)
+      localStorage.setItem('api_key', token)
     } else {
-      localStorage.removeItem('auth_token')
+      localStorage.removeItem('api_key')
     }
   }
 
   /**
-   * Construir headers con token de autenticación
+   * Construir headers con API key
+   * ✅ CORRECCIÓN: Usa X-API-Key header en lugar de Bearer token
    */
   getHeaders(additionalHeaders = {}) {
     const headers = {
@@ -42,7 +45,8 @@ class ApiClient {
     }
 
     if (this.token) {
-      headers['Authorization'] = `Bearer ${this.token}`
+      // ✅ Backend espera X-API-Key header, no Authorization Bearer
+      headers['X-API-Key'] = this.token
     }
 
     return headers
@@ -141,6 +145,7 @@ class ApiClient {
 
   /**
    * Upload file (para CV, imagen, etc)
+   * ✅ CORRECCIÓN: Usa X-API-Key header
    */
   async uploadFile(endpoint, file, additionalData = {}) {
     const formData = new FormData()
@@ -154,7 +159,8 @@ class ApiClient {
     const headers = {}
 
     if (this.token) {
-      headers['Authorization'] = `Bearer ${this.token}`
+      // ✅ Usar X-API-Key header en file uploads también
+      headers['X-API-Key'] = this.token
     }
 
     try {

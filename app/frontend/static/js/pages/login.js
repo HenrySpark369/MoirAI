@@ -122,6 +122,29 @@ function setupRegisterForm() {
     // Validación en tiempo real
     FormValidator.setupRealtimeValidation(form);
 
+    // ✅ CORRECCIÓN: Mostrar/ocultar campos según rol
+    const roleSelect = form.querySelector('[name="role"]');
+    if (roleSelect) {
+        roleSelect.addEventListener('change', (e) => {
+            const role = e.target.value;
+            
+            // Ocultar todos los campos condicionales
+            document.getElementById('student-program').style.display = 'none';
+            document.getElementById('company-industry').style.display = 'none';
+            document.getElementById('company-size').style.display = 'none';
+            document.getElementById('company-location').style.display = 'none';
+            
+            // Mostrar según rol
+            if (role === 'student') {
+                document.getElementById('student-program').style.display = 'block';
+            } else if (role === 'company') {
+                document.getElementById('company-industry').style.display = 'block';
+                document.getElementById('company-size').style.display = 'block';
+                document.getElementById('company-location').style.display = 'block';
+            }
+        });
+    }
+
     // Manejador del submit
     form.addEventListener('submit', async (e) => {
         e.preventDefault();
@@ -142,12 +165,18 @@ function setupRegisterForm() {
 
         // Obtener datos
         const formData = FormValidator.getFormData(form);
+        
+        // ✅ CORRECCIÓN: Mapear datos correctamente según la estructura esperada por backend
         const userData = {
+            name: `${formData.first_name} ${formData.last_name}`.trim(),
             email: formData.email,
             password: formData.password,
-            first_name: formData.first_name,
-            last_name: formData.last_name,
-            role: formData.role || 'student'
+            role: formData.role || 'student',
+            // Campos según rol
+            program: formData.role === 'student' ? formData.program : undefined,
+            industry: formData.role === 'company' ? formData.industry : undefined,
+            companySize: formData.role === 'company' ? formData.company_size : undefined,
+            location: formData.role === 'company' ? formData.location : undefined
         };
 
         // Mostrar loading

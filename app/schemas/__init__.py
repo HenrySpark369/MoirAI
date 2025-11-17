@@ -216,11 +216,18 @@ class UserRegister(BaseModel):
     name: str = Field(..., min_length=1, max_length=100)
     email: EmailStr
     role: str = Field(..., pattern="^(student|company|admin)$")
+    password: str = Field(..., min_length=6, description="Contraseña del usuario")
     # Campos específicos por rol
     program: Optional[str] = Field(None, max_length=100, description="Para estudiantes")
     industry: Optional[str] = Field(None, max_length=50, description="Para empresas")
     company_size: Optional[str] = Field(None, max_length=20, description="Para empresas")
     location: Optional[str] = Field(None, max_length=100, description="Para empresas")
+
+
+class LoginRequest(BaseModel):
+    """Esquema para login con email y contraseña"""
+    email: EmailStr = Field(..., description="Email del usuario")
+    password: str = Field(..., min_length=6, description="Contraseña del usuario")
 
 
 class UserLoginResponse(BaseModel):

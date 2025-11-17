@@ -33,6 +33,9 @@ class Student(SQLModel, table=True):
     phone_hash: Optional[str] = Field(default=None, max_length=64, description="Hash SHA256 del teléfono para búsquedas")
     program: Optional[str] = Field(max_length=100, description="Programa académico")
     
+    # Seguridad - Contraseña (aunque en MVP se usa API key después del login)
+    hashed_password: str = Field(max_length=255, description="Hash SHA256 de la contraseña")
+    
     # Datos de privacidad y consentimiento (LFPDPPP)
     consent_data_processing: bool = Field(default=True, description="Consentimiento para procesamiento de datos")
     consent_date: Optional[datetime] = Field(default_factory=datetime.utcnow)
@@ -42,6 +45,11 @@ class Student(SQLModel, table=True):
     skills: Optional[str] = Field(description="Lista de habilidades técnicas (JSON)")
     soft_skills: Optional[str] = Field(description="Lista de habilidades blandas (JSON)")
     projects: Optional[str] = Field(description="Lista de proyectos (JSON)")
+    
+    # CV uploaded (documento)
+    cv_uploaded: bool = Field(default=False, description="Si el currículum ha sido subido")
+    cv_filename: Optional[str] = Field(default=None, max_length=255, description="Nombre del archivo del CV")
+    cv_upload_date: Optional[datetime] = Field(default=None, description="Fecha de subida del CV")
     
     # Metadatos
     created_at: datetime = Field(default_factory=datetime.utcnow)
@@ -126,6 +134,9 @@ class Company(SQLModel, table=True):
     industry: Optional[str] = Field(max_length=50, description="Sector industrial")
     size: Optional[str] = Field(max_length=20, description="Tamaño de empresa (startup, pequeña, mediana, grande)")
     location: Optional[str] = Field(max_length=100, description="Ubicación principal")
+    
+    # Seguridad - Contraseña (aunque en MVP se usa API key después del login)
+    hashed_password: str = Field(max_length=255, description="Hash SHA256 de la contraseña")
     
     # Estado y verificación
     is_verified: bool = Field(default=False, description="Empresa verificada por UNRC")
