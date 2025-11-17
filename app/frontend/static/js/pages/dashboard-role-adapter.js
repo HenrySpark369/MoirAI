@@ -97,16 +97,19 @@ class DashboardRoleAdapter {
     getMenuItemsByRole() {
         const menus = {
             'student': [
+                { href: '/dashboard', icon: 'fa-home', label: 'Dashboard' },
                 { href: '/oportunidades', icon: 'fa-briefcase', label: 'Oportunidades' },
                 { href: '/profile', icon: 'fa-user', label: 'Mi Perfil' },
                 { href: '/applications', icon: 'fa-file-alt', label: 'Mis Aplicaciones' }
             ],
             'company': [
+                { href: '/dashboard', icon: 'fa-home', label: 'Dashboard' },
                 { href: '/buscar-candidatos', icon: 'fa-search', label: 'Buscar Candidatos' },
                 { href: '/profile', icon: 'fa-building', label: 'Mi Empresa' },
-                { href: '/oportunidades', icon: 'fa-briefcase', label: 'Mis Vacantes' }
+                { href: '/mis-vacantes', icon: 'fa-briefcase', label: 'Mis Vacantes' }
             ],
             'admin': [
+                { href: '/dashboard', icon: 'fa-home', label: 'Dashboard' },
                 { href: '/admin/users', icon: 'fa-users', label: 'Usuarios' },
                 { href: '/admin/analytics', icon: 'fa-chart-line', label: 'Analítica' },
                 { href: '/admin/settings', icon: 'fa-cog', label: 'Configuración' }
