@@ -69,56 +69,50 @@ class NavbarManager {
     setupAuthenticatedNavbar() {
         console.log('🔐 Configurando navbar autenticada...');
         
-        const navbar = document.querySelector('.navbar');
-        if (!navbar) {
-            console.warn('⚠️ Navbar no encontrada en el DOM');
+        const navbarContainer = document.getElementById('navbar-container') || document.querySelector('.navbar');
+        if (!navbarContainer) {
+            console.warn('⚠️ Navbar container no encontrada en el DOM');
             return;
         }
 
-        const navList = navbar.querySelector('.nav-list');
-        if (!navList) {
-            console.warn('⚠️ nav-list no encontrada');
-            return;
-        }
-
-        // Limpiar menú (mantener solo Dashboard)
-        const items = navList.querySelectorAll('.nav-item');
-        if (items.length > 1) {
-            for (let i = items.length - 1; i > 0; i--) {
-                items[i].remove();
-            }
-        }
-
-        // Agregar items según role
         const menuItems = this.getMenuItemsByRole();
-        menuItems.forEach(item => {
-            const li = document.createElement('li');
-            li.className = 'nav-item';
-            
-            // Marcar como activo si es la página actual
-            const isActive = item.page === this.currentPage ? 'active' : '';
-            
-            li.innerHTML = `
-                <a href="${item.href}" class="nav-link ${isActive}">
-                    <i class="fas ${item.icon}"></i>
-                    <span>${item.label}</span>
-                </a>
-            `;
-            navList.appendChild(li);
-        });
-
-        // Actualizar botón CTA
-        const navCta = navbar.querySelector('.nav-cta');
-        if (navCta) {
-            navCta.innerHTML = `
-                <div class="user-info" style="display: flex; align-items: center; gap: 15px; margin-right: 20px;">
-                    <span class="user-name" style="font-size: 14px; color: #333;">${this.userName}</span>
-                    <button class="btn btn-secondary" onclick="navbar_logout()" style="cursor: pointer;">
-                        <i class="fas fa-sign-out-alt"></i> Salir
-                    </button>
+        
+        // Renderizar navbar completo dinámicamente
+        navbarContainer.innerHTML = `
+            <div class="nav-container">
+                <div class="nav-logo">
+                    <a href="/dashboard">
+                        <i class="fas fa-brain"></i>
+                        <span>MoirAI</span>
+                    </a>
                 </div>
-            `;
-        }
+
+                <div class="nav-menu" id="nav-menu">
+                    <ul class="nav-list">
+                        ${menuItems.map(item => {
+                            const isActive = item.page === this.currentPage ? 'active' : '';
+                            return `
+                                <li class="nav-item">
+                                    <a href="${item.href}" class="nav-link ${isActive}">
+                                        <i class="fas ${item.icon}"></i>
+                                        <span>${item.label}</span>
+                                    </a>
+                                </li>
+                            `;
+                        }).join('')}
+                    </ul>
+                </div>
+
+                <div class="nav-cta">
+                    <div class="user-info" style="display: flex; align-items: center; gap: 15px; margin-right: 20px;">
+                        <span class="user-name" style="font-size: 14px; color: #333;">${this.userName}</span>
+                        <button class="btn btn-secondary" onclick="navbar_logout()" style="cursor: pointer;">
+                            <i class="fas fa-sign-out-alt"></i> Salir
+                        </button>
+                    </div>
+                </div>
+            </div>
+        `;
 
         console.log('✅ Navbar autenticada configurada para role:', this.userRole);
     }
@@ -129,49 +123,49 @@ class NavbarManager {
     setupPublicNavbar() {
         console.log('🌐 Configurando navbar pública...');
         
-        const navbar = document.querySelector('.navbar');
-        if (!navbar) return;
+        const navbarContainer = document.getElementById('navbar-container') || document.querySelector('.navbar');
+        if (!navbarContainer) {
+            console.warn('⚠️ Navbar container no encontrada');
+            return;
+        }
 
-        const navList = navbar.querySelector('.nav-list');
-        if (navList) {
-            // Limpiar menú
-            const items = navList.querySelectorAll('.nav-item');
-            items.forEach(item => item.remove());
-
-            // Agregar items públicos
-            const publicItems = [
-                { href: '/', icon: 'fa-home', label: 'Inicio', page: 'home' },
-                { href: '/oportunidades', icon: 'fa-briefcase', label: 'Oportunidades', page: 'oportunidades' },
-            ];
-
-            publicItems.forEach(item => {
-                const li = document.createElement('li');
-                li.className = 'nav-item';
-                const isActive = item.page === this.currentPage ? 'active' : '';
-                li.innerHTML = `
-                    <a href="${item.href}" class="nav-link ${isActive}">
-                        <i class="fas ${item.icon}"></i>
-                        <span>${item.label}</span>
+        // Renderizar navbar pública dinámicamente
+        navbarContainer.innerHTML = `
+            <div class="nav-container">
+                <div class="nav-logo">
+                    <a href="/">
+                        <i class="fas fa-brain"></i>
+                        <span>MoirAI</span>
                     </a>
-                `;
-                navList.appendChild(li);
-            });
-        }
+                </div>
 
-        // Actualizar botón CTA
-        const navCta = navbar.querySelector('.nav-cta');
-        if (navCta) {
-            navCta.innerHTML = `
-                <button class="btn btn-primary" onclick="window.location.href='/login'" style="cursor: pointer;">
-                    <i class="fas fa-sign-in-alt"></i> Iniciar Sesión
-                </button>
-            `;
-        }
+                <div class="nav-menu" id="nav-menu">
+                    <ul class="nav-list">
+                        <li class="nav-item">
+                            <a href="/" class="nav-link ${this.currentPage === 'home' ? 'active' : ''}">
+                                <i class="fas fa-home"></i>
+                                <span>Inicio</span>
+                            </a>
+                        </li>
+                        <li class="nav-item">
+                            <a href="/oportunidades" class="nav-link ${this.currentPage === 'oportunidades' ? 'active' : ''}">
+                                <i class="fas fa-briefcase"></i>
+                                <span>Oportunidades</span>
+                            </a>
+                        </li>
+                    </ul>
+                </div>
+
+                <div class="nav-cta">
+                    <button class="btn btn-primary" onclick="window.location.href='/login'" style="cursor: pointer;">
+                        <i class="fas fa-sign-in-alt"></i> Iniciar Sesión
+                    </button>
+                </div>
+            </div>
+        `;
 
         console.log('✅ Navbar pública configurada');
-    }
-
-    /**
+    }    /**
      * Obtener items del menú según el role
      */
     getMenuItemsByRole() {
