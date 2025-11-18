@@ -18,22 +18,16 @@ document.addEventListener('DOMContentLoaded', () => {
  */
 async function initApplicationsPage() {
     // Proteger ruta
-    if (!authManager.isAuthenticated()) {
-        window.location.href = '/login?redirect=/applications';
-        return;
-    }
-
-    notificationManager.loading('Cargando aplicaciones...');
-
-    try {
-        await loadApplications();
-        setupEventListeners();
-        notificationManager.hideLoading();
-    } catch (error) {
-        notificationManager.hideLoading();
-        notificationManager.error('Error al cargar aplicaciones');
-        console.error(error);
-    }
+    await protectedPageManager.initProtectedPage({
+        requiredRoles: ['student'],
+        redirectOnUnauth: '/login?redirect=/applications',
+        redirectOnUnauthorized: '/dashboard',
+        loadingMessage: 'Cargando aplicaciones...',
+        onInit: async () => {
+            await loadApplications();
+            setupEventListeners();
+        }
+    });
 }
 
 /**

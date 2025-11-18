@@ -472,6 +472,7 @@ async def get_current_user_info(
     return {
         "user_id": current_user.user_id,
         "email": current_user.email,
+        "name": current_user.name or current_user.email.split('@')[0],
         "role": current_user.role,
         "permissions": current_user.permissions
     }

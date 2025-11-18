@@ -42,10 +42,20 @@ class RateLimiter {
 const applicationLimiter = new RateLimiter(3, 5000);
 
 document.addEventListener('DOMContentLoaded', () => {
-    // Esperar a que el role adapter se inicialice
-    setTimeout(() => {
-        initDashboard();
-    }, 100);
+    // Usar protectedPageManager para mejor sincronización
+    protectedPageManager.initProtectedPage({
+        redirectOnUnauth: '/login?redirect=/dashboard',
+        loadingMessage: 'Cargando dashboard...',
+        onInit: async () => {
+            // Dar tiempo al role adapter de inicializarse
+            await new Promise(resolve => setTimeout(resolve, 150));
+            
+            // Luego inicializar el dashboard
+            initDashboard();
+        }
+    }).catch(error => {
+        console.error('Error en initProtectedPage:', error);
+    });
 });
 
 /**
@@ -56,14 +66,29 @@ async function initDashboard() {
     if (isInitializing) return;
     isInitializing = true;
 
-    // Proteger ruta
-    if (!authManager.isAuthenticated()) {
+    console.log('⏳ Dashboard: Iniciando...');
+    console.log('✅ API Client autenticado:', apiClient.isAuthenticated());
+    console.log('✅ Auth Manager usuario:', !!authManager.currentUser);
+
+    // Proteger ruta - Verificar autenticación
+    if (!apiClient.isAuthenticated()) {
+        console.error('❌ Dashboard: No autenticado, redirigiendo a login');
         window.location.href = '/login?redirect=/dashboard';
         return;
     }
 
+    // Si authManager no tiene currentUser, intentar cargar
+    if (!authManager.currentUser) {
+        console.log('⏳ Dashboard: Cargando usuario desde API...');
+        try {
+            await authManager.getCurrentUser();
+        } catch (error) {
+            console.warn('⚠️ Dashboard: Error cargando usuario, pero tenemos token. Continuando...');
+        }
+    }
+
     // Cargar datos del usuario
-    console.log('⏳ Iniciando carga del dashboard...');
+    console.log('⏳ Dashboard: Cargando datos...');
 
     try {
         // Cargar datos del usuario y datos específicos del rol
@@ -99,7 +124,12 @@ async function initDashboard() {
  * Cargar datos específicos según el rol
  */
 async function loadRoleSpecificData() {
-    const role = authManager.getUserRole() || localStorage.getItem('user_role') || 'student';
+    let role;
+    if (typeof storageManager !== 'undefined') {
+        role = storageManager.getUserRole();
+    } else {
+        role = authManager.getUserRole() || localStorage.getItem('user_role') || 'student';
+    }
     
     console.log(`📊 Cargando datos específicos para rol: ${role}`);
     
@@ -175,12 +205,18 @@ async function loadUserData() {
             throw new Error('No se pudo obtener datos del usuario');
         }
 
-        // Usar email como nombre si no hay primer nombre
-        const userName = localStorage.getItem('user_name') || userInfo.email?.split('@')[0] || 'Usuario';
-        const userEmail = userInfo.email || localStorage.getItem('user_email') || 'Sin email';
+        // Usar email como nombre si no hay primer nombre (con storageManager si disponible)
+        let userName, userEmail;
+        if (typeof storageManager !== 'undefined') {
+            userName = storageManager.getUserName() || userInfo.email?.split('@')[0] || 'Usuario';
+            userEmail = userInfo.email || storageManager.getUserEmail() || 'Sin email';
+        } else {
+            userName = localStorage.getItem('user_name') || userInfo.email?.split('@')[0] || 'Usuario';
+            userEmail = userInfo.email || localStorage.getItem('user_email') || 'Sin email';
+        }
 
         currentUser = {
-            id: userInfo.user_id || localStorage.getItem('user_id'),
+            id: userInfo.user_id || (typeof storageManager !== 'undefined' ? storageManager.getUserId() : localStorage.getItem('user_id')),
             email: userEmail,
             first_name: userName,
             role: userInfo.role || localStorage.getItem('user_role')
@@ -212,13 +248,22 @@ async function loadUserData() {
     } catch (error) {
         console.warn('⚠️ Error al cargar datos del usuario desde /auth/me:', error);
         
-        // Fallback: usar datos de localStorage
-        const fallbackName = localStorage.getItem('user_name') || 'Usuario';
-        const fallbackEmail = localStorage.getItem('user_email') || 'Sin email';
-        const fallbackRole = localStorage.getItem('user_role') || 'student';
+        // Fallback: usar datos de storage (con storageManager si disponible)
+        let fallbackName, fallbackEmail, fallbackRole, fallbackId;
+        if (typeof storageManager !== 'undefined') {
+            fallbackName = storageManager.getUserName() || 'Usuario';
+            fallbackEmail = storageManager.getUserEmail() || 'Sin email';
+            fallbackRole = storageManager.getUserRole() || 'student';
+            fallbackId = storageManager.getUserId();
+        } else {
+            fallbackName = localStorage.getItem('user_name') || 'Usuario';
+            fallbackEmail = localStorage.getItem('user_email') || 'Sin email';
+            fallbackRole = localStorage.getItem('user_role') || 'student';
+            fallbackId = localStorage.getItem('user_id');
+        }
         
         currentUser = {
-            id: localStorage.getItem('user_id'),
+            id: fallbackId,
             email: fallbackEmail,
             first_name: fallbackName,
             role: fallbackRole
@@ -240,6 +285,25 @@ async function loadUserData() {
 
         console.log('✅ Datos del usuario obtenidos de localStorage:', { id: currentUser.id, email: currentUser.email, role: currentUser.role });
         return currentUser;
+    }
+}
+
+/**
+ * Cargar recomendaciones del usuario
+ */
+async function loadRecommendations() {
+    try {
+        const response = await apiClient.get('/matching/student/recommendations');
+
+        dashboardData.recommendations = response.recommendations || [];
+
+        // Renderizar recomendaciones
+        renderRecommendations();
+
+    } catch (error) {
+        console.warn('No se pudieron cargar las recomendaciones:', error);
+        dashboardData.recommendations = [];
+        renderRecommendations();
     }
 }
 

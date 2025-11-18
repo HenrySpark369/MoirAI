@@ -43,26 +43,17 @@ document.addEventListener('DOMContentLoaded', () => {
  * Inicializar página
  */
 async function initCompanySearchPage() {
-    // Proteger ruta - solo empresas
-    if (!authManager.isAuthenticated()) {
-        window.location.href = '/login?redirect=/buscar-candidatos';
-        return;
-    }
-
-    const userRole = authManager.getUserRole();
-    if (userRole !== 'company' && userRole !== 'admin') {
-        notificationManager.error('Solo empresas pueden acceder a esta página');
-        setTimeout(() => window.location.href = '/dashboard', 2000);
-        return;
-    }
-
-    try {
-        setupEventListeners();
-        await loadInitialStudents();
-    } catch (error) {
-        notificationManager.error('Error al cargar la página');
-        console.error(error);
-    }
+    // Proteger ruta - solo empresas y admins
+    await protectedPageManager.initProtectedPage({
+        requiredRoles: ['company', 'admin'],
+        redirectOnUnauth: '/login?redirect=/buscar-candidatos',
+        redirectOnUnauthorized: '/dashboard',
+        loadingMessage: 'Cargando candidatos...',
+        onInit: async () => {
+            setupEventListeners();
+            await loadInitialStudents();
+        }
+    });
 }
 
 /**

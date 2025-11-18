@@ -44,18 +44,16 @@ document.addEventListener('DOMContentLoaded', () => {
  */
 async function initJobsSearchPage() {
     // Proteger ruta - estudiantes y empresas pueden acceder
-    if (!authManager.isAuthenticated()) {
-        window.location.href = '/login?redirect=/oportunidades';
-        return;
-    }
-
-    try {
-        setupEventListeners();
-        await loadInitialJobs();
-    } catch (error) {
-        notificationManager.error('Error al cargar la página de empleos');
-        console.error(error);
-    }
+    await protectedPageManager.initProtectedPage({
+        requiredRoles: ['student', 'company'],
+        redirectOnUnauth: '/login?redirect=/oportunidades',
+        redirectOnUnauthorized: '/dashboard',
+        loadingMessage: 'Cargando oportunidades...',
+        onInit: async () => {
+            setupEventListeners();
+            await loadInitialJobs();
+        }
+    });
 }
 
 /**

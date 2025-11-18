@@ -21,10 +21,18 @@ class NavbarManager {
         console.log('🔄 Inicializando NavbarManager...');
         
         try {
-            // Detectar si está autenticado
-            this.isAuthenticated = !!localStorage.getItem('api_key');
-            this.userRole = localStorage.getItem('user_role') || null;
-            this.userName = localStorage.getItem('user_name') || localStorage.getItem('user_email') || 'Usuario';
+            // Detectar si está autenticado (usando storageManager si disponible)
+            if (typeof storageManager !== 'undefined') {
+                this.isAuthenticated = storageManager.isAuthenticated();
+                this.userRole = storageManager.getUserRole();
+                this.userName = storageManager.getUserName() || storageManager.getUserEmail() || 'Usuario';
+            } else {
+                // Fallback a localStorage directo
+                this.isAuthenticated = !!localStorage.getItem('api_key');
+                this.userRole = localStorage.getItem('user_role') || null;
+                this.userName = localStorage.getItem('user_name') || localStorage.getItem('user_email') || 'Usuario';
+            }
+            
             this.currentPage = this.getCurrentPage();
 
             console.log(`📌 NavbarManager State:`, {
@@ -238,14 +246,20 @@ class NavbarManager {
     }
 }
 
+
 // Instancia global
 const navbarManager = new NavbarManager();
 
 // Función de logout global
 function navbar_logout() {
     console.log('🔓 Logout desde navbar...');
-    localStorage.clear();
-    sessionStorage.clear();
+    // Usar storageManager si disponible, fallback a directo
+    if (typeof storageManager !== 'undefined') {
+        storageManager.clear();
+    } else {
+        localStorage.clear();
+        sessionStorage.clear();
+    }
     window.location.href = '/login';
 }
 
@@ -253,6 +267,8 @@ function navbar_logout() {
 document.addEventListener('DOMContentLoaded', () => {
     setTimeout(() => {
         navbarManager.initialize();
+        setupMobileMenu();
+        setupScrollEffects();
     }, 50);
 });
 
@@ -261,11 +277,130 @@ if (document.readyState === 'loading') {
     document.addEventListener('DOMContentLoaded', () => {
         setTimeout(() => {
             navbarManager.initialize();
+            setupMobileMenu();
+            setupScrollEffects();
         }, 50);
     });
 } else {
     // Si ya está cargado, inicializar inmediatamente
     setTimeout(() => {
         navbarManager.initialize();
+        setupMobileMenu();
+        setupScrollEffects();
     }, 50);
 }
+
+/**
+ * Configurar menú móvil (funcionalidad de sidebar.js)
+ */
+function setupMobileMenu() {
+    const navbar = document.querySelector('.navbar');
+    const navContainer = document.querySelector('.nav-container');
+    
+    if (!navbar || !navContainer) return;
+
+    // Crear botón de toggle móvil
+    let mobileToggle = document.getElementById('mobileToggle');
+    if (!mobileToggle) {
+        mobileToggle = document.createElement('button');
+        mobileToggle.className = 'sidebar-toggle';
+        mobileToggle.innerHTML = '<i class="fas fa-bars"></i>';
+        mobileToggle.id = 'mobileToggle';
+        navContainer.appendChild(mobileToggle);
+    }
+
+    // Handler para toggle
+    mobileToggle.addEventListener('click', () => {
+        navbar.classList.toggle('show');
+        mobileToggle.classList.toggle('active');
+    });
+
+    // Cerrar menu al hacer clic en un link (mobile)
+    const navLinks = navbar.querySelectorAll('.nav-link');
+    navLinks.forEach(link => {
+        link.addEventListener('click', () => {
+            if (window.innerWidth <= 768) {
+                navbar.classList.remove('show');
+                mobileToggle.classList.remove('active');
+            }
+        });
+    });
+
+    // Cerrar menu al hacer clic fuera (mobile)
+    document.addEventListener('click', (event) => {
+        if (window.innerWidth <= 768) {
+            const isClickInsideNavbar = navbar.contains(event.target);
+            const isClickOnToggle = mobileToggle.contains(event.target);
+
+            if (!isClickInsideNavbar && !isClickOnToggle && navbar.classList.contains('show')) {
+                navbar.classList.remove('show');
+                mobileToggle.classList.remove('active');
+            }
+        }
+    });
+
+    // Manejar resize
+    window.addEventListener('resize', () => {
+        if (window.innerWidth > 768) {
+            navbar.classList.remove('show');
+            if (mobileToggle) mobileToggle.style.display = 'none';
+            if (mobileToggle) mobileToggle.classList.remove('active');
+        } else {
+            if (mobileToggle) mobileToggle.style.display = 'flex';
+        }
+    });
+}
+
+/**
+ * Configurar scroll effects (funcionalidad de sidebar.js)
+ */
+function setupScrollEffects() {
+    const navbar = document.querySelector('.navbar');
+    if (!navbar) return;
+
+    window.addEventListener('scroll', () => {
+        const scrollTop = window.pageYOffset || document.documentElement.scrollTop;
+
+        if (scrollTop > 10) {
+            navbar.classList.add('scrolled');
+        } else {
+            navbar.classList.remove('scrolled');
+        }
+    });
+}
+
+/**
+ * Marcar link activo según la página actual (funcionalidad de sidebar.js)
+ */
+function setActiveLink() {
+    const currentPath = window.location.pathname;
+    const navLinks = document.querySelectorAll('.nav-link');
+
+    navLinks.forEach(link => {
+        link.classList.remove('active');
+        const href = link.getAttribute('href');
+        
+        if (href === currentPath || (currentPath === '/' && href === '/dashboard')) {
+            link.classList.add('active');
+        }
+    });
+}
+
+/**
+ * Smooth scroll para anchor links
+ */
+function smoothScroll(target) {
+    const element = document.querySelector(target);
+    if (element) {
+        element.scrollIntoView({
+            behavior: 'smooth',
+            block: 'start'
+        });
+    }
+}
+
+// Exportar utilidades para uso en otros scripts
+window.megaMenuUtils = {
+    setActiveLink,
+    smoothScroll
+};

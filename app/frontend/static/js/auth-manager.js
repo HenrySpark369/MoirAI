@@ -88,22 +88,22 @@ class AuthManager {
         api_key_length: response.api_key?.length || 0
       });
 
-      // ✅ CORRECCIÓN: Verificar api_key o usar la del registro
+            // ✅ CORRECCIÓN: Verificar api_key o usar la guardada del registro
       let apiKey = response.api_key;
       
       // Si no viene api_key en la respuesta, usar la guardada del registro
       if (!apiKey || apiKey === '' || apiKey === undefined) {
-        console.log('⚠️ api_key vacío o no presente, buscando en localStorage...');
-        apiKey = localStorage.getItem('api_key');
+        console.log('⚠️ api_key vacío o no presente, buscando en storage...');
+        apiKey = storageManager?.getApiKey();
         
-        console.log('📍 localStorage api_key:', {
+        console.log('📍 Storage api_key:', {
           presente: !!apiKey,
           length: apiKey?.length || 0
         });
         
-        // Si tampoco está en localStorage, error
+        // Si tampoco está en storage, error
         if (!apiKey) {
-          console.error('❌ No se encontró API key en respuesta ni en localStorage');
+          console.error('❌ No se encontró API key en respuesta ni en storage');
           throw new Error('No se recibió API key de autenticación. Por favor, vuelve a registrarte.')
         }
       }
@@ -120,13 +120,24 @@ class AuthManager {
         role: response.role
       }
 
-      // ✅ ACTUALIZACIÓN: Guardar en localStorage
-      localStorage.setItem('api_key', apiKey)
-      localStorage.setItem('user_id', response.user_id.toString())
-      localStorage.setItem('user_role', response.role)
-      localStorage.setItem('user_email', response.email)
+      // ✅ ACTUALIZACIÓN: Guardar usando storageManager
+      if (storageManager) {
+        storageManager.setUserSession({
+          api_key: apiKey,
+          user_id: response.user_id,
+          role: response.role,
+          email: response.email,
+          name: response.name
+        });
+      } else {
+        // Fallback si storageManager no está disponible
+        localStorage.setItem('api_key', apiKey)
+        localStorage.setItem('user_id', response.user_id.toString())
+        localStorage.setItem('user_role', response.role)
+        localStorage.setItem('user_email', response.email)
+      }
 
-      console.log('✅ Datos guardados en localStorage');
+      console.log('✅ Datos guardados');
 
       this.notifyListeners()
       return response
@@ -153,8 +164,27 @@ class AuthManager {
       console.warn('Error en logout:', error)
     }
 
+    // ✅ CORRECCIÓN: Limpiar completamente la sesión
     this.api.clearToken()
     this.currentUser = null
+    
+    // Limpiar datos de storage
+    if (storageManager) {
+      storageManager.clearUserSession()
+    } else {
+      // Fallback si storageManager no disponible
+      localStorage.removeItem('moirai_api_key')
+      localStorage.removeItem('moirai_user_id')
+      localStorage.removeItem('moirai_user_role')
+      localStorage.removeItem('moirai_user_email')
+      localStorage.removeItem('moirai_user_name')
+      // También limpiar sin prefijo por compatibilidad
+      localStorage.removeItem('api_key')
+      localStorage.removeItem('user_id')
+      localStorage.removeItem('user_role')
+      localStorage.removeItem('user_email')
+    }
+    
     this.notifyListeners()
   }
 
@@ -320,13 +350,23 @@ const authManager = new AuthManager(apiClient)
 
 // Auto-cargar usuario actual al iniciar
 document.addEventListener('DOMContentLoaded', async () => {
+  console.log('⏳ Auth-manager: Verificando autenticación...');
   if (apiClient.isAuthenticated()) {
-    await authManager.getCurrentUser()
+    console.log('✅ Auth-manager: Token encontrado, cargando usuario...');
+    try {
+      const user = await authManager.getCurrentUser();
+      console.log('✅ Auth-manager: Usuario cargado:', user);
+    } catch (error) {
+      console.warn('⚠️ Auth-manager: Error cargando usuario:', error);
+    }
+  } else {
+    console.log('⚠️ Auth-manager: No hay token en localStorage');
   }
 })
 
 // Event listener global para unauthorized
 window.addEventListener('unauthorized', () => {
+  console.log('🔐 Auth-manager: Sesión no autorizada, limpiando datos');
   authManager.currentUser = null
   authManager.notifyListeners()
 })

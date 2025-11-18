@@ -14,24 +14,16 @@ document.addEventListener('DOMContentLoaded', () => {
  * Inicializar página de perfil
  */
 async function initProfilePage() {
-    // Proteger ruta
-    if (!authManager.isAuthenticated()) {
-        window.location.href = '/login?redirect=/profile';
-        return;
-    }
-
-    notificationManager.loading('Cargando perfil...');
-
-    try {
-        await loadUserProfile();
-        setupFormHandlers();
-        setupCVUpload();
-        notificationManager.hideLoading();
-    } catch (error) {
-        notificationManager.hideLoading();
-        notificationManager.error('Error al cargar el perfil');
-        console.error(error);
-    }
+    // Proteger ruta - todos los roles autenticados pueden acceder
+    await protectedPageManager.initProtectedPage({
+        redirectOnUnauth: '/login?redirect=/profile',
+        loadingMessage: 'Cargando perfil...',
+        onInit: async () => {
+            await loadUserProfile();
+            setupFormHandlers();
+            setupCVUpload();
+        }
+    });
 }
 
 /**
@@ -249,7 +241,9 @@ async function handleCVUpload(file) {
 function uploadFileWithProgress(url, file, onProgress) {
     return new Promise((resolve, reject) => {
         const xhr = new XMLHttpRequest();
-        const token = localStorage.getItem('moirai_token');
+        const token = typeof storageManager !== 'undefined' 
+            ? storageManager.get('moirai_token')
+            : localStorage.getItem('moirai_token');
 
         // Setup xhr
         xhr.upload.addEventListener('progress', (e) => {

@@ -15,8 +15,12 @@ class DashboardRoleAdapter {
      */
     async initialize() {
         try {
-            // Obtener role de localStorage o del usuario actual
-            this.role = localStorage.getItem('user_role') || 'student';
+            // Obtener role de storage o del usuario actual (con storageManager si disponible)
+            if (typeof storageManager !== 'undefined') {
+                this.role = storageManager.getUserRole();
+            } else {
+                this.role = localStorage.getItem('user_role') || 'student';
+            }
             
             // Renderizar interfaz según role
             this.setupRoleInterface();
@@ -302,12 +306,18 @@ const dashboardRoleAdapter = new DashboardRoleAdapter();
 // Inicializar cuando el DOM esté listo
 if (document.readyState === 'loading') {
     document.addEventListener('DOMContentLoaded', () => {
+        // Esperar a que authManager esté completamente cargado
+        setTimeout(() => {
+            dashboardRoleAdapter.initialize().catch(error => {
+                console.error('Error inicializando dashboard role adapter:', error);
+            });
+        }, 150);
+    });
+} else {
+    // Esperar a que authManager esté completamente cargado
+    setTimeout(() => {
         dashboardRoleAdapter.initialize().catch(error => {
             console.error('Error inicializando dashboard role adapter:', error);
         });
-    });
-} else {
-    dashboardRoleAdapter.initialize().catch(error => {
-        console.error('Error inicializando dashboard role adapter:', error);
-    });
+    }, 150);
 }
