@@ -27,7 +27,8 @@ from datetime import datetime
 from pathlib import Path
 
 from app.core.config import settings
-from app.core.database import create_db_and_tables
+from app.core.database import create_db_and_tables, get_session
+from app.core.admin_init import init_default_admin, verify_admin_access_configured
 from app.api.endpoints import students, auth
 from app.schemas import ErrorResponse
 
@@ -99,6 +100,22 @@ async def startup_event():
     """Inicializar aplicación"""
     # Crear tablas de base de datos
     create_db_and_tables()
+    
+    # Inicializar admin por defecto desde .env (si está habilitado)
+    try:
+        from sqlmodel import Session
+        from app.core.database import engine
+        
+        with Session(engine) as session:
+            admin_id = init_default_admin(session)
+            if admin_id:
+                print(f"✅ Admin inicializado: ID {admin_id}")
+    except Exception as e:
+        print(f"⚠️  No se pudo inicializar admin: {e}")
+    
+    # Verificar que hay acceso admin disponible
+    verify_admin_access_configured()
+    
     print(f"🚀 {settings.PROJECT_NAME} iniciado correctamente")
     print(f"📊 Base de datos: {settings.DATABASE_URL}")
     print(f"🔐 Audit logging: {'✅' if settings.ENABLE_AUDIT_LOGGING else '❌'}")

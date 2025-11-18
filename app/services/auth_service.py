@@ -39,7 +39,7 @@ class AuthenticationService:
         """
         Busca un usuario por email en ambas tablas
         
-        Returns: (user_object, user_type) donde user_type es 'student', 'company', o None
+        Returns: (user_object, user_type) donde user_type es 'student', 'company', 'admin', o None
         """
         email_hash = AuthenticationService._hash_email(email)
         
@@ -49,6 +49,9 @@ class AuthenticationService:
         ).first()
         
         if student:
+            # Si es admin, retorna como admin
+            if student.program == "Administration":
+                return student, "admin"
             return student, "student"
         
         # Buscar en empresas
@@ -77,7 +80,7 @@ class AuthenticationService:
         **kwargs
     ) -> Tuple[int, str]:
         """
-        Crea un nuevo usuario (estudiante o empresa)
+        Crea un nuevo usuario (estudiante, empresa, o administrador)
         
         Returns: (user_id, user_type)
         """
@@ -88,8 +91,8 @@ class AuthenticationService:
         if existing_user:
             raise ValueError("Ya existe un usuario registrado con ese email")
         
-        if role not in ["student", "company"]:
-            raise ValueError("Rol inválido. Debe ser 'student' o 'company'")
+        if role not in ["student", "company", "admin"]:
+            raise ValueError("Rol inválido. Debe ser 'student', 'company', o 'admin'")
         
         encryption_service = AuthenticationService._get_encryption_service()
         hashed_pw = AuthenticationService._hash_password(password)
@@ -101,6 +104,26 @@ class AuthenticationService:
             student = Student(
                 name=name,
                 program=kwargs.get("program", ""),
+                consent_data_processing=True,
+                skills="[]",
+                soft_skills="[]",
+                projects="[]",
+                email_hash=email_hash,
+                hashed_password=hashed_pw,
+                cv_uploaded=False,
+                email=email_encrypted
+            )
+            session.add(student)
+            session.flush()
+            session.commit()
+            session.refresh(student)
+            user_id = student.id
+            
+        elif role == "admin":
+            # Crear admin como Student con program="Administration"
+            student = Student(
+                name=name,
+                program="Administration",  # Flag para identificar como admin
                 consent_data_processing=True,
                 skills="[]",
                 soft_skills="[]",

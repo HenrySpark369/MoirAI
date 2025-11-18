@@ -85,6 +85,25 @@ class Settings(BaseSettings):
     COMPANY_API_KEYS: List[str] = []
     STUDENT_API_KEYS: List[str] = []
 
+    # Admin Configuration (SEGURIDAD)
+    # Inicialización de admin por defecto desde .env
+    INIT_DEFAULT_ADMIN: bool = Field(
+        default=False,
+        description="Si true, intenta crear admin por defecto al iniciar. Cambiar a false después de crear."
+    )
+    ADMIN_DEFAULT_NAME: Optional[str] = Field(
+        default=None,
+        description="Nombre del admin por defecto (vacío = deshabilitado)"
+    )
+    ADMIN_DEFAULT_EMAIL: Optional[str] = Field(
+        default=None,
+        description="Email del admin por defecto (vacío = deshabilitado)"
+    )
+    ADMIN_DEFAULT_PASSWORD: Optional[str] = Field(
+        default=None,
+        description="Contraseña inicial del admin (vacío = deshabilitado)"
+    )
+
     LOG_LEVEL: str = "INFO"
     LOG_FORMAT: str = "json"
 

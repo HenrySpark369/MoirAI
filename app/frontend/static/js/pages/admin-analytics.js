@@ -39,29 +39,40 @@ class AdminAnalyticsPage {
      * @param {boolean} isIntegrated - Si es true, busca dentro del contenedor
      */
     validateElements(isIntegrated = false) {
-        const requiredElements = [
-            'error-message',
+        // Elementos siempre requeridos (deben existir en ambas versiones)
+        const criticalElements = ['error-message'];
+        
+        // Elementos opcionales para standalone
+        const standaloneElements = [
             'start-date',
             'end-date',
-            'kpi-grid'
+            'kpi-grid',
+            'loading-state', 
+            'analytics-content', 
+            'charts-section', 
+            'tables-section'
         ];
-
-        // Para standalone, requerir más elementos
-        if (!isIntegrated) {
-            requiredElements.push('loading-state', 'analytics-content', 'charts-section', 'tables-section');
+        
+        // Para integrated mode, no validamos elementos del DOM
+        // porque podrían estar en diferentes contenedores o estructuras
+        if (isIntegrated) {
+            console.log('📌 Modo integrado: validación flexible de elementos');
+            return;
         }
 
-        requiredElements.forEach(id => {
-            const selector = isIntegrated && this.containerSelector 
-                ? `${this.containerSelector} #${id}` 
-                : `#${id}`;
-            
+        // Para standalone, validar elementos críticos y advertir sobre los faltantes
+        criticalElements.forEach(id => {
+            const selector = `#${id}`;
             if (!document.querySelector(selector)) {
-                console.warn(`Elemento no encontrado: ${selector}`);
-                // No throw para integrated mode
-                if (!isIntegrated) {
-                    throw new Error(`Elemento requerido no encontrado: #${id}`);
-                }
+                console.warn(`⚠️ Elemento no encontrado: ${selector}`);
+            }
+        });
+
+        // Para standalone, advertir pero no fallar si faltan elementos no críticos
+        standaloneElements.forEach(id => {
+            const selector = `#${id}`;
+            if (!document.querySelector(selector)) {
+                console.warn(`⚠️ Elemento no encontrado: ${selector} (no crítico)`);
             }
         });
     }
@@ -74,15 +85,17 @@ class AdminAnalyticsPage {
         // Selector base
         const selector = isIntegrated && this.containerSelector ? this.containerSelector : '';
         
-        // Botón de actualizar
+        // Botón de actualizar (opcional, puede no existir en integrated mode)
         const updateBtn = selector 
             ? document.querySelector(`${selector} .date-range button`)
             : document.querySelector('.date-range button');
         if (updateBtn) {
             updateBtn.addEventListener('click', () => this.loadAnalytics(isIntegrated));
+        } else {
+            console.debug('💡 Botón de actualizar no encontrado (opcional)');
         }
 
-        // Enter en campos de fecha
+        // Enter en campos de fecha (opcional)
         const startDate = selector
             ? document.querySelector(`${selector} #start-date`)
             : document.getElementById('start-date');
@@ -90,13 +103,17 @@ class AdminAnalyticsPage {
             ? document.querySelector(`${selector} #end-date`)
             : document.getElementById('end-date');
         
-        if (startDate) startDate.addEventListener('keypress', (e) => {
-            if (e.key === 'Enter') this.loadAnalytics(isIntegrated);
-        });
+        if (startDate) {
+            startDate.addEventListener('keypress', (e) => {
+                if (e.key === 'Enter') this.loadAnalytics(isIntegrated);
+            });
+        }
         
-        if (endDate) endDate.addEventListener('keypress', (e) => {
-            if (e.key === 'Enter') this.loadAnalytics(isIntegrated);
-        });
+        if (endDate) {
+            endDate.addEventListener('keypress', (e) => {
+                if (e.key === 'Enter') this.loadAnalytics(isIntegrated);
+            });
+        }
     }
 
     /**
@@ -156,8 +173,12 @@ class AdminAnalyticsPage {
             ? document.querySelector(`${selector} #analytics-content`)
             : document.getElementById('analytics-content');
         
-        if (loading) loading.style.display = 'block';
-        if (content) content.style.display = 'none';
+        if (loading) {
+            loading.style.display = 'block';
+        }
+        if (content) {
+            content.style.display = 'none';
+        }
     }
 
     /**
@@ -174,8 +195,12 @@ class AdminAnalyticsPage {
             ? document.querySelector(`${selector} #analytics-content`)
             : document.getElementById('analytics-content');
         
-        if (loading) loading.style.display = 'none';
-        if (content) content.style.display = 'block';
+        if (loading) {
+            loading.style.display = 'none';
+        }
+        if (content) {
+            content.style.display = 'block';
+        }
     }
 
     /**
@@ -196,8 +221,14 @@ class AdminAnalyticsPage {
             ? document.querySelector(`${selector} #end-date`)
             : document.getElementById('end-date');
 
+        // Solo asignar valores si los elementos existen
         if (startInput) startInput.valueAsDate = startDate;
         if (endInput) endInput.valueAsDate = endDate;
+        
+        // Log para debugging
+        if (!startInput || !endInput) {
+            console.debug('💡 Campos de fecha no encontrados (opcional)');
+        }
     }
 
     /**
@@ -526,30 +557,32 @@ let adminAnalyticsPage = null;
 //   const analytics = new AdminAnalyticsPage('#analytics');
 //   analytics.initialize(true);
 
-if (document.readyState === 'loading') {
-    document.addEventListener('DOMContentLoaded', () => {
-        // Solo inicializar automáticamente si NO está en dashboard
-        const isInDashboard = document.querySelector('main.main-content') && 
-                             document.querySelector('#analytics.content-section');
+function initializeAnalyticsPage() {
+    try {
+        // Detectar si estamos en página standalone o integrada
+        const analyticsHtml = document.querySelector('[data-page="analytics"]');
+        const isDedicatedPage = window.location.pathname === '/admin/analytics';
+        const hasStandaloneStructure = document.querySelector('.content-section.active #analytics-content');
         
-        if (!isInDashboard || window.location.pathname === '/admin/analytics') {
+        // Solo inicializar automáticamente en página standalone
+        if (isDedicatedPage || hasStandaloneStructure) {
+            console.log('📊 Inicializando Analytics en modo STANDALONE');
             adminAnalyticsPage = new AdminAnalyticsPage();
             adminAnalyticsPage.initialize(false).catch(error => {
-                console.error('Error en admin analytics:', error);
+                console.error('❌ Error en analytics standalone:', error);
             });
+        } else {
+            console.log('📊 Modo integrado detectado - Analytics no se inicializa automáticamente');
         }
-    });
-} else {
-    // Solo inicializar automáticamente si NO está en dashboard
-    const isInDashboard = document.querySelector('main.main-content') && 
-                         document.querySelector('#analytics.content-section');
-    
-    if (!isInDashboard || window.location.pathname === '/admin/analytics') {
-        adminAnalyticsPage = new AdminAnalyticsPage();
-        adminAnalyticsPage.initialize(false).catch(error => {
-            console.error('Error en admin analytics:', error);
-        });
+    } catch (error) {
+        console.error('❌ Error al detectar modo de analytics:', error);
     }
+}
+
+if (document.readyState === 'loading') {
+    document.addEventListener('DOMContentLoaded', initializeAnalyticsPage);
+} else {
+    initializeAnalyticsPage();
 }
 
 // Limpiar al salir
@@ -558,3 +591,14 @@ window.addEventListener('beforeunload', () => {
         adminAnalyticsPage.destroy();
     }
 });
+
+// Exportar función global para HTML onclick
+window.updateAnalytics = function() {
+    if (adminAnalyticsPage && adminAnalyticsPage.initialized) {
+        adminAnalyticsPage.loadAnalytics(false);
+    } else if (adminAnalyticsPage) {
+        console.warn('Analytics not initialized yet');
+    } else {
+        console.error('AdminAnalyticsPage instance not found');
+    }
+};

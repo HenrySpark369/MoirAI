@@ -68,66 +68,118 @@ async def get_all_users(
         _require_admin(current_user)
         
         # Obtener estudiantes
-        students = session.exec(
-            select(Student).offset(offset).limit(limit)
-        ).all()
+        try:
+            students = session.exec(
+                select(Student).offset(offset).limit(limit)
+            ).all()
+        except Exception as e:
+            print(f"⚠️  Error obteniendo estudiantes: {e}")
+            students = []
         
         # Obtener empresas
-        companies = session.exec(
-            select(Company).offset(offset).limit(limit)
-        ).all()
+        try:
+            companies = session.exec(
+                select(Company).offset(offset).limit(limit)
+            ).all()
+        except Exception as e:
+            print(f"⚠️  Error obteniendo empresas: {e}")
+            companies = []
         
         # Combinar y transformar
         users = []
         
+        # Procesar estudiantes
         for student in students:
-            users.append({
-                "id": student.id,
-                "name": student.name,
-                "email": student.get_email(),
-                "role": "student",
-                "program": student.program,
-                "is_active": student.is_active,
-                "created_at": student.created_at
-            })
+            try:
+                # Intentar obtener email desencriptado
+                try:
+                    email = student.get_email() if student.email else ""
+                except Exception as email_error:
+                    print(f"⚠️  Error desencriptando email de student {student.id}: {email_error}")
+                    email = f"[encrypted-{student.id}]"
+                
+                users.append({
+                    "id": student.id,
+                    "name": student.name or "N/A",
+                    "email": email,
+                    "role": "admin" if student.program == "Administration" else "student",
+                    "program": student.program or "",
+                    "is_active": getattr(student, 'is_active', True),
+                    "created_at": getattr(student, 'created_at', None)
+                })
+            except Exception as user_error:
+                print(f"❌ Error procesando student {getattr(student, 'id', '?')}: {user_error}")
+                import traceback
+                traceback.print_exc()
         
+        # Procesar empresas
         for company in companies:
-            users.append({
-                "id": company.id,
-                "name": company.name,
-                "email": company.get_email(),
-                "role": "company",
-                "industry": company.industry,
-                "is_active": company.is_active,
-                "created_at": company.created_at
-            })
+            try:
+                # Intentar obtener email desencriptado
+                try:
+                    email = company.get_email() if company.email else ""
+                except Exception as email_error:
+                    print(f"⚠️  Error desencriptando email de company {company.id}: {email_error}")
+                    email = f"[encrypted-{company.id}]"
+                
+                users.append({
+                    "id": company.id,
+                    "name": company.name or "N/A",
+                    "email": email,
+                    "role": "company",
+                    "industry": getattr(company, 'industry', None) or "",
+                    "is_active": getattr(company, 'is_active', True),
+                    "created_at": getattr(company, 'created_at', None)
+                })
+            except Exception as user_error:
+                print(f"❌ Error procesando company {getattr(company, 'id', '?')}: {user_error}")
+                import traceback
+                traceback.print_exc()
         
         # Total count
-        total_students = session.exec(select(func.count(Student.id))).one()
-        total_companies = session.exec(select(func.count(Company.id))).one()
+        try:
+            total_students = session.exec(select(func.count(Student.id))).one() or 0
+        except Exception as e:
+            print(f"⚠️  Error contando estudiantes: {e}")
+            total_students = 0
+        
+        try:
+            total_companies = session.exec(select(func.count(Company.id))).one() or 0
+        except Exception as e:
+            print(f"⚠️  Error contando empresas: {e}")
+            total_companies = 0
+        
         total = total_students + total_companies
         
         _log_audit_action(
             session, "GET_USERS", "all",
-            current_user, details=f"Obtenidos {len(users)} usuarios"
+            current_user, details=f"Obtenidos {len(users)} usuarios (estudiantes: {total_students}, empresas: {total_companies})"
         )
+        session.commit()
         
         return {
             "items": users,
             "total": total,
             "offset": offset,
-            "limit": limit
+            "limit": limit,
+            "count": len(users)
         }
     
     except HTTPException:
         raise
     except Exception as e:
-        print(f"Error getting users: {e}")
-        _log_audit_action(
-            session, "GET_USERS", "all",
-            current_user, success=False, error_message=str(e)
-        )
-        raise HTTPException(status_code=500, detail=str(e))
+        print(f"❌ Error getting users: {type(e).__name__}: {e}")
+        import traceback
+        traceback.print_exc()
+        try:
+            _log_audit_action(
+                session, "GET_USERS", "all",
+                current_user, success=False, error_message=str(e)
+            )
+            session.commit()
+        except:
+            pass
+        raise HTTPException(status_code=500, detail=f"Error al obtener usuarios: {str(e)}")
 
 
 @router.delete("/users/{user_id}", response_model=BaseResponse)
@@ -149,33 +201,60 @@ async def delete_user(
         _require_admin(current_user)
         
         # Intentar eliminar como estudiante
-        student = session.get(Student, user_id)
-        if student:
-            session.delete(student)
-            session.commit()
-            _log_audit_action(
-                session, "DELETE_USER", f"student_id:{user_id}",
-                current_user, details=f"Estudiante '{student.name}' eliminado"
-            )
-            return BaseResponse(success=True, message="Usuario eliminado exitosamente")
+        try:
+            student = session.get(Student, user_id)
+            if student:
+                student_name = student.name or "N/A"
+                session.delete(student)
+                session.commit()
+                try:
+                    _log_audit_action(
+                        session, "DELETE_USER", f"student_id:{user_id}",
+                        current_user, details=f"Estudiante '{student_name}' eliminado"
+                    )
+                    session.commit()
+                except:
+                    pass
+                return BaseResponse(success=True, message="Usuario eliminado exitosamente")
+        except Exception as e:
+            print(f"⚠️  Error eliminando como student: {e}")
         
         # Intentar eliminar como empresa
-        company = session.get(Company, user_id)
-        if company:
-            session.delete(company)
-            session.commit()
-            _log_audit_action(
-                session, "DELETE_USER", f"company_id:{user_id}",
-                current_user, details=f"Empresa '{company.name}' eliminada"
-            )
-            return BaseResponse(success=True, message="Usuario eliminado exitosamente")
+        try:
+            company = session.get(Company, user_id)
+            if company:
+                company_name = company.name or "N/A"
+                session.delete(company)
+                session.commit()
+                try:
+                    _log_audit_action(
+                        session, "DELETE_USER", f"company_id:{user_id}",
+                        current_user, details=f"Empresa '{company_name}' eliminada"
+                    )
+                    session.commit()
+                except:
+                    pass
+                return BaseResponse(success=True, message="Usuario eliminado exitosamente")
+        except Exception as e:
+            print(f"⚠️  Error eliminando como company: {e}")
         
         raise HTTPException(status_code=404, detail="Usuario no encontrado")
     
     except HTTPException:
         raise
     except Exception as e:
-        print(f"Error deleting user: {e}")
+        print(f"❌ Error deleting user: {type(e).__name__}: {e}")
+        import traceback
+        traceback.print_exc()
+        try:
+            _log_audit_action(
+                session, "DELETE_USER", f"user_id:{user_id}",
+                current_user, success=False, error_message=str(e)
+            )
+            session.commit()
+        except:
+            pass
+        raise HTTPException(status_code=500, detail=f"Error al eliminar usuario: {str(e)}")
         _log_audit_action(
             session, "DELETE_USER", f"user_id:{user_id}",
             current_user, success=False, error_message=str(e)
