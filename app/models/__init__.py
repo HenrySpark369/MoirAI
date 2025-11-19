@@ -221,7 +221,7 @@ class JobPosition(SQLModel, table=True):
     company_logo: Optional[str] = Field(default=None, description="URL del logo de la empresa")
     
     # Metadatos y estado
-    publication_date: Optional[datetime] = Field(default=None, description="Fecha de publicación original")
+    publication_date: Optional[str] = Field(default=None, max_length=255, description="Fecha de publicación (ISO 8601, relativa como 'Hace 5 días', o formateada)")
     scraped_at: Optional[datetime] = Field(default=None, description="Fecha de scraping (si aplica)")
     is_active: bool = Field(default=True, description="Si el empleo está activo")
     is_featured: bool = Field(default=False, description="Si es empleo destacado")

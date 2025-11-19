@@ -1,11 +1,12 @@
 """
-Endpoints para gestión de empresas colaboradoras - CRUD completo
+Endpoints para gestión de empresas colaboradoras - CRUD completo (ASYNC)
 Incluye operaciones para crear, leer, actualizar y eliminar empresas
 considerando acceso seguro a datos de estudiantes y verificación
 """
 from typing import List, Optional
 from fastapi import APIRouter, Depends, HTTPException, Query
-from sqlmodel import Session, select, func
+from sqlmodel import select, func
+from sqlalchemy.ext.asyncio import AsyncSession
 import json
 from datetime import datetime
 
@@ -24,10 +25,10 @@ router = APIRouter(prefix="/companies", tags=["companies"])
 VALID_SIZES = {"startup", "pequeña", "mediana", "grande"}
 
 
-def _log_audit_action(session: Session, action: str, resource: str, 
+async def _log_audit_action(session: AsyncSession, action: str, resource: str, 
                      actor: UserContext, success: bool = True, 
                      details: str = None, error_message: str = None):
-    """Helper para registrar acciones de auditoría"""
+    """Helper para registrar acciones de auditoría de forma asincrónica"""
     audit_log = AuditLog(
         actor_role=actor.role,
         actor_id=str(actor.user_id) if actor.user_id else actor.email,
@@ -38,6 +39,7 @@ def _log_audit_action(session: Session, action: str, resource: str,
         error_message=error_message
     )
     session.add(audit_log)
+    await session.commit()
 
 
 def _convert_to_company_profile(company: Company) -> CompanyProfile:
@@ -62,7 +64,7 @@ def _convert_to_company_profile(company: Company) -> CompanyProfile:
 @router.post("/", response_model=CompanyProfile, status_code=201)
 async def create_company(
     company_data: CompanyCreate,
-    session: Session = Depends(get_session),
+    session: AsyncSession = Depends(get_session),
     current_user: UserContext = Depends(AuthService.get_current_user)
 ):
     """
@@ -94,12 +96,12 @@ async def create_company(
         )
     
     # Verificar email único
-    existing = session.exec(
+    existing = await session.execute(
         select(Company).where(Company.email == company_data.email)
     ).first()
     
     if existing:
-        _log_audit_action(
+        await _log_audit_action(
             session, "CREATE_COMPANY", f"email:{company_data.email}",
             current_user, success=False, error_message="Email duplicado"
         )
@@ -121,10 +123,10 @@ async def create_company(
     
     try:
         session.add(company)
-        session.commit()
+        await session.commit()
         session.refresh(company)
         
-        _log_audit_action(
+        await _log_audit_action(
             session, "CREATE_COMPANY", f"company_id:{company.id}",
             current_user, details=f"Empresa {company.name} creada (email: {company.email})"
         )
@@ -133,7 +135,7 @@ async def create_company(
         
     except Exception as e:
         session.rollback()
-        _log_audit_action(
+        await _log_audit_action(
             session, "CREATE_COMPANY", f"email:{company_data.email}",
             current_user, success=False, error_message=str(e)
         )
@@ -156,7 +158,7 @@ async def list_companies(
     location: Optional[str] = Query(None, description="Filtrar por ubicación"),
     is_verified: Optional[bool] = Query(None, description="Filtrar por verificación"),
     sort_by: str = Query("name", description="Ordenar por: name, created_at"),
-    session: Session = Depends(get_session),
+    session: AsyncSession = Depends(get_session),
     current_user: UserContext = Depends(AuthService.get_current_user)
 ):
     """
@@ -210,15 +212,15 @@ async def list_companies(
         query = query.order_by(Company.name)
     
     # Obtener total
-    total = session.exec(select(func.count(Company.id)).select_from(Company)).one()
+    total = await session.execute(select(func.count(Company.id)).select_from(Company)).scalar_one()
     
     # Aplicar paginación
-    companies = session.exec(query.offset(skip).limit(limit)).all()
+    companies = await session.execute(query.offset(skip).limit(limit)).scalars().all()
     
     # Convertir a perfiles
     data = [_convert_to_company_profile(c) for c in companies]
     
-    _log_audit_action(
+    await _log_audit_action(
         session, "LIST_COMPANIES", "companies",
         current_user, details=f"Listar empresas (skip={skip}, limit={limit})"
     )
@@ -238,7 +240,7 @@ async def list_companies(
 @router.get("/{company_id}", response_model=CompanyProfile)
 async def get_company(
     company_id: int,
-    session: Session = Depends(get_session),
+    session: AsyncSession = Depends(get_session),
     current_user: UserContext = Depends(AuthService.get_current_user)
 ):
     """
@@ -251,12 +253,12 @@ async def get_company(
     - Student: solo si está verificada
     - Anonymous: no tiene acceso
     """
-    company = session.exec(
+    company = await session.execute(
         select(Company).where(Company.id == company_id)
     ).first()
     
     if not company:
-        _log_audit_action(
+        await _log_audit_action(
             session, "GET_COMPANY", f"company_id:{company_id}",
             current_user, success=False, error_message="Empresa no encontrada"
         )
@@ -286,7 +288,7 @@ async def get_company(
                 detail="Empresa no verificada"
             )
     
-    _log_audit_action(
+    await _log_audit_action(
         session, "GET_COMPANY", f"company_id:{company_id}",
         current_user, details=f"Obtener empresa: {company.name}"
     )
@@ -307,7 +309,7 @@ async def search_students(
     program: Optional[str] = Query(None, description="Programa académico"),
     skip: int = Query(0, ge=0, description="Registros a saltar"),
     limit: int = Query(20, ge=1, le=100, description="Límite de resultados"),
-    session: Session = Depends(get_session),
+    session: AsyncSession = Depends(get_session),
     current_user: UserContext = Depends(AuthService.get_current_user)
 ):
     """
@@ -335,7 +337,7 @@ async def search_students(
         )
     
     # Obtener la empresa
-    company = session.exec(
+    company = await session.execute(
         select(Company).where(Company.id == company_id)
     ).first()
     
@@ -347,7 +349,7 @@ async def search_students(
     
     # Verificar que la empresa está verificada
     if not company.is_verified:
-        _log_audit_action(
+        await _log_audit_action(
             session, "SEARCH_STUDENTS", f"company_id:{company_id}",
             current_user, success=False, error_message="Empresa no verificada"
         )
@@ -387,10 +389,10 @@ async def search_students(
         query = query.where(Student.program == program)
     
     # Obtener total
-    total = session.exec(select(func.count(Student.id)).select_from(Student)).one()
+    total = await session.execute(select(func.count(Student.id)).select_from(Student)).scalar_one()
     
     # Aplicar paginación
-    students = session.exec(query.offset(skip).limit(limit)).all()
+    students = await session.execute(query.offset(skip).limit(limit)).scalars().all()
     
     # Convertir a StudentPublic (información pública)
     data = []
@@ -404,7 +406,7 @@ async def search_students(
             "projects": json.loads(student.projects or "[]"),
         })
     
-    _log_audit_action(
+    await _log_audit_action(
         session, "SEARCH_STUDENTS", f"company_id:{company_id}",
         current_user, details=f"Búsqueda de estudiantes (skills={skills}, found={len(data)})"
     )
@@ -425,7 +427,7 @@ async def search_students(
 async def update_company(
     company_id: int,
     company_data: CompanyCreate,
-    session: Session = Depends(get_session),
+    session: AsyncSession = Depends(get_session),
     current_user: UserContext = Depends(AuthService.get_current_user)
 ):
     """
@@ -443,7 +445,7 @@ async def update_company(
     - Owner (company): puede actualizar su propia empresa
     - Admin: puede actualizar cualquier empresa
     """
-    company = session.exec(
+    company = await session.execute(
         select(Company).where(Company.id == company_id)
     ).first()
     
@@ -482,10 +484,10 @@ async def update_company(
         company.updated_at = datetime.utcnow()
         
         session.add(company)
-        session.commit()
+        await session.commit()
         session.refresh(company)
         
-        _log_audit_action(
+        await _log_audit_action(
             session, "UPDATE_COMPANY", f"company_id:{company.id}",
             current_user, details=f"Empresa {company.name} actualizada"
         )
@@ -494,7 +496,7 @@ async def update_company(
         
     except Exception as e:
         session.rollback()
-        _log_audit_action(
+        await _log_audit_action(
             session, "UPDATE_COMPANY", f"company_id:{company_id}",
             current_user, success=False, error_message=str(e)
         )
@@ -513,7 +515,7 @@ async def verify_company(
     company_id: int,
     is_verified: bool,
     reason: Optional[str] = Query(None, max_length=500),
-    session: Session = Depends(get_session),
+    session: AsyncSession = Depends(get_session),
     current_user: UserContext = Depends(AuthService.get_current_user)
 ):
     """
@@ -532,7 +534,7 @@ async def verify_company(
             detail="Solo administradores pueden verificar empresas"
         )
     
-    company = session.exec(
+    company = await session.execute(
         select(Company).where(Company.id == company_id)
     ).first()
     
@@ -547,10 +549,10 @@ async def verify_company(
         company.updated_at = datetime.utcnow()
         
         session.add(company)
-        session.commit()
+        await session.commit()
         session.refresh(company)
         
-        _log_audit_action(
+        await _log_audit_action(
             session, "VERIFY_COMPANY", f"company_id:{company.id}",
             current_user, details=f"Empresa {company.name} verificada: {is_verified}, reason: {reason}"
         )
@@ -577,7 +579,7 @@ async def activate_company(
     company_id: int,
     is_active: bool,
     reason: Optional[str] = Query(None, max_length=500),
-    session: Session = Depends(get_session),
+    session: AsyncSession = Depends(get_session),
     current_user: UserContext = Depends(AuthService.get_current_user)
 ):
     """
@@ -591,7 +593,7 @@ async def activate_company(
     - Owner: puede desactivar su propia empresa
     - Admin: puede activar/desactivar cualquier empresa
     """
-    company = session.exec(
+    company = await session.execute(
         select(Company).where(Company.id == company_id)
     ).first()
     
@@ -619,10 +621,10 @@ async def activate_company(
         company.updated_at = datetime.utcnow()
         
         session.add(company)
-        session.commit()
+        await session.commit()
         session.refresh(company)
         
-        _log_audit_action(
+        await _log_audit_action(
             session, "ACTIVATE_COMPANY", f"company_id:{company.id}",
             current_user, details=f"Empresa {company.name} {'activada' if is_active else 'desactivada'}, reason: {reason}"
         )
@@ -649,7 +651,7 @@ async def delete_company(
     company_id: int,
     permanently: bool = Query(False, description="Hard delete (admin only)"),
     reason: Optional[str] = Query(None, max_length=500),
-    session: Session = Depends(get_session),
+    session: AsyncSession = Depends(get_session),
     current_user: UserContext = Depends(AuthService.get_current_user)
 ):
     """
@@ -667,7 +669,7 @@ async def delete_company(
     - Owner: puede hacer soft delete de su empresa
     - Admin: puede hacer soft o hard delete
     """
-    company = session.exec(
+    company = await session.execute(
         select(Company).where(Company.id == company_id)
     ).first()
     
@@ -707,10 +709,10 @@ async def delete_company(
     try:
         if permanently:
             # Hard delete (eliminación física)
-            session.delete(company)
-            session.commit()
+            await session.delete(company)
+            await session.commit()
             
-            _log_audit_action(
+            await _log_audit_action(
                 session, "DELETE_COMPANY_HARD", f"company_id:{company_id}",
                 current_user, details=f"Empresa {company.name} eliminada permanentemente, reason: {reason}"
             )
@@ -725,10 +727,10 @@ async def delete_company(
             company.updated_at = datetime.utcnow()
             
             session.add(company)
-            session.commit()
+            await session.commit()
             session.refresh(company)
             
-            _log_audit_action(
+            await _log_audit_action(
                 session, "DELETE_COMPANY_SOFT", f"company_id:{company_id}",
                 current_user, details=f"Empresa {company.name} desactivada (soft delete), reason: {reason}"
             )
@@ -755,7 +757,7 @@ async def get_company_posted_jobs(
     offset: int = Query(0),
     limit: int = Query(20),
     current_user: UserContext = Depends(AuthService.get_current_user),
-    session: Session = Depends(get_session)
+    session: AsyncSession = Depends(get_session)
 ):
     """
     Obtener todos los empleos publicados por la empresa actual
@@ -781,7 +783,7 @@ async def get_company_posted_jobs(
         from app.models import JobPosition
         from app.models import JobApplicationDB
         
-        jobs = session.exec(
+        jobs = await session.execute(
             select(JobPosition)
             .where(JobPosition.company_id == current_user.user_id)
             .order_by(JobPosition.created_at.desc())
@@ -792,7 +794,7 @@ async def get_company_posted_jobs(
         # Enriquecer con estadísticas
         result = []
         for job in jobs:
-            applicant_count = session.exec(
+            applicant_count = await session.execute(
                 select(func.count(JobApplicationDB.id))
                 .where(JobApplicationDB.job_position_id == job.id)
             ).one()
@@ -809,7 +811,7 @@ async def get_company_posted_jobs(
                 "expires_at": job.expires_at
             })
         
-        _log_audit_action(
+        await _log_audit_action(
             session, "GET_COMPANY_JOBS", f"company_id:{current_user.user_id}",
             current_user, details=f"Obtenidos {len(result)} empleos publicados"
         )
@@ -820,7 +822,7 @@ async def get_company_posted_jobs(
         raise
     except Exception as e:
         print(f"Error getting company jobs: {e}")
-        _log_audit_action(
+        await _log_audit_action(
             session, "GET_COMPANY_JOBS", f"company_id:{current_user.user_id}",
             current_user, success=False, error_message=str(e)
         )
@@ -831,7 +833,7 @@ async def get_company_posted_jobs(
 async def create_job_posting(
     job_data: dict,
     current_user: UserContext = Depends(AuthService.get_current_user),
-    session: Session = Depends(get_session)
+    session: AsyncSession = Depends(get_session)
 ):
     """
     Crear nuevo empleo/vacante para la empresa
@@ -872,7 +874,7 @@ async def create_job_posting(
             raise HTTPException(status_code=400, detail="Campo 'location' es requerido")
         
         # Obtener empresa
-        company = session.get(Company, current_user.user_id)
+        company = await session.get(Company, current_user.user_id)
         if not company:
             raise HTTPException(status_code=404, detail="Empresa no encontrada")
         
@@ -894,10 +896,10 @@ async def create_job_posting(
         )
         
         session.add(job)
-        session.commit()
+        await session.commit()
         session.refresh(job)
         
-        _log_audit_action(
+        await _log_audit_action(
             session, "CREATE_JOB", f"job_id:{job.id}",
             current_user, details=f"Empleo '{job.title}' creado exitosamente"
         )
@@ -916,7 +918,7 @@ async def create_job_posting(
         raise
     except Exception as e:
         print(f"Error creating job: {e}")
-        _log_audit_action(
+        await _log_audit_action(
             session, "CREATE_JOB", f"company_id:{current_user.user_id}",
             current_user, success=False, error_message=str(e)
         )
@@ -928,7 +930,7 @@ async def get_job_applicants(
     job_id: int,
     sort_by: str = Query("match_score"),
     current_user: UserContext = Depends(AuthService.get_current_user),
-    session: Session = Depends(get_session)
+    session: AsyncSession = Depends(get_session)
 ):
     """
     Obtener todos los candidatos que han aplicado a un empleo
@@ -952,12 +954,12 @@ async def get_job_applicants(
         from app.models import JobPosition, JobApplicationDB
         
         # Verificar que el empleo pertenece a la empresa
-        job = session.get(JobPosition, job_id)
+        job = await session.get(JobPosition, job_id)
         if not job or job.company_id != current_user.user_id:
             raise HTTPException(status_code=404, detail="Empleo no encontrado")
         
         # Obtener aplicaciones
-        applications = session.exec(
+        applications = await session.execute(
             select(JobApplicationDB)
             .where(JobApplicationDB.job_position_id == job_id)
         ).all()
@@ -965,7 +967,7 @@ async def get_job_applicants(
         # Enriquecer con información del candidato
         applicants = []
         for app in applications:
-            student = session.get(Student, app.user_id)
+            student = await session.get(Student, app.user_id)
             if student:
                 applicants.append({
                     "application_id": app.id,
@@ -987,7 +989,7 @@ async def get_job_applicants(
         else:  # match_score
             applicants.sort(key=lambda x: x["match_score"], reverse=True)
         
-        _log_audit_action(
+        await _log_audit_action(
             session, "GET_JOB_APPLICANTS", f"job_id:{job_id}",
             current_user, details=f"Obtenidos {len(applicants)} candidatos"
         )
@@ -998,7 +1000,7 @@ async def get_job_applicants(
         raise
     except Exception as e:
         print(f"Error getting applicants: {e}")
-        _log_audit_action(
+        await _log_audit_action(
             session, "GET_JOB_APPLICANTS", f"job_id:{job_id}",
             current_user, success=False, error_message=str(e)
         )
@@ -1011,7 +1013,7 @@ async def update_application_status(
     app_id: int,
     status_data: dict,
     current_user: UserContext = Depends(AuthService.get_current_user),
-    session: Session = Depends(get_session)
+    session: AsyncSession = Depends(get_session)
 ):
     """
     Actualizar el estado de una aplicación
@@ -1035,12 +1037,12 @@ async def update_application_status(
         from app.models import JobPosition, JobApplicationDB
         
         # Verificar que el empleo pertenece a la empresa
-        job = session.get(JobPosition, job_id)
+        job = await session.get(JobPosition, job_id)
         if not job or job.company_id != current_user.user_id:
             raise HTTPException(status_code=404, detail="Empleo no encontrado")
         
         # Buscar aplicación
-        app = session.get(JobApplicationDB, app_id)
+        app = await session.get(JobApplicationDB, app_id)
         if not app or app.job_position_id != job_id:
             raise HTTPException(status_code=404, detail="Aplicación no encontrada")
         
@@ -1057,9 +1059,9 @@ async def update_application_status(
         app.status = new_status
         app.updated_at = datetime.utcnow()
         session.add(app)
-        session.commit()
+        await session.commit()
         
-        _log_audit_action(
+        await _log_audit_action(
             session, "UPDATE_APPLICATION_STATUS", f"app_id:{app_id}",
             current_user, details=f"Estado actualizado a '{new_status}'"
         )
@@ -1073,7 +1075,7 @@ async def update_application_status(
         raise
     except Exception as e:
         print(f"Error updating application status: {e}")
-        _log_audit_action(
+        await _log_audit_action(
             session, "UPDATE_APPLICATION_STATUS", f"app_id:{app_id}",
             current_user, success=False, error_message=str(e)
         )

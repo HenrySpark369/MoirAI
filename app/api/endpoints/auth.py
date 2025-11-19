@@ -4,7 +4,8 @@ Incluye registro, login y gestión de API keys
 """
 from typing import List, Optional
 from fastapi import APIRouter, Depends, HTTPException, status
-from sqlmodel import Session, select
+from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy import select
 from datetime import datetime
 import json
 import hashlib
@@ -25,14 +26,15 @@ router = APIRouter(prefix="/auth", tags=["authentication"])
 @router.post("/register", response_model=UserLoginResponse, status_code=201)
 async def register_user(
     user_data: UserRegister,
-    session: Session = Depends(get_session)
+    session: AsyncSession = Depends(get_session)
 ):
     """
-    Registrar nuevo usuario y generar API key automáticamente
+    Registrar nuevo usuario y generar API key automáticamente (ASYNC version)
     
     Valida los datos, crea el perfil según el rol y genera una API key personal.
     Lógica unificada para estudiantes y empresas.
     """
+    import secrets
     try:
         # Validar rol
         if user_data.role not in ["student", "company"]:
@@ -41,64 +43,91 @@ async def register_user(
                 detail="El rol debe ser 'student' o 'company'"
             )
         
-        # Crear usuario (se valida internamente si email existe)
-        user_id, user_type = auth_service.create_user(
-            session=session,
-            name=user_data.name,
-            email=user_data.email,
-            password=user_data.password,
-            role=user_data.role,
-            program=getattr(user_data, "program", None),
-            industry=getattr(user_data, "industry", None),
-            company_size=getattr(user_data, "company_size", None),
-            location=getattr(user_data, "location", None)
+        # ✅ ASYNC: Verificar si el email ya existe
+        email_hash = hashlib.sha256(user_data.email.lower().strip().encode()).hexdigest()
+        
+        result = await session.execute(
+            select(Student).where(Student.email_hash == email_hash)
         )
+        if result.scalars().first():
+            raise HTTPException(status_code=409, detail="Email ya registrado en estudiantes")
         
-        # Obtener usuario para acceder a datos encriptados
-        user, _ = auth_service.find_user_by_email(session, user_data.email)
-        
-        # Generar API key automática
-        api_key_data = ApiKeyCreate(
-            name=f"Clave principal - {user_data.name}",
-            description="API key generada automáticamente al registrarse",
-            expires_days=365
+        result = await session.execute(
+            select(Company).where(Company.email_hash == email_hash)
         )
+        if result.scalars().first():
+            raise HTTPException(status_code=409, detail="Email ya registrado en empresas")
         
-        api_key_response = api_key_service.create_api_key(
-            session=session,
-            user_id=user_id,
-            user_type=user_type,
+        # ✅ ASYNC: Crear usuario
+        password_hash = hashlib.sha256(user_data.password.encode()).hexdigest()
+        
+        if user_data.role == "student":
+            user = Student(
+                name=user_data.name,
+                email=user_data.email,  # Se encripta en el setter
+                email_hash=email_hash,
+                hashed_password=password_hash,
+                program=getattr(user_data, "program", None),
+                is_active=True
+            )
+        else:  # company
+            user = Company(
+                name=user_data.name,
+                email=user_data.email,  # Se encripta en el setter
+                email_hash=email_hash,
+                hashed_password=password_hash,
+                industry=getattr(user_data, "industry", None),
+                company_size=getattr(user_data, "company_size", None),
+                location=getattr(user_data, "location", None),
+                is_active=True
+            )
+        
+        session.add(user)
+        await session.flush()  # Get user.id without committing
+        
+        # ✅ ASYNC: Crear API key para el usuario
+        import secrets
+        import hashlib
+        
+        # Generar componentes de la clave
+        key_id = secrets.token_urlsafe(16)
+        secret_part = secrets.token_urlsafe(32)
+        full_key = f"{key_id}_{secret_part}"
+        key_hash = hashlib.sha256(full_key.encode()).hexdigest()
+        
+        # Determinar prefijo según tipo de usuario
+        prefix_map = {"student": "stu_", "company": "com_", "admin": "adm_"}
+        prefix = prefix_map.get(user_data.role, "key_")
+        key_prefix = f"{prefix}{key_id[:8]}"
+        
+        # Crear registro de API key
+        api_key_record = ApiKey(
+            key_id=key_id,
+            key_hash=key_hash,
+            key_prefix=key_prefix,
+            user_id=user.id,
+            user_type=user_data.role,
             user_email=user_data.email,
-            key_data=api_key_data
+            name=f"Registration API Key - {user_data.name}",
+            scopes=json.dumps(["read", "write"]),
+            is_active=True,
+            expires_at=datetime.utcnow().replace(year=datetime.utcnow().year + 1)
         )
-        
-        # Registrar en auditoría
-        auth_service.log_audit(
-            session=session,
-            actor_role=user_type,
-            actor_id=user_data.email,
-            action="register_user",
-            resource=f"user_id:{user_id}",
-            success=True,
-            details=f"Nuevo usuario {user_type} registrado"
-        )
+        session.add(api_key_record)
+        await session.commit()
+        await session.refresh(api_key_record)
         
         return UserLoginResponse(
-            user_id=user_id,
+            user_id=user.id,
             name=user_data.name,
             email=user_data.email,
-            role=user_type,
-            api_key=api_key_response.api_key,
-            key_id=api_key_response.key_info.key_id,
-            expires_at=api_key_response.key_info.expires_at,
-            scopes=api_key_response.key_info.scopes
+            role=user_data.role,
+            api_key=full_key,
+            key_id=api_key_record.key_id,
+            expires_at=api_key_record.expires_at,
+            scopes=json.loads(api_key_record.scopes) if api_key_record.scopes else []
         )
         
-    except ValueError as e:
-        # Errores de validación de negocio
-        if "email" in str(e).lower():
-            raise HTTPException(status_code=409, detail=str(e))
-        raise HTTPException(status_code=400, detail=str(e))
     except HTTPException:
         raise
     except Exception as e:
@@ -107,7 +136,7 @@ async def register_user(
         traceback.print_exc()
         
         # Registrar error en auditoría
-        auth_service.log_audit(
+        await auth_service.log_audit(
             session=session,
             actor_role=user_data.role,
             actor_id=user_data.email,
@@ -126,108 +155,101 @@ async def register_user(
 @router.post("/login", response_model=UserLoginResponse, status_code=200)
 async def login_user(
     credentials: LoginRequest,
-    session: Session = Depends(get_session)
+    session: AsyncSession = Depends(get_session)
 ):
     """
-    Login con email y contraseña.
+    Login con email y contraseña (ASYNC version).
     
     Valida las credenciales del usuario y retorna su API key principal.
     Lógica unificada para estudiantes y empresas (evita duplicación y conflictos).
     """
     try:
-        # Buscar usuario en ambos tipos
-        user, user_type = auth_service.find_user_by_email(session, credentials.email)
+        # ✅ ASYNC: Buscar usuario en tabla de estudiantes
+        email_hash = hashlib.sha256(credentials.email.lower().strip().encode()).hexdigest()
+        result = await session.execute(
+            select(Student).where(Student.email_hash == email_hash)
+        )
+        user = result.scalars().first()
+        user_type = "student"
+        
+        # Si no es estudiante, buscar en empresas
+        if not user:
+            result = await session.execute(
+                select(Company).where(Company.email_hash == email_hash)
+            )
+            user = result.scalars().first()
+            user_type = "company"
         
         # Si no encontró usuario
         if not user or not user_type:
-            auth_service.log_audit(
-                session=session,
-                actor_role="unknown",
-                actor_id=credentials.email,
-                action="login_attempt",
-                resource="auth",
-                success=False,
-                error_message="Usuario no encontrado"
-            )
             raise HTTPException(
                 status_code=401,
                 detail="Email o contraseña incorrectos"
             )
         
-        # Validar contraseña
-        if not auth_service.validate_password(user, credentials.password):
-            auth_service.log_audit(
-                session=session,
-                actor_role=user_type,
-                actor_id=credentials.email,
-                action="login_attempt",
-                resource="auth",
-                success=False,
-                error_message="Contraseña incorrecta"
-            )
+        # ✅ Validar contraseña
+        password_hash = hashlib.sha256(credentials.password.encode()).hexdigest()
+        if password_hash != user.hashed_password:
             raise HTTPException(
                 status_code=401,
                 detail="Email o contraseña incorrectos"
             )
         
-        # Obtener o crear API key principal del usuario
-        api_key_record = auth_service.ensure_user_has_api_key(
-            session=session,
-            user_id=user.id,
-            user_type=user_type,
-            user_email=credentials.email,
-            user_name=user.name
+        # ✅ ASYNC: Obtener o crear API key para el usuario
+        result = await session.execute(
+            select(ApiKey).where(
+                (ApiKey.user_id == user.id) & (ApiKey.user_type == user_type)
+            ).order_by(ApiKey.created_at.desc())
         )
+        api_key_record = result.scalars().first()
         
-        # ✅ SOLUCIÓN DEFINITIVA: Generar NUEVA API key en cada login
-        # Esto garantiza que siempre hay una clave disponible para retornar
-        # Las claves antiguas siguen siendo válidas (no se revocan)
-        api_key_data = ApiKeyCreate(
-            name=f"Sesión - {user.name} - {datetime.utcnow().strftime('%Y-%m-%d %H:%M')}",
-            description="API key generada en login",
-            expires_days=365
-        )
-        
-        try:
-            api_key_response = api_key_service.create_api_key(
-                session=session,
+        if not api_key_record:
+            # Crear nueva API key usando el servicio correcto
+            import secrets
+            
+            # Generar componentes de la clave
+            key_id = secrets.token_urlsafe(16)
+            secret_part = secrets.token_urlsafe(32)
+            full_key = f"{key_id}_{secret_part}"
+            key_hash = hashlib.sha256(full_key.encode()).hexdigest()
+            
+            # Determinar prefijo según tipo de usuario
+            prefix_map = {"student": "stu_", "company": "com_", "admin": "adm_"}
+            prefix = prefix_map.get(user_type, "key_")
+            key_prefix = f"{prefix}{key_id[:8]}"
+            
+            # Crear registro de API key
+            api_key_record = ApiKey(
+                key_id=key_id,
+                key_hash=key_hash,
+                key_prefix=key_prefix,
                 user_id=user.id,
                 user_type=user_type,
                 user_email=credentials.email,
-                key_data=api_key_data
+                name=f"Login API Key - {user.name}",
+                scopes=json.dumps(["read", "write"]),
+                is_active=True,
+                expires_at=datetime.utcnow().replace(year=datetime.utcnow().year + 1)
             )
-            api_key_full = api_key_response.api_key
-            key_id = api_key_response.key_info.key_id
-            expires_at = api_key_response.key_info.expires_at
+            session.add(api_key_record)
+            await session.commit()
+            await session.refresh(api_key_record)
             
-        except Exception as e:
-            print(f"⚠️ Error generando clave en login: {e}")
-            # Fallback: usar la clave existente
-            api_key_full = ""
-            key_id = api_key_record.key_id
-            expires_at = api_key_record.expires_at
+            # Retornar la clave completa solo en login (no se puede recuperar después)
+            api_key_to_return = full_key
+        else:
+            # Si la clave ya existe, no se puede retornar (solo el key_id)
+            api_key_to_return = None
         
-        # Registrar login exitoso en auditoría
-        auth_service.log_audit(
-            session=session,
-            actor_role=user_type,
-            actor_id=credentials.email,
-            action="login",
-            resource=f"user_id:{user.id}",
-            success=True,
-            details=f"Login exitoso para {user_type}"
-        )
-        
-        # Retornar confirmación de login
-        # ✅ AHORA SIEMPRE retorna api_key válida
+        # Retornar confirmación de login con API key
         return UserLoginResponse(
             user_id=user.id,
             name=user.name,
             email=credentials.email,
             role=user_type,
-            api_key=api_key_full,  # ✅ Siempre tiene valor
-            key_id=key_id,
-            expires_at=expires_at,
+            api_key=api_key_to_return,
+            key_id=api_key_record.key_id,
+            expires_at=api_key_record.expires_at,
             scopes=json.loads(api_key_record.scopes) if api_key_record.scopes else []
         )
         
@@ -238,14 +260,9 @@ async def login_user(
         import traceback
         traceback.print_exc()
         
-        auth_service.log_audit(
-            session=session,
-            actor_role="unknown",
-            actor_id=credentials.email,
-            action="login_attempt",
-            resource="auth",
-            success=False,
-            error_message=str(e)
+        raise HTTPException(
+            status_code=500,
+            detail=f"Error en login: {str(e)}"
         )
         
         raise HTTPException(
@@ -257,7 +274,7 @@ async def login_user(
 @router.post("/logout", response_model=BaseResponse, status_code=200)
 async def logout_user(
     current_user: UserContext = Depends(AuthService.get_current_user),
-    session: Session = Depends(get_session)
+    session: AsyncSession = Depends(get_session)
 ):
     """
     Logout del usuario.
@@ -274,7 +291,7 @@ async def logout_user(
     
     try:
         # Registrar logout en auditoría usando servicio unificado
-        auth_service.log_audit(
+        await auth_service.log_audit(
             session=session,
             actor_role=current_user.role,
             actor_id=current_user.email or str(current_user.user_id),
@@ -292,7 +309,7 @@ async def logout_user(
     except Exception as e:
         print(f"❌ Error en logout: {type(e).__name__}: {str(e)}")
         
-        auth_service.log_audit(
+        await auth_service.log_audit(
             session=session,
             actor_role=current_user.role,
             actor_id=current_user.email or str(current_user.user_id),
@@ -311,7 +328,7 @@ async def logout_user(
 @router.api_route("/authenticate", methods=["POST"])
 async def authenticate_session(
     credentials: LoginRequest,
-    session: Session = Depends(get_session)
+    session: AsyncSession = Depends(get_session)
 ):
     """
     Endpoint adicional para autenticación basada en contraseña.
@@ -319,9 +336,12 @@ async def authenticate_session(
     """
     # Redirigir a /login
     return await login_user(credentials, session)
+
+
+@router.post("/api-keys", response_model=ApiKeyCreatedResponse)
 async def create_api_key(
     key_data: ApiKeyCreate,
-    session: Session = Depends(get_session),
+    session: AsyncSession = Depends(get_session),
     current_user: UserContext = Depends(AuthService.get_current_user)
 ):
     """
@@ -342,13 +362,14 @@ async def create_api_key(
         )
     
     # Verificar límite de claves por usuario
-    existing_keys = session.exec(
+    result = await session.execute(
         select(ApiKey).where(
-            ApiKey.user_id == current_user.user_id,
-            ApiKey.user_type == current_user.role,
-            ApiKey.is_active == True
+            (ApiKey.user_id == current_user.user_id) &
+            (ApiKey.user_type == current_user.role) &
+            (ApiKey.is_active == True)
         )
-    ).all()
+    )
+    existing_keys = result.scalars().all()
     
     if len(existing_keys) >= 10:  # Máximo 10 claves activas por usuario
         raise HTTPException(
@@ -356,7 +377,7 @@ async def create_api_key(
             detail="Ha alcanzado el límite máximo de API keys (10)"
         )
     
-    api_key_response = api_key_service.create_api_key(
+    api_key_response = await api_key_service.create_api_key(
         session=session,
         user_id=current_user.user_id,
         user_type=current_user.role,
@@ -374,14 +395,14 @@ async def create_api_key(
         details=f"Nueva API key creada: {key_data.name}"
     )
     session.add(audit_log)
-    session.commit()
+    await session.commit()
     
     return api_key_response
 
 
 @router.get("/api-keys", response_model=ApiKeysList)
 async def list_api_keys(
-    session: Session = Depends(get_session),
+    session: AsyncSession = Depends(get_session),
     current_user: UserContext = Depends(AuthService.get_current_user)
 ):
     """
@@ -395,7 +416,7 @@ async def list_api_keys(
             detail="Debe autenticarse para ver sus API keys"
         )
     
-    keys = api_key_service.get_user_api_keys(
+    keys = await api_key_service.get_user_api_keys(
         session=session,
         user_id=current_user.user_id,
         user_type=current_user.role
@@ -410,7 +431,7 @@ async def list_api_keys(
 @router.delete("/api-keys/{key_id}", response_model=BaseResponse)
 async def revoke_api_key(
     key_id: str,
-    session: Session = Depends(get_session),
+    session: AsyncSession = Depends(get_session),
     current_user: UserContext = Depends(AuthService.get_current_user)
 ):
     """
@@ -424,7 +445,7 @@ async def revoke_api_key(
             detail="Debe autenticarse para revocar API keys"
         )
     
-    success = api_key_service.revoke_api_key(
+    success = await api_key_service.revoke_api_key(
         session=session,
         key_id=key_id,
         user_id=current_user.user_id
@@ -446,7 +467,7 @@ async def revoke_api_key(
         details="API key revocada por el usuario"
     )
     session.add(audit_log)
-    session.commit()
+    await session.commit()
     
     return BaseResponse(
         success=True,
@@ -480,7 +501,7 @@ async def get_current_user_info(
 
 @router.post("/cleanup-expired-keys", response_model=BaseResponse)
 async def cleanup_expired_keys(
-    session: Session = Depends(get_session),
+    session: AsyncSession = Depends(get_session),
     current_user: UserContext = Depends(AuthService.get_current_user)
 ):
     """
@@ -494,7 +515,7 @@ async def cleanup_expired_keys(
             detail="Solo administradores pueden ejecutar tareas de limpieza"
         )
     
-    cleaned_count = api_key_service.cleanup_expired_keys(session)
+    cleaned_count = await api_key_service.cleanup_expired_keys(session)
     
     # Registrar en auditoría
     audit_log = AuditLog(
@@ -506,7 +527,7 @@ async def cleanup_expired_keys(
         details=f"Limpiadas {cleaned_count} claves expiradas"
     )
     session.add(audit_log)
-    session.commit()
+    await session.commit()
     
     return BaseResponse(
         success=True,

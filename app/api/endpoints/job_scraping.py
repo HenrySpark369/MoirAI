@@ -7,6 +7,8 @@ from fastapi import APIRouter, HTTPException, Query, Depends
 from pydantic import BaseModel, Field
 from datetime import datetime
 import logging
+from sqlmodel import select
+from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.services.occ_scraper_service import (
     SearchFilters,
@@ -31,7 +33,6 @@ from app.services.job_application_service import (
     JobCacheManager
 )
 from app.middleware.auth import get_current_user
-from sqlmodel import Session
 
 logger = logging.getLogger(__name__)
 
@@ -208,7 +209,7 @@ async def search_jobs(
     request: SearchRequest, 
     detailed: bool = Query(False, description="Incluir información enriquecida del contenedor"),
     full_details: bool = Query(False, description="Obtener detalles completos vía API OCC (más lento, 95%+ datos)"),
-    db_session: Session = Depends(get_session)
+    db_session: AsyncSession = Depends(get_session)
 ):
     """
     Busca empleos en OCC.com.mx basado en los criterios especificados.
@@ -269,7 +270,7 @@ async def search_jobs(
         # ✨ NUEVO: Guardar automáticamente en caché persistente (BD)
         try:
             cache_manager = JobCacheManager(db_session)
-            cached_count = cache_manager.save_scraped_jobs(
+            cached_count = await cache_manager.save_scraped_jobs(
                 jobs=jobs,
                 source="occ",
                 keyword=request.keyword
@@ -278,6 +279,7 @@ async def search_jobs(
         except Exception as cache_error:
             # No fallar la búsqueda si hay error en cache
             logger.warning(f"⚠️  Error guardando cache: {cache_error}")
+            cached_count = 0
         
         # Construir mensaje descriptivo
         if full_details:
@@ -435,7 +437,7 @@ async def get_job_details(job_id: str):
 @router.post("/track", response_model=MonitoringResponse)
 async def track_job_opportunities(
     request: JobTrackingRequest,
-    session: Session = Depends(get_session)
+    session: AsyncSession = Depends(get_session)
 ):
     """
     Rastrea oportunidades laborales para múltiples keywords
@@ -731,7 +733,7 @@ async def explore_occ_site_structure(keyword: str = "data science"):
 async def create_job_application(
     application_request: JobApplicationRequest,
     current_user = Depends(get_current_user),
-    db_session = Depends(get_session)
+    db_session: AsyncSession = Depends(get_session)
 ):
     """
     Crear una nueva aplicación de empleo
@@ -740,9 +742,12 @@ async def create_job_application(
     """
     try:
         # Buscar la oferta de trabajo
-        job_offer = db_session.query(JobPosition).filter(
-            JobPosition.external_job_id == application_request.job_id
-        ).first()
+        result = await db_session.execute(
+            select(JobPosition).where(
+                JobPosition.external_job_id == application_request.job_id
+            )
+        )
+        job_offer = result.scalars().first()
         
         if not job_offer:
             raise HTTPException(status_code=404, detail="Oferta de empleo no encontrada")
@@ -901,7 +906,7 @@ async def create_job_alert(
 @router.get("/alerts", tags=["Alerts"])
 async def get_user_alerts(
     current_user = Depends(get_current_user),
-    db_session = Depends(get_session)
+    db_session: AsyncSession = Depends(get_session)
 ):
     """
     Obtener alertas de empleo del usuario
@@ -909,9 +914,12 @@ async def get_user_alerts(
     Lista todas las alertas configuradas por el usuario.
     """
     try:
-        alerts = db_session.query(UserJobAlertDB).filter(
-            UserJobAlertDB.user_id == current_user.user_id
-        ).all()
+        result = await db_session.execute(
+            select(UserJobAlertDB).where(
+                UserJobAlertDB.user_id == current_user.user_id
+            )
+        )
+        alerts = result.scalars().all()
         
         return {"alerts": alerts, "total": len(alerts)}
         
@@ -924,7 +932,7 @@ async def get_user_alerts(
 async def delete_job_alert(
     alert_id: int,
     current_user = Depends(get_current_user),
-    db_session = Depends(get_session)
+    db_session: AsyncSession = Depends(get_session)
 ):
     """
     Eliminar una alerta de empleo
@@ -932,16 +940,19 @@ async def delete_job_alert(
     Desactiva o elimina una alerta específica del usuario.
     """
     try:
-        alert = db_session.query(UserJobAlertDB).filter(
-            UserJobAlertDB.id == alert_id,
-            UserJobAlertDB.user_id == current_user.user_id
-        ).first()
+        result = await db_session.execute(
+            select(UserJobAlertDB).where(
+                (UserJobAlertDB.id == alert_id) &
+                (UserJobAlertDB.user_id == current_user.user_id)
+            )
+        )
+        alert = result.scalars().first()
         
         if not alert:
             raise HTTPException(status_code=404, detail="Alerta no encontrada")
         
         alert.is_active = False
-        db_session.commit()
+        await db_session.commit()
         
         return {"message": "Alerta desactivada exitosamente"}
         
@@ -985,7 +996,7 @@ async def get_search_history(
 @router.post("/cache/store", response_model=CacheStoreResponse, tags=["Cache"])
 async def store_search_results(
     request: CacheStoreRequest,
-    db_session: Session = Depends(get_session)
+    db_session: AsyncSession = Depends(get_session)
 ):
     """
     Guarda resultados de búsqueda en caché persistente (BD).
@@ -1024,7 +1035,7 @@ async def store_search_results(
         logger.info(f"💾 Guardando {len(request.jobs)} empleos en cache (keyword: '{request.keyword}')")
         
         cache_manager = JobCacheManager(db_session)
-        saved_count = cache_manager.save_scraped_jobs(
+        saved_count = await cache_manager.save_scraped_jobs(
             jobs=request.jobs,
             source=request.source,
             keyword=request.keyword
@@ -1032,7 +1043,7 @@ async def store_search_results(
         
         # ✅ Obtener total en cache después de guardar
         try:
-            stats = cache_manager.get_cache_stats()
+            stats = await cache_manager.get_cache_stats()
             total_cached = stats.get("total_active", 0)
         except Exception as stats_error:
             logger.warning(f"⚠️  Error al obtener estadísticas de cache: {stats_error}")
@@ -1066,7 +1077,7 @@ async def get_cached_jobs(
     sort_by: str = Query("recent", description="Ordenamiento: recent, relevance"),
     limit: int = Query(50, ge=1, le=200, description="Máximo de resultados"),
     offset: int = Query(0, ge=0, description="Saltar N resultados"),
-    db_session: Session = Depends(get_session)
+    db_session: AsyncSession = Depends(get_session)
 ):
     """
     Obtiene empleos desde caché persistente con filtros opcionales.
@@ -1108,7 +1119,7 @@ async def get_cached_jobs(
             filters["job_type"] = job_type
         
         # Obtener empleos
-        jobs, total = cache_manager.get_cached_jobs(
+        jobs, total = await cache_manager.get_cached_jobs(
             filters=filters,
             limit=limit,
             offset=offset
@@ -1161,7 +1172,7 @@ async def get_cached_jobs(
 @router.post("/cache/invalidate", response_model=dict, tags=["Cache"])
 async def invalidate_expired_jobs(
     max_age_days: int = Query(7, ge=1, le=90, description="Invalidar empleos con edad > N días"),
-    db_session: Session = Depends(get_session)
+    db_session: AsyncSession = Depends(get_session)
 ):
     """
     Invalida (soft-delete) empleos expirados del cache.
@@ -1179,10 +1190,10 @@ async def invalidate_expired_jobs(
     """
     try:
         cache_manager = JobCacheManager(db_session)
-        invalidated_count = cache_manager.invalidate_expired_jobs(max_age_days=max_age_days)
+        invalidated_count = await cache_manager.invalidate_expired_jobs(max_age_days=max_age_days)
         
         # Obtener stats después de invalidación
-        stats = cache_manager.get_cache_stats()
+        stats = await cache_manager.get_cache_stats()
         
         return {
             "invalidated_count": invalidated_count,
@@ -1202,7 +1213,7 @@ async def invalidate_expired_jobs(
 
 @router.get("/cache/stats", response_model=CacheStatsResponse, tags=["Cache"])
 async def get_cache_statistics(
-    db_session: Session = Depends(get_session)
+    db_session: AsyncSession = Depends(get_session)
 ):
     """
     Retorna estadísticas del caché persistente.
@@ -1221,7 +1232,7 @@ async def get_cache_statistics(
     """
     try:
         cache_manager = JobCacheManager(db_session)
-        stats = cache_manager.get_cache_stats()
+        stats = await cache_manager.get_cache_stats()
         
         return CacheStatsResponse(**stats)
         

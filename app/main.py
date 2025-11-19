@@ -98,8 +98,8 @@ if static_path.exists():
 @app.on_event("startup")
 async def startup_event():
     """Inicializar aplicación"""
-    # Crear tablas de base de datos
-    create_db_and_tables()
+    # Crear tablas de base de datos (ASYNC)
+    await create_db_and_tables()
     
     # Inicializar admin por defecto desde .env (si está habilitado)
     try:

@@ -1,10 +1,11 @@
 """
-Endpoints para administración del sistema
+Endpoints para administración del sistema (ASYNC)
 Incluye gestión de usuarios, analítica, y configuración del sistema
 """
 from typing import List, Optional
 from fastapi import APIRouter, Depends, HTTPException, Query
-from sqlmodel import Session, select, func
+from sqlmodel import select, func
+from sqlalchemy.ext.asyncio import AsyncSession
 from datetime import datetime, timedelta, date
 import json
 import logging
@@ -19,20 +20,28 @@ router = APIRouter(prefix="/admin", tags=["admin"])
 logger = logging.getLogger(__name__)
 
 
-def _log_audit_action(session: Session, action: str, resource: str,
-                     actor: UserContext, success: bool = True,
-                     details: str = None, error_message: str = None):
-    """Helper para registrar acciones de auditoría"""
-    audit_log = AuditLog(
-        actor_role=actor.role,
-        actor_id=str(actor.user_id) if actor.user_id else actor.email,
-        action=action,
-        resource=resource,
-        success=success,
-        details=details,
-        error_message=error_message
-    )
-    session.add(audit_log)
+async def _log_audit_action(
+    session: AsyncSession,
+    action: str,
+    resource: str,
+    resource_id: Optional[int] = None,
+    details: Optional[str] = None,
+    user_id: Optional[int] = None,
+):
+    """Registra una acción de auditoría de forma asincrónica"""
+    try:
+        audit_log = AuditLog(
+            action=action,
+            resource=resource,
+            resource_id=resource_id,
+            details=details,
+            user_id=user_id,
+            timestamp=datetime.utcnow(),
+        )
+        session.add(audit_log)
+        await session.commit()
+    except Exception as e:
+        logging.error(f"Error logging audit action: {str(e)}")
 
 
 def _require_admin(current_user: UserContext):
@@ -53,7 +62,7 @@ async def get_all_users(
     offset: int = Query(0),
     limit: int = Query(100),
     current_user: UserContext = Depends(AuthService.get_current_user),
-    session: Session = Depends(get_session)
+    session: AsyncSession = Depends(get_session)
 ):
     """
     Obtener lista de todos los usuarios del sistema
@@ -71,18 +80,20 @@ async def get_all_users(
         
         # Obtener estudiantes
         try:
-            students = session.exec(
+            result = await session.execute(
                 select(Student).offset(offset).limit(limit)
-            ).all()
+            )
+            students = result.scalars().all()
         except Exception as e:
             print(f"⚠️  Error obteniendo estudiantes: {e}")
             students = []
         
         # Obtener empresas
         try:
-            companies = session.exec(
+            result = await session.execute(
                 select(Company).offset(offset).limit(limit)
-            ).all()
+            )
+            companies = result.scalars().all()
         except Exception as e:
             print(f"⚠️  Error obteniendo empresas: {e}")
             companies = []
@@ -140,24 +151,26 @@ async def get_all_users(
         
         # Total count
         try:
-            total_students = session.exec(select(func.count(Student.id))).one() or 0
+            result = await session.execute(select(func.count(Student.id)))
+            total_students = result.scalar_one() or 0
         except Exception as e:
             print(f"⚠️  Error contando estudiantes: {e}")
             total_students = 0
         
         try:
-            total_companies = session.exec(select(func.count(Company.id))).one() or 0
+            result = await session.execute(select(func.count(Company.id)))
+            total_companies = result.scalar_one() or 0
         except Exception as e:
             print(f"⚠️  Error contando empresas: {e}")
             total_companies = 0
         
         total = total_students + total_companies
         
-        _log_audit_action(
+        await _log_audit_action(
             session, "GET_USERS", "all",
             current_user, details=f"Obtenidos {len(users)} usuarios (estudiantes: {total_students}, empresas: {total_companies})"
         )
-        session.commit()
+        await session.commit()
         
         return {
             "items": users,
@@ -174,11 +187,11 @@ async def get_all_users(
         import traceback
         traceback.print_exc()
         try:
-            _log_audit_action(
+            await _log_audit_action(
                 session, "GET_USERS", "all",
                 current_user, success=False, error_message=str(e)
             )
-            session.commit()
+            await session.commit()
         except:
             pass
         raise HTTPException(status_code=500, detail=f"Error al obtener usuarios: {str(e)}")
@@ -188,7 +201,7 @@ async def get_all_users(
 async def delete_user(
     user_id: int,
     current_user: UserContext = Depends(AuthService.get_current_user),
-    session: Session = Depends(get_session)
+    session: AsyncSession = Depends(get_session)
 ):
     """
     Eliminar un usuario del sistema
@@ -204,17 +217,17 @@ async def delete_user(
         
         # Intentar eliminar como estudiante
         try:
-            student = session.get(Student, user_id)
+            student = await session.get(Student, user_id)
             if student:
                 student_name = student.name or "N/A"
-                session.delete(student)
-                session.commit()
+                await session.delete(student)
+                await session.commit()
                 try:
-                    _log_audit_action(
+                    await _log_audit_action(
                         session, "DELETE_USER", f"student_id:{user_id}",
                         current_user, details=f"Estudiante '{student_name}' eliminado"
                     )
-                    session.commit()
+                    await session.commit()
                 except:
                     pass
                 return BaseResponse(success=True, message="Usuario eliminado exitosamente")
@@ -223,17 +236,17 @@ async def delete_user(
         
         # Intentar eliminar como empresa
         try:
-            company = session.get(Company, user_id)
+            company = await session.get(Company, user_id)
             if company:
                 company_name = company.name or "N/A"
-                session.delete(company)
-                session.commit()
+                await session.delete(company)
+                await session.commit()
                 try:
-                    _log_audit_action(
+                    await _log_audit_action(
                         session, "DELETE_USER", f"company_id:{user_id}",
                         current_user, details=f"Empresa '{company_name}' eliminada"
                     )
-                    session.commit()
+                    await session.commit()
                 except:
                     pass
                 return BaseResponse(success=True, message="Usuario eliminado exitosamente")
@@ -249,19 +262,14 @@ async def delete_user(
         import traceback
         traceback.print_exc()
         try:
-            _log_audit_action(
+            await _log_audit_action(
                 session, "DELETE_USER", f"user_id:{user_id}",
                 current_user, success=False, error_message=str(e)
             )
-            session.commit()
+            await session.commit()
         except:
             pass
         raise HTTPException(status_code=500, detail=f"Error al eliminar usuario: {str(e)}")
-        _log_audit_action(
-            session, "DELETE_USER", f"user_id:{user_id}",
-            current_user, success=False, error_message=str(e)
-        )
-        raise HTTPException(status_code=500, detail=str(e))
 
 
 # ============================================================================
@@ -273,7 +281,7 @@ async def get_analytics_kpis(
     start_date: Optional[date] = Query(None, description="Fecha inicio (YYYY-MM-DD)"),
     end_date: Optional[date] = Query(None, description="Fecha fin (YYYY-MM-DD)"),
     current_user: UserContext = Depends(AuthService.get_current_user),
-    session: Session = Depends(get_session)
+    session: AsyncSession = Depends(get_session)
 ):
     """
     Obtener KPIs principales del sistema con filtro de fechas opcional
@@ -299,16 +307,21 @@ async def get_analytics_kpis(
             date_filters.append(Student.created_at <= datetime.combine(end_date, datetime.max.time()))
         
         # ========== CONTEOS BÁSICOS ==========
-        total_students = session.exec(select(func.count(Student.id))).one()
-        total_companies = session.exec(select(func.count(Company.id))).one()
-        total_jobs = session.exec(select(func.count(JobPosition.id))).one()
-        total_applications = session.exec(select(func.count(JobApplicationDB.id))).one()
+        result = await session.execute(select(func.count(Student.id)))
+        total_students = result.scalar_one()
+        result = await session.execute(select(func.count(Company.id)))
+        total_companies = result.scalar_one()
+        result = await session.execute(select(func.count(JobPosition.id)))
+        total_jobs = result.scalar_one()
+        result = await session.execute(select(func.count(JobApplicationDB.id)))
+        total_applications = result.scalar_one()
         
         # ========== APLICACIONES EXITOSAS ==========
-        successful_apps = session.exec(
+        result = await session.execute(
             select(func.count(JobApplicationDB.id))
             .where(JobApplicationDB.status == "accepted")
-        ).one()
+        )
+        successful_apps = result.scalar_one()
         
         # ========== TASA DE MATCHING (%) ==========
         # Matching rate = (aplicaciones exitosas / total aplicaciones) * 100
@@ -316,26 +329,29 @@ async def get_analytics_kpis(
         
         # ========== ESTUDIANTES ACTIVOS ==========
         thirty_days_ago = datetime.utcnow() - timedelta(days=30)
-        active_students = session.exec(
+        result = await session.execute(
             select(func.count(Student.id))
             .where(Student.last_active >= thirty_days_ago)
             .where(Student.is_active == True)
-        ).one()
+        )
+        active_students = result.scalar_one()
         
         # ========== EMPRESAS VERIFICADAS ==========
-        verified_companies = session.exec(
+        result = await session.execute(
             select(func.count(Company.id))
             .where(Company.is_verified == True)
-        ).one()
+        )
+        verified_companies = result.scalar_one()
         
         # ========== TOP COMPANIES BY JOBS ==========
-        top_companies = session.exec(
+        result = await session.execute(
             select(Company.name, func.count(JobPosition.id).label('jobs_count'))
             .join(JobPosition)
             .group_by(Company.id)
             .order_by(func.count(JobPosition.id).desc())
             .limit(5)
-        ).all()
+        )
+        top_companies = result.all()
         
         # ========== TOP SKILLS (From Job Requirements) ==========
         # Nota: Implementación mejorada que busca skills en JobPosition
@@ -360,12 +376,13 @@ async def get_analytics_kpis(
             ]
         
         # ========== TOP LOCATIONS ==========
-        locations = session.exec(
+        result = await session.execute(
             select(JobPosition.location, func.count(JobPosition.id).label('jobs_count'))
             .group_by(JobPosition.location)
             .order_by(func.count(JobPosition.id).desc())
             .limit(5)
-        ).all()
+        )
+        locations = result.all()
         
         top_locations = [
             {"name": loc, "jobs_count": count} for loc, count in locations
@@ -381,11 +398,12 @@ async def get_analytics_kpis(
         for i in range(4):
             week_start = four_weeks_ago + timedelta(weeks=i)
             week_end = week_start + timedelta(weeks=1)
-            count = session.exec(
+            result = await session.execute(
                 select(func.count(Student.id))
                 .where(Student.created_at >= week_start)
                 .where(Student.created_at < week_end)
-            ).one()
+            )
+            count = result.scalar_one()
             student_dates.append(f"Sem {i+1}")
             student_values.append(count if count else 0)
         
@@ -395,11 +413,12 @@ async def get_analytics_kpis(
         for i in range(4):
             week_start = four_weeks_ago + timedelta(weeks=i)
             week_end = week_start + timedelta(weeks=1)
-            count = session.exec(
+            result = await session.execute(
                 select(func.count(JobPosition.id))
                 .where(JobPosition.created_at >= week_start)
                 .where(JobPosition.created_at < week_end)
-            ).one()
+            )
+            count = result.scalar_one()
             job_dates.append(f"Sem {i+1}")
             job_values.append(count if count else 0)
         
@@ -409,11 +428,12 @@ async def get_analytics_kpis(
         for i in range(4):
             week_start = four_weeks_ago + timedelta(weeks=i)
             week_end = week_start + timedelta(weeks=1)
-            count = session.exec(
+            result = await session.execute(
                 select(func.count(JobApplicationDB.id))
                 .where(JobApplicationDB.created_at >= week_start)
                 .where(JobApplicationDB.created_at < week_end)
-            ).one()
+            )
+            count = result.scalar_one()
             app_dates.append(f"Sem {i+1}")
             app_values.append(count if count else 0)
         
@@ -425,25 +445,27 @@ async def get_analytics_kpis(
             week_end = week_start + timedelta(weeks=1)
             
             # Total applications in week
-            total_week = session.exec(
+            result = await session.execute(
                 select(func.count(JobApplicationDB.id))
                 .where(JobApplicationDB.created_at >= week_start)
                 .where(JobApplicationDB.created_at < week_end)
-            ).one()
+            )
+            total_week = result.scalar_one()
             
             # Successful applications in week
-            successful_week = session.exec(
+            result = await session.execute(
                 select(func.count(JobApplicationDB.id))
                 .where(JobApplicationDB.status == "accepted")
                 .where(JobApplicationDB.created_at >= week_start)
                 .where(JobApplicationDB.created_at < week_end)
-            ).one()
+            )
+            successful_week = result.scalar_one()
             
             success_rate = (successful_week / total_week * 100) if total_week > 0 else 0
             success_dates.append(f"Sem {i+1}")
             success_values.append(round(success_rate, 2))
         
-        _log_audit_action(
+        await _log_audit_action(
             session, "GET_ANALYTICS_KPIS", "all",
             current_user, 
             details=f"KPIs obtenidos (período: {start_date} a {end_date})"
@@ -492,7 +514,7 @@ async def get_analytics_kpis(
         raise
     except Exception as e:
         print(f"Error getting analytics: {e}")
-        _log_audit_action(
+        await _log_audit_action(
             session, "GET_ANALYTICS_KPIS", "all",
             current_user, success=False, error_message=str(e)
         )
@@ -503,7 +525,7 @@ async def get_analytics_kpis(
 async def get_analytics_trends(
     period: str = Query("month"),
     current_user: UserContext = Depends(AuthService.get_current_user),
-    session: Session = Depends(get_session)
+    session: AsyncSession = Depends(get_session)
 ):
     """
     Obtener datos de tendencias del sistema
@@ -537,7 +559,7 @@ async def get_analytics_trends(
         raise
     except Exception as e:
         print(f"Error getting trends: {e}")
-        _log_audit_action(
+        await _log_audit_action(
             session, "GET_TRENDS", f"period:{period}",
             current_user, success=False, error_message=str(e)
         )
@@ -555,7 +577,7 @@ async def get_audit_log(
     offset: int = Query(0),
     limit: int = Query(50),
     current_user: UserContext = Depends(AuthService.get_current_user),
-    session: Session = Depends(get_session)
+    session: AsyncSession = Depends(get_session)
 ):
     """
     Obtener logs de auditoría del sistema
@@ -579,13 +601,15 @@ async def get_audit_log(
         if actor_role:
             query = query.where(AuditLog.actor_role == actor_role)
         
-        logs = session.exec(
+        result = await session.execute(
             query.order_by(AuditLog.created_at.desc()).offset(offset).limit(limit)
-        ).all()
+        )
+        logs = result.scalars().all()
         
-        total = session.exec(
+        result = await session.execute(
             select(func.count(AuditLog.id))
-        ).one()
+        )
+        total = result.scalar_one()
         
         return {
             "items": [

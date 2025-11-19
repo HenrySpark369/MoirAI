@@ -1,5 +1,5 @@
 """
-Job Posting API Routes
+Job Posting API Routes (ASYNC)
 
 Endpoints for job scraping, searching, and retrieval.
 
@@ -20,7 +20,8 @@ import logging
 from typing import List, Optional
 
 from fastapi import APIRouter, Depends, Query, HTTPException, status, Security
-from sqlmodel import Session, select
+from sqlmodel import select
+from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.database import get_session
 from app.services.api_key_service import verify_api_key
@@ -144,7 +145,7 @@ async def search_jobs(
         ge=0,
         description="Results to skip (for pagination)"
     ),
-    db: Session = Depends(get_session),
+    db: AsyncSession = Depends(get_session),
 ) -> JobSearchResponse:
     """
     Search job postings by keyword and location.
@@ -214,10 +215,12 @@ async def search_jobs(
             query = query.where(JobPosting.location.ilike(f"%{location}%"))
         
         # Apply pagination
-        total = db.exec(select(JobPosting)).count() if skip == 0 else None
+        result = await db.execute(select(JobPosting))
+        total = result.scalars().all().__len__() if skip == 0 else None
         query = query.offset(skip).limit(limit)
         
-        jobs = db.exec(query).all()
+        result = await db.execute(query)
+        jobs = result.scalars().all()
         
         # Convert to response using to_dict_public() (excludes PII)
         items = [
@@ -249,12 +252,8 @@ async def search_jobs(
     description="Get detailed information about a job (no PII exposed)",
 )
 async def get_job_detail(
-    job_id: int = Query(
-        ..., 
-        description="Job database ID",
-        gt=0
-    ),
-    db: Session = Depends(get_session),
+    job_id: int,
+    db: AsyncSession = Depends(get_session),
 ) -> JobDetailResponse:
     """
     Retrieve detailed job posting information.
@@ -293,9 +292,10 @@ async def get_job_detail(
     ```
     """
     try:
-        job = db.exec(
+        result = await db.execute(
             select(JobPosting).where(JobPosting.id == job_id)
-        ).first()
+        )
+        job = result.scalars().first()
         
         if not job:
             logger.warning(f"Job {job_id} not found")

@@ -1,11 +1,13 @@
 """
-Servicios de matchmaking entre estudiantes y oportunidades laborales
+Servicios de matchmaking entre estudiantes y oportunidades laborales (ASYNC)
 Algoritmos de compatibilidad y recomendación
+Completamente asincrónico con AsyncSession
 """
 from typing import List, Dict, Tuple, Optional
 import json
 from datetime import datetime, timedelta
-from sqlmodel import Session, select
+from sqlalchemy.ext.asyncio import AsyncSession
+from sqlmodel import select
 
 from app.models import Student, JobMatchEvent
 from app.schemas import JobItem, MatchResult, StudentPublic, MatchingCriteria
@@ -73,57 +75,58 @@ class MatchingService:
         
         return found_keywords[:3]  # Max 3 keywords
     
-    async def find_job_recommendations(self, student_id: int, 
+    async def find_job_recommendations(self, session: AsyncSession, student_id: int, 
                                      location: Optional[str] = None,
                                      limit: int = 10) -> Dict[str, any]:
-        """Encontrar recomendaciones de trabajos para un estudiante"""
-        with Session(engine) as session:
-            student = session.get(Student, student_id)
-            if not student:
-                raise ValueError(f"Estudiante con ID {student_id} no encontrado")
-            
-            # Construir query de búsqueda
-            search_query = self.build_student_query(student)
-            
-            # Buscar trabajos usando los proveedores
-            raw_jobs = await job_provider_manager.search_all_providers(
-                query=search_query,
-                location=location,
-                limit_per_provider=limit
-            )
-            
-            # Calcular scores de matching
-            scored_jobs = []
-            for job in raw_jobs:
-                score, details = self._calculate_job_match_score(student, job)
-                if score >= self.min_match_score:
-                    job.match_score = round(score, 3)
-                    scored_jobs.append((job, score, details))
-            
-            # Ordenar por score descendente
-            scored_jobs.sort(key=lambda x: x[1], reverse=True)
-            
-            # Tomar los mejores matches
-            best_jobs = [job for job, score, details in scored_jobs[:limit]]
-            
-            # Registrar evento de matching
-            match_event = JobMatchEvent(
-                student_id=student_id,
-                query=search_query,
-                num_results=len(best_jobs),
-                source="internal_matching"
-            )
-            session.add(match_event)
-            session.commit()
-            
-            return {
-                "student_id": student_id,
-                "jobs": best_jobs,
-                "total_found": len(raw_jobs),
-                "matches_found": len(best_jobs),
-                "query_used": search_query,
-                "generated_at": datetime.utcnow()
-            }
+        """Encontrar recomendaciones de trabajos para un estudiante - ASYNC"""
+        result = await session.execute(select(Student).where(Student.id == student_id))
+        student = result.scalars().first()
+        
+        if not student:
+            raise ValueError(f"Estudiante con ID {student_id} no encontrado")
+        
+        # Construir query de búsqueda
+        search_query = self.build_student_query(student)
+        
+        # Buscar trabajos usando los proveedores
+        raw_jobs = await job_provider_manager.search_all_providers(
+            query=search_query,
+            location=location,
+            limit_per_provider=limit
+        )
+        
+        # Calcular scores de matching
+        scored_jobs = []
+        for job in raw_jobs:
+            score, details = self._calculate_job_match_score(student, job)
+            if score >= self.min_match_score:
+                job.match_score = round(score, 3)
+                scored_jobs.append((job, score, details))
+        
+        # Ordenar por score descendente
+        scored_jobs.sort(key=lambda x: x[1], reverse=True)
+        
+        # Tomar los mejores matches
+        best_jobs = [job for job, score, details in scored_jobs[:limit]]
+        
+        # Registrar evento de matching
+        match_event = JobMatchEvent(
+            student_id=student_id,
+            query=search_query,
+            num_results=len(best_jobs),
+            source="internal_matching"
+        )
+        session.add(match_event)
+        await session.commit()
+        
+        return {
+            "student_id": student_id,
+            "jobs": best_jobs,
+            "total_found": len(raw_jobs),
+            "matches_found": len(best_jobs),
+            "query_used": search_query,
+            "generated_at": datetime.utcnow()
+        }
     
     def _calculate_job_match_score(self, student: Student, job: JobItem) -> Tuple[float, Dict]:
         """Calcular score de compatibilidad entre estudiante y trabajo"""
@@ -192,110 +195,110 @@ class MatchingService:
             "final_score": final_score
         }
     
-    def filter_students_by_criteria(self, criteria: MatchingCriteria) -> List[MatchResult]:
-        """Filtrar estudiantes basado en criterios específicos"""
-        with Session(engine) as session:
-            # Obtener todos los estudiantes activos
-            students = session.exec(
-                select(Student).where(Student.is_active == True)
-            ).all()
+    async def filter_students_by_criteria(self, session: AsyncSession, criteria: MatchingCriteria) -> List[MatchResult]:
+        """Filtrar estudiantes basado en criterios específicos - ASYNC"""
+        # Obtener todos los estudiantes activos
+        result = await session.execute(
+            select(Student).where(Student.is_active == True)
+        )
+        students = result.scalars().all()
+        
+        matched_students = []
+        
+        for student in students:
+            student_skills = json.loads(student.skills or "[]")
+            student_projects = json.loads(student.projects or "[]")
             
-            matched_students = []
+            # Verificar criterios de skills
+            if criteria.skills:
+                required_skills = [s.lower() for s in criteria.skills]
+                student_skills_lower = [s.lower() for s in student_skills]
+                
+                matching_skills = [
+                    skill for skill in required_skills
+                    if any(req_skill in skill for req_skill in student_skills_lower)
+                ]
+                
+                if len(matching_skills) < len(required_skills) * 0.5:  # Al menos 50% match
+                    continue
+            else:
+                matching_skills = []
             
-            for student in students:
-                student_skills = json.loads(student.skills or "[]")
-                student_projects = json.loads(student.projects or "[]")
+            # Verificar criterios de proyectos
+            if criteria.projects:
+                required_projects = [p.lower() for p in criteria.projects]
+                student_projects_lower = [p.lower() for p in student_projects]
                 
-                # Verificar criterios de skills
-                if criteria.skills:
-                    required_skills = [s.lower() for s in criteria.skills]
-                    student_skills_lower = [s.lower() for s in student_skills]
-                    
-                    matching_skills = [
-                        skill for skill in required_skills
-                        if any(req_skill in skill for req_skill in student_skills_lower)
-                    ]
-                    
-                    if len(matching_skills) < len(required_skills) * 0.5:  # Al menos 50% match
-                        continue
-                else:
-                    matching_skills = []
+                matching_projects = []
+                for req_proj in required_projects:
+                    for stud_proj in student_projects_lower:
+                        if req_proj in stud_proj:
+                            matching_projects.append(stud_proj)
+                            break
                 
-                # Verificar criterios de proyectos
-                if criteria.projects:
-                    required_projects = [p.lower() for p in criteria.projects]
-                    student_projects_lower = [p.lower() for p in student_projects]
-                    
-                    matching_projects = []
-                    for req_proj in required_projects:
-                        for stud_proj in student_projects_lower:
-                            if req_proj in stud_proj:
-                                matching_projects.append(stud_proj)
-                                break
-                    
-                    if len(matching_projects) == 0:
-                        continue
-                else:
-                    matching_projects = []
-                
-                # Calcular score basado en matches
-                skill_score = len(matching_skills) / max(len(criteria.skills or []), 1)
-                project_score = len(matching_projects) / max(len(criteria.projects or []), 1)
-                final_score = (skill_score * 0.7) + (project_score * 0.3)
-                
-                # Crear resultado de match
-                student_public = StudentPublic(
-                    id=student.id,
-                    name=student.name,
-                    program=student.program,
-                    skills=student_skills,
-                    soft_skills=json.loads(student.soft_skills or "[]"),
-                    projects=student_projects
-                )
-                
-                match_result = MatchResult(
-                    student=student_public,
-                    score=round(final_score, 3),
-                    matching_skills=matching_skills,
-                    matching_projects=matching_projects
-                )
-                
-                matched_students.append(match_result)
+                if len(matching_projects) == 0:
+                    continue
+            else:
+                matching_projects = []
             
-            # Ordenar por score descendente
-            matched_students.sort(key=lambda x: x.score, reverse=True)
+            # Calcular score basado en matches
+            skill_score = len(matching_skills) / max(len(criteria.skills or []), 1)
+            project_score = len(matching_projects) / max(len(criteria.projects or []), 1)
+            final_score = (skill_score * 0.7) + (project_score * 0.3)
             
-            return matched_students
+            # Crear resultado de match
+            student_public = StudentPublic(
+                id=student.id,
+                name=student.name,
+                program=student.program,
+                skills=student_skills,
+                soft_skills=json.loads(student.soft_skills or "[]"),
+                projects=student_projects
+            )
+            
+            match_result = MatchResult(
+                student=student_public,
+                score=round(final_score, 3),
+                matching_skills=matching_skills,
+                matching_projects=matching_projects
+            )
+            
+            matched_students.append(match_result)
+        
+        # Ordenar por score descendente
+        matched_students.sort(key=lambda x: x.score, reverse=True)
+        
+        return matched_students
     
-    def get_featured_students(self, limit: int = 10) -> List[StudentPublic]:
-        """Obtener estudiantes destacados basado en métricas de calidad"""
-        with Session(engine) as session:
-            students = session.exec(
-                select(Student).where(Student.is_active == True)
-            ).all()
-            
-            scored_students = []
-            
-            for student in students:
-                score = self._calculate_student_featured_score(student)
-                scored_students.append((student, score))
-            
-            # Ordenar por score y tomar los mejores
-            scored_students.sort(key=lambda x: x[1], reverse=True)
-            
-            featured = []
-            for student, score in scored_students[:limit]:
-                student_public = StudentPublic(
-                    id=student.id,
-                    name=student.name,
-                    program=student.program,
-                    skills=json.loads(student.skills or "[]"),
-                    soft_skills=json.loads(student.soft_skills or "[]"),
-                    projects=json.loads(student.projects or "[]")
-                )
-                featured.append(student_public)
-            
-            return featured
+    async def get_featured_students(self, session: AsyncSession, limit: int = 10) -> List[StudentPublic]:
+        """Obtener estudiantes destacados basado en métricas de calidad - ASYNC"""
+        result = await session.execute(
+            select(Student).where(Student.is_active == True)
+        )
+        students = result.scalars().all()
+        
+        scored_students = []
+        
+        for student in students:
+            score = self._calculate_student_featured_score(student)
+            scored_students.append((student, score))
+        
+        # Ordenar por score y tomar los mejores
+        scored_students.sort(key=lambda x: x[1], reverse=True)
+        
+        featured = []
+        for student, score in scored_students[:limit]:
+            student_public = StudentPublic(
+                id=student.id,
+                name=student.name,
+                program=student.program,
+                skills=json.loads(student.skills or "[]"),
+                soft_skills=json.loads(student.soft_skills or "[]"),
+                projects=json.loads(student.projects or "[]")
+            )
+            featured.append(student_public)
+        
+        return featured
     
     def _calculate_student_featured_score(self, student: Student) -> float:
         """Calcular score para estudiante destacado"""

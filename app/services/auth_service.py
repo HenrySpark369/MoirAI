@@ -1,6 +1,7 @@
 """
-Servicio unificado de autenticación
+Servicio unificado de autenticación (ASYNC)
 Centraliza la lógica de registro, login y logout para evitar conflictos
+Completamente asincrónico con AsyncSession
 """
 
 import hashlib
@@ -8,7 +9,8 @@ import json
 from datetime import datetime
 from typing import Optional, Tuple, Dict, Any
 
-from sqlmodel import Session, select
+from sqlalchemy.ext.asyncio import AsyncSession
+from sqlmodel import select
 
 from app.models import Student, Company, ApiKey, AuditLog
 from app.schemas import ApiKeyCreate
@@ -35,18 +37,19 @@ class AuthenticationService:
         return EncryptionService()
     
     @staticmethod
-    def find_user_by_email(session: Session, email: str) -> Tuple[Optional[Any], str]:
+    async def find_user_by_email(session: AsyncSession, email: str) -> Tuple[Optional[Any], str]:
         """
-        Busca un usuario por email en ambas tablas
+        Busca un usuario por email en ambas tablas (ASYNC)
         
         Returns: (user_object, user_type) donde user_type es 'student', 'company', 'admin', o None
         """
         email_hash = AuthenticationService._hash_email(email)
         
         # Buscar en estudiantes
-        student = session.exec(
+        result = await session.execute(
             select(Student).where(Student.email_hash == email_hash)
-        ).first()
+        )
+        student = result.scalars().first()
         
         if student:
             # Si es admin, retorna como admin
@@ -55,9 +58,10 @@ class AuthenticationService:
             return student, "student"
         
         # Buscar en empresas
-        company = session.exec(
+        result = await session.execute(
             select(Company).where(Company.email_hash == email_hash)
-        ).first()
+        )
+        company = result.scalars().first()
         
         if company:
             return company, "company"
@@ -71,8 +75,8 @@ class AuthenticationService:
         return password_hash == user.hashed_password
     
     @staticmethod
-    def create_user(
-        session: Session,
+    async def create_user(
+        session: AsyncSession,
         name: str,
         email: str,
         password: str,
@@ -80,14 +84,14 @@ class AuthenticationService:
         **kwargs
     ) -> Tuple[int, str]:
         """
-        Crea un nuevo usuario (estudiante, empresa, o administrador)
+        Crea un nuevo usuario (estudiante, empresa, o administrador) - ASYNC
         
         Returns: (user_id, user_type)
         """
         email_hash = AuthenticationService._hash_email(email)
         
         # Verificar si email ya existe
-        existing_user, _ = AuthenticationService.find_user_by_email(session, email)
+        existing_user, _ = await AuthenticationService.find_user_by_email(session, email)
         if existing_user:
             raise ValueError("Ya existe un usuario registrado con ese email")
         
@@ -114,9 +118,9 @@ class AuthenticationService:
                 email=email_encrypted
             )
             session.add(student)
-            session.flush()
-            session.commit()
-            session.refresh(student)
+            await session.flush()
+            await session.commit()
+            await session.refresh(student)
             user_id = student.id
             
         elif role == "admin":
@@ -134,9 +138,9 @@ class AuthenticationService:
                 email=email_encrypted
             )
             session.add(student)
-            session.flush()
-            session.commit()
-            session.refresh(student)
+            await session.flush()
+            await session.commit()
+            await session.refresh(student)
             user_id = student.id
             
         elif role == "company":
@@ -151,56 +155,58 @@ class AuthenticationService:
                 email=email_encrypted
             )
             session.add(company)
-            session.flush()
-            session.commit()
-            session.refresh(company)
+            await session.flush()
+            await session.commit()
+            await session.refresh(company)
             user_id = company.id
         
         return user_id, role
     
     @staticmethod
-    def get_user_api_key(
-        session: Session,
+    async def get_user_api_key(
+        session: AsyncSession,
         user_id: int,
         create_if_missing: bool = True
     ) -> Optional[ApiKey]:
         """
-        Obtiene la API key principal (más antigua) del usuario
+        Obtiene la API key principal (más antigua) del usuario - ASYNC
         
         Si create_if_missing=True y no existe, crea una nueva
         """
         # Buscar la API key más antigua (la del registro)
-        api_key = session.exec(
+        result = await session.execute(
             select(ApiKey).where(
                 ApiKey.user_id == user_id,
                 ApiKey.is_active == True,
                 ApiKey.expires_at > datetime.utcnow()
             ).order_by(ApiKey.created_at.asc())
-        ).first()
+        )
+        api_key = result.scalars().first()
         
         return api_key
     
     @staticmethod
-    def ensure_user_has_api_key(
-        session: Session,
+    async def ensure_user_has_api_key(
+        session: AsyncSession,
         user_id: int,
         user_type: str,
         user_email: str,
         user_name: str
     ) -> ApiKey:
         """
-        Asegura que el usuario tenga al menos una API key válida
+        Asegura que el usuario tenga al menos una API key válida - ASYNC
         
         Si no existe, crea una nueva
         """
         # Buscar la API key del usuario (más antigua primero = la del registro)
-        api_key = session.exec(
+        result = await session.execute(
             select(ApiKey).where(
                 ApiKey.user_id == user_id,
                 ApiKey.is_active == True,
                 ApiKey.expires_at > datetime.utcnow()
             ).order_by(ApiKey.created_at.asc())
-        ).first()
+        )
+        api_key = result.scalars().first()
         
         if api_key and api_key.user_id == user_id:
             # Validar que la API key pertenece al usuario correcto
@@ -213,7 +219,7 @@ class AuthenticationService:
             expires_days=365
         )
         
-        api_key_response = api_key_service.create_api_key(
+        api_key_response = await api_key_service.create_api_key(
             session=session,
             user_id=user_id,
             user_type=user_type,
@@ -223,12 +229,13 @@ class AuthenticationService:
         
         # Retornar la API key recién creada (convertir response a modelo)
         # Ya que create_api_key hace commit, debería estar en la BD
-        new_api_key = session.exec(
+        result = await session.execute(
             select(ApiKey).where(
                 ApiKey.key_id == api_key_response.key_info.key_id,
                 ApiKey.user_id == user_id
             )
-        ).first()
+        )
+        new_api_key = result.scalars().first()
         
         if new_api_key:
             return new_api_key
@@ -238,8 +245,8 @@ class AuthenticationService:
         raise RuntimeError(f"No se pudo obtener API key para usuario {user_id}")
     
     @staticmethod
-    def log_audit(
-        session: Session,
+    async def log_audit(
+        session: AsyncSession,
         actor_role: str,
         actor_id: str,
         action: str,
@@ -248,7 +255,7 @@ class AuthenticationService:
         details: Optional[str] = None,
         error_message: Optional[str] = None
     ):
-        """Registra una acción en el audit log"""
+        """Registra una acción en el audit log - ASYNC"""
         audit_log = AuditLog(
             actor_role=actor_role,
             actor_id=actor_id,
@@ -259,7 +266,7 @@ class AuthenticationService:
             error_message=error_message
         )
         session.add(audit_log)
-        session.commit()
+        await session.commit()
 
 
 # Instancia global del servicio

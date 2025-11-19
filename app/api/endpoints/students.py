@@ -1,11 +1,12 @@
 """
-Endpoints para gestión de estudiantes - CRUD completo
+Endpoints para gestión de estudiantes - CRUD completo (ASYNC)
 Incluye operaciones para crear, leer, actualizar y eliminar estudiantes
 considerando historias de usuario y flujos de trabajo académicos
 """
 from typing import List, Optional
 from fastapi import APIRouter, Depends, HTTPException, UploadFile, File, Form, Query, BackgroundTasks
-from sqlmodel import Session, select, func
+from sqlmodel import select, func
+from sqlalchemy.ext.asyncio import AsyncSession
 import json
 import hashlib
 from datetime import datetime, timedelta
@@ -25,10 +26,10 @@ from app.core.config import settings
 router = APIRouter(prefix="/students", tags=["students"])
 
 
-def _log_audit_action(session: Session, action: str, resource: str, 
+async def _log_audit_action(session: AsyncSession, action: str, resource: str, 
                      actor: UserContext, success: bool = True, 
                      details: str = None, error_message: str = None):
-    """Helper para registrar acciones de auditoría"""
+    """Helper para registrar acciones de auditoría de forma asincrónica"""
     audit_log = AuditLog(
         actor_role=actor.role,
         actor_id=str(actor.user_id) if actor.user_id else actor.email,
@@ -39,6 +40,7 @@ def _log_audit_action(session: Session, action: str, resource: str,
         error_message=error_message
     )
     session.add(audit_log)
+    await session.commit()
 
 
 def _convert_to_student_profile(student: Student) -> StudentProfile:
@@ -64,7 +66,7 @@ def _convert_to_student_profile(student: Student) -> StudentProfile:
 @router.post("/", response_model=StudentProfile, status_code=201)
 async def create_student(
     student_data: StudentCreate,
-    session: Session = Depends(get_session),
+    session: AsyncSession = Depends(get_session),
     current_user: UserContext = Depends(AuthService.get_current_user)
 ):
     """
@@ -80,12 +82,12 @@ async def create_student(
             detail="Solo estudiantes y administradores pueden crear perfiles"
         )
     # Verificar si ya existe estudiante con ese email
-    existing = session.exec(
+    existing = await session.execute(
         select(Student).where(Student.email == student_data.email)
     ).first()
     
     if existing:
-        _log_audit_action(
+        await _log_audit_action(
             session, "CREATE_STUDENT", f"email:{student_data.email}",
             current_user, success=False, error_message="Email ya existe"
         )
@@ -107,10 +109,10 @@ async def create_student(
     
     try:
         session.add(student)
-        session.commit()
+        await session.commit()
         session.refresh(student)
         
-        _log_audit_action(
+        await _log_audit_action(
             session, "CREATE_STUDENT", f"student_id:{student.id}",
             current_user, details=f"Estudiante {student.name} creado manualmente"
         )
@@ -119,7 +121,7 @@ async def create_student(
         
     except Exception as e:
         session.rollback()
-        _log_audit_action(
+        await _log_audit_action(
             session, "CREATE_STUDENT", f"email:{student_data.email}",
             current_user, success=False, error_message=str(e)
         )
@@ -133,7 +135,7 @@ async def create_student(
 async def upload_resume(
     meta: str = Form(..., description="JSON con datos del estudiante"),
     file: UploadFile = File(..., description="Archivo de currículum (PDF/DOCX/TXT)"),
-    session: Session = Depends(get_session),
+    session: AsyncSession = Depends(get_session),
     current_user: UserContext = Depends(AuthService.get_current_user)
 ):
     """
@@ -159,7 +161,7 @@ async def upload_resume(
         meta_dict = json.loads(meta)
         student_data = ResumeUploadRequest(**meta_dict)
     except Exception as e:
-        _log_audit_action(
+        await _log_audit_action(
             session, "UPLOAD_RESUME", f"email:{meta[:50]}...",
             current_user, success=False, error_message=f"Metadatos inválidos: {str(e)}"
         )
@@ -170,7 +172,7 @@ async def upload_resume(
     
     # Verificar si ya existe estudiante con ese email (usando hash para comparación segura)
     email_hash = hashlib.sha256(student_data.email.lower().encode()).hexdigest()
-    existing = session.exec(
+    existing = await session.execute(
         select(Student).where(Student.email_hash == email_hash)
     ).first()
     
@@ -183,7 +185,7 @@ async def upload_resume(
                 detail="El currículum debe contener al menos 50 caracteres de texto"
             )
     except Exception as e:
-        _log_audit_action(
+        await _log_audit_action(
             session, "UPLOAD_RESUME", f"email:{student_data.email}",
             current_user, success=False, error_message=f"Error procesando archivo: {str(e)}"
         )
@@ -196,7 +198,7 @@ async def upload_resume(
     try:
         analysis = nlp_service.analyze_resume(resume_text)
     except Exception as e:
-        _log_audit_action(
+        await _log_audit_action(
             session, "UPLOAD_RESUME", f"email:{student_data.email}",
             current_user, success=False, error_message=f"Error en análisis NLP: {str(e)}"
         )
@@ -227,7 +229,7 @@ async def upload_resume(
         student.cv_filename = file.filename
         student.cv_upload_date = datetime.utcnow()
         
-        _log_audit_action(
+        await _log_audit_action(
             session, "UPLOAD_RESUME", f"student_id:{student.id}",
             current_user, details=f"Currículum actualizado para {student.name}"
         )
@@ -254,15 +256,15 @@ async def upload_resume(
         
         session.add(student)
         
-        _log_audit_action(
+        await _log_audit_action(
             session, "UPLOAD_RESUME", f"email:{student_data.email}",
             current_user, details=f"Nuevo estudiante registrado: {student_data.name}"
         )
     
-    session.commit()
+    await session.commit()
     session.refresh(student)
     
-    _log_audit_action(
+    await _log_audit_action(
         session, "UPLOAD_RESUME", f"student_id:{student.id}",
         current_user, details=f"Currículum procesado para {student.name}"
     )
@@ -288,7 +290,7 @@ async def list_students(
     program: Optional[str] = Query(None, description="Filtrar por programa académico"),
     active_only: bool = Query(True, description="Solo estudiantes activos"),
     search: Optional[str] = Query(None, description="Buscar por nombre o email"),
-    session: Session = Depends(get_session),
+    session: AsyncSession = Depends(get_session),
     current_user: UserContext = Depends(AuthService.get_current_user)
 ):
     """
@@ -323,9 +325,9 @@ async def list_students(
     # Aplicar paginación
     query = query.offset(skip).limit(min(limit, settings.MAX_PAGE_SIZE))
     
-    students = session.exec(query).all()
+    students = await session.execute(query).scalars().all()
     
-    _log_audit_action(
+    await _log_audit_action(
         session, "LIST_STUDENTS", f"count:{len(students)}",
         current_user, details=f"Listado con filtros: program={program}, search={search}"
     )
@@ -335,7 +337,7 @@ async def list_students(
 
 @router.get("/stats", response_model=dict)
 async def get_students_stats(
-    session: Session = Depends(get_session),
+    session: AsyncSession = Depends(get_session),
     current_user: UserContext = Depends(AuthService.get_current_user)
 ):
     """
@@ -351,13 +353,13 @@ async def get_students_stats(
             detail="Solo administradores pueden ver estadísticas"
         )
     # Contadores básicos
-    total_students = session.exec(select(func.count(Student.id))).first()
-    active_students = session.exec(
+    total_students = await session.execute(select(func.count(Student.id))).scalars().first()
+    active_students = await session.execute(
         select(func.count(Student.id)).where(Student.is_active == True)
     ).first()
     
     # Estudiantes por programa
-    programs_query = session.exec(
+    programs_query = await session.execute(
         select(Student.program, func.count(Student.id))
         .where(Student.is_active == True)
         .group_by(Student.program)
@@ -367,7 +369,7 @@ async def get_students_stats(
     
     # Estudiantes recientes (últimos 30 días)
     thirty_days_ago = datetime.utcnow() - timedelta(days=30)
-    recent_students = session.exec(
+    recent_students = await session.execute(
         select(func.count(Student.id))
         .where(Student.created_at >= thirty_days_ago)
     ).first()
@@ -381,7 +383,7 @@ async def get_students_stats(
         "generated_at": datetime.utcnow()
     }
     
-    _log_audit_action(
+    await _log_audit_action(
         session, "VIEW_STATS", "students_stats",
         current_user, details="Consulta de estadísticas de estudiantes"
     )
@@ -396,7 +398,7 @@ async def get_students_stats(
 @router.get("/profile", response_model=StudentProfile)
 async def get_student_profile(
     current_user: UserContext = Depends(AuthService.get_current_user),
-    session: Session = Depends(get_session)
+    session: AsyncSession = Depends(get_session)
 ):
     """
     Obtener el perfil completo del estudiante actual
@@ -416,7 +418,7 @@ async def get_student_profile(
             )
         
         # Buscar estudiante
-        student = session.exec(
+        student = await session.execute(
             select(Student).where(Student.email_hash == hashlib.sha256(current_user.email.encode()).hexdigest())
         ).first()
         
@@ -425,7 +427,7 @@ async def get_student_profile(
         
         profile = _convert_to_student_profile(student)
         
-        _log_audit_action(
+        await _log_audit_action(
             session, "GET_PROFILE", f"student_id:{student.id}",
             current_user, details="Perfil obtenido exitosamente"
         )
@@ -436,7 +438,7 @@ async def get_student_profile(
         raise
     except Exception as e:
         print(f"Error getting profile: {e}")
-        _log_audit_action(
+        await _log_audit_action(
             session, "GET_PROFILE", f"student_id:{current_user.user_id}",
             current_user, success=False, error_message=str(e)
         )
@@ -449,7 +451,7 @@ async def get_my_applications(
     limit: int = Query(20),
     offset: int = Query(0),
     current_user: UserContext = Depends(AuthService.get_current_user),
-    session: Session = Depends(get_session)
+    session: AsyncSession = Depends(get_session)
 ):
     """
     Obtener todas las aplicaciones del estudiante actual
@@ -473,7 +475,7 @@ async def get_my_applications(
             )
         
         # Buscar estudiante
-        student = session.exec(
+        student = await session.execute(
             select(Student).where(Student.email_hash == hashlib.sha256(current_user.email.encode()).hexdigest())
         ).first()
         
@@ -492,16 +494,16 @@ async def get_my_applications(
         total_query = select(JobApplicationDB).where(JobApplicationDB.user_id == student.id)
         if status:
             total_query = total_query.where(JobApplicationDB.status == status)
-        total = len(session.exec(total_query).all())
+        total = len(await session.execute(total_query).scalars().all())
         
         # Aplicar paginación
-        applications = session.exec(query.offset(offset).limit(limit)).all()
+        applications = await session.execute(query.offset(offset).limit(limit)).scalars().all()
         
         # Enriquecer con detalles de empleos
         result = []
         for app in applications:
             from app.models import JobPosition
-            job = session.get(JobPosition, app.job_position_id)
+            job = await session.get(JobPosition, app.job_position_id)
             if job:
                 result.append({
                     "id": app.id,
@@ -515,7 +517,7 @@ async def get_my_applications(
                     "match_score": getattr(app, 'match_score', None)
                 })
         
-        _log_audit_action(
+        await _log_audit_action(
             session, "GET_APPLICATIONS", f"student_id:{student.id}",
             current_user, details=f"Obtenidas {len(result)} aplicaciones"
         )
@@ -531,7 +533,7 @@ async def get_my_applications(
         raise
     except Exception as e:
         print(f"Error getting applications: {e}")
-        _log_audit_action(
+        await _log_audit_action(
             session, "GET_APPLICATIONS", f"student_id:{current_user.user_id}",
             current_user, success=False, error_message=str(e)
         )
@@ -542,7 +544,7 @@ async def get_my_applications(
 async def get_student_recommendations(
     limit: int = Query(10),
     current_user: UserContext = Depends(AuthService.get_current_user),
-    session: Session = Depends(get_session)
+    session: AsyncSession = Depends(get_session)
 ):
     """
     Obtener recomendaciones de empleos personalizadas para el estudiante
@@ -563,7 +565,7 @@ async def get_student_recommendations(
             )
         
         # Buscar estudiante
-        student = session.exec(
+        student = await session.execute(
             select(Student).where(Student.email_hash == hashlib.sha256(current_user.email.encode()).hexdigest())
         ).first()
         
@@ -575,7 +577,7 @@ async def get_student_recommendations(
         
         # Buscar empleos activos
         from app.models import JobPosition
-        all_jobs = session.exec(
+        all_jobs = await session.execute(
             select(JobPosition).where(JobPosition.is_active == True)
         ).all()
         
@@ -605,7 +607,7 @@ async def get_student_recommendations(
         # Limitar resultados
         recommendations = scored_jobs[:limit]
         
-        _log_audit_action(
+        await _log_audit_action(
             session, "GET_RECOMMENDATIONS", f"student_id:{student.id}",
             current_user, details=f"Obtenidas {len(recommendations)} recomendaciones"
         )
@@ -622,7 +624,7 @@ async def get_student_recommendations(
         raise
     except Exception as e:
         print(f"Error getting recommendations: {e}")
-        _log_audit_action(
+        await _log_audit_action(
             session, "GET_RECOMMENDATIONS", f"student_id:{current_user.user_id}",
             current_user, success=False, error_message=str(e)
         )
@@ -637,7 +639,7 @@ async def get_student_recommendations(
 
 @router.get("/me", response_model=StudentProfile)
 async def get_my_profile(
-    session: Session = Depends(get_session),
+    session: AsyncSession = Depends(get_session),
     current_user: UserContext = Depends(AuthService.get_current_user)
 ):
     """
@@ -676,10 +678,10 @@ async def get_my_profile(
             )
         
         # Buscar estudiante por su ID
-        student = session.get(Student, current_user.user_id)
+        student = await session.get(Student, current_user.user_id)
         
         if not student:
-            _log_audit_action(
+            await _log_audit_action(
                 session, "GET_PROFILE_ME", f"user_id:{current_user.user_id}",
                 current_user, success=False, error_message="Estudiante no encontrado"
             )
@@ -691,9 +693,9 @@ async def get_my_profile(
         # Actualizar last_active
         student.last_active = datetime.utcnow()
         session.add(student)
-        session.commit()
+        await session.commit()
         
-        _log_audit_action(
+        await _log_audit_action(
             session, "GET_PROFILE_ME", f"student_id:{student.id}",
             current_user, details="Perfil completo del usuario autenticado"
         )
@@ -704,7 +706,7 @@ async def get_my_profile(
         raise
     except Exception as e:
         print(f"Error getting my profile: {e}")
-        _log_audit_action(
+        await _log_audit_action(
             session, "GET_PROFILE_ME", f"user_id:{current_user.user_id}",
             current_user, success=False, error_message=str(e)
         )
@@ -714,7 +716,7 @@ async def get_my_profile(
 @router.get("/{student_id}", response_model=StudentProfile)
 async def get_student(
     student_id: int,
-    session: Session = Depends(get_session),
+    session: AsyncSession = Depends(get_session),
     current_user: UserContext = Depends(AuthService.get_current_user)
 ):
     """
@@ -729,9 +731,9 @@ async def get_student(
             status_code=403,
             detail="Acceso denegado para ver perfiles de estudiantes"
         )
-    student = session.get(Student, student_id)
+    student = await session.get(Student, student_id)
     if not student:
-        _log_audit_action(
+        await _log_audit_action(
             session, "GET_STUDENT", f"student_id:{student_id}",
             current_user, success=False, error_message="Estudiante no encontrado"
         )
@@ -739,7 +741,7 @@ async def get_student(
     
     # Verificar permisos: estudiantes solo pueden ver su propio perfil
     if current_user.role == "student" and current_user.user_id != student_id:
-        _log_audit_action(
+        await _log_audit_action(
             session, "GET_STUDENT", f"student_id:{student_id}",
             current_user, success=False, error_message="Acceso denegado"
         )
@@ -748,7 +750,7 @@ async def get_student(
             detail="No tiene permisos para ver este perfil"
         )
     
-    _log_audit_action(
+    await _log_audit_action(
         session, "GET_STUDENT", f"student_id:{student_id}",
         current_user, details=f"Consulta de perfil de {student.name}"
     )
@@ -759,7 +761,7 @@ async def get_student(
 @router.get("/email/{email}", response_model=StudentProfile)
 async def get_student_by_email(
     email: str,
-    session: Session = Depends(get_session),
+    session: AsyncSession = Depends(get_session),
     current_user: UserContext = Depends(AuthService.get_current_user)
 ):
     """
@@ -775,18 +777,18 @@ async def get_student_by_email(
             detail="Solo administradores pueden buscar por email"
         )
     
-    student = session.exec(
+    student = await session.execute(
         select(Student).where(Student.email == email)
     ).first()
     
     if not student:
-        _log_audit_action(
+        await _log_audit_action(
             session, "GET_STUDENT_BY_EMAIL", f"email:{email}",
             current_user, success=False, error_message="Estudiante no encontrado"
         )
         raise HTTPException(status_code=404, detail="Estudiante no encontrado")
     
-    _log_audit_action(
+    await _log_audit_action(
         session, "GET_STUDENT_BY_EMAIL", f"email:{email}",
         current_user, details=f"Búsqueda por email de {student.name}"
     )
@@ -800,7 +802,7 @@ async def get_student_by_email(
 async def update_student(
     student_id: int,
     student_update: StudentUpdate,
-    session: Session = Depends(get_session),
+    session: AsyncSession = Depends(get_session),
     current_user: UserContext = Depends(AuthService.get_current_user)
 ):
     """
@@ -809,7 +811,7 @@ async def update_student(
     Historia de usuario: Como estudiante, quiero poder actualizar mi información
     personal como nombre y programa académico para mantener mi perfil actualizado.
     """
-    student = session.get(Student, student_id)
+    student = await session.get(Student, student_id)
     if not student:
         raise HTTPException(status_code=404, detail="Estudiante no encontrado")
     
@@ -839,10 +841,10 @@ async def update_student(
     
     try:
         session.add(student)
-        session.commit()
+        await session.commit()
         session.refresh(student)
         
-        _log_audit_action(
+        await _log_audit_action(
             session, "UPDATE_STUDENT", f"student_id:{student_id}",
             current_user, 
             details=f"Campos actualizados: {', '.join(updated_fields)}. Valores anteriores: {old_values}"
@@ -852,7 +854,7 @@ async def update_student(
         
     except Exception as e:
         session.rollback()
-        _log_audit_action(
+        await _log_audit_action(
             session, "UPDATE_STUDENT", f"student_id:{student_id}",
             current_user, success=False, error_message=str(e)
         )
@@ -866,7 +868,7 @@ async def update_student(
 async def update_student_skills(
     student_id: int,
     skills_data: StudentSkillsUpdate,
-    session: Session = Depends(get_session),
+    session: AsyncSession = Depends(get_session),
     current_user: UserContext = Depends(AuthService.get_current_user)
 ):
     """
@@ -882,7 +884,7 @@ async def update_student_skills(
         "projects": ["Proyecto web", "App móvil"]
     }
     """
-    student = session.get(Student, student_id)
+    student = await session.get(Student, student_id)
     if not student:
         raise HTTPException(status_code=404, detail="Estudiante no encontrado")
     
@@ -907,10 +909,10 @@ async def update_student_skills(
         student.updated_at = datetime.utcnow()
         
         session.add(student)
-        session.commit()
+        await session.commit()
         session.refresh(student)
         
-        _log_audit_action(
+        await _log_audit_action(
             session, "UPDATE_SKILLS", f"student_id:{student_id}",
             current_user, details=f"Habilidades actualizadas manualmente"
         )
@@ -919,7 +921,7 @@ async def update_student_skills(
         
     except Exception as e:
         session.rollback()
-        _log_audit_action(
+        await _log_audit_action(
             session, "UPDATE_SKILLS", f"student_id:{student_id}",
             current_user, success=False, error_message=str(e)
         )
@@ -932,7 +934,7 @@ async def update_student_skills(
 @router.patch("/{student_id}/activate", response_model=BaseResponse)
 async def activate_student(
     student_id: int,
-    session: Session = Depends(get_session),
+    session: AsyncSession = Depends(get_session),
     current_user: UserContext = Depends(AuthService.get_current_user)
 ):
     """
@@ -948,7 +950,7 @@ async def activate_student(
             detail="Solo administradores pueden reactivar estudiantes"
         )
     
-    student = session.get(Student, student_id)
+    student = await session.get(Student, student_id)
     if not student:
         raise HTTPException(status_code=404, detail="Estudiante no encontrado")
     
@@ -962,9 +964,9 @@ async def activate_student(
     student.updated_at = datetime.utcnow()
     
     session.add(student)
-    session.commit()
+    await session.commit()
     
-    _log_audit_action(
+    await _log_audit_action(
         session, "ACTIVATE_STUDENT", f"student_id:{student_id}",
         current_user, details=f"Estudiante {student.name} reactivado"
     )
@@ -981,7 +983,7 @@ async def activate_student(
 async def delete_student(
     student_id: int,
     permanent: bool = Query(False, description="Eliminación permanente (solo admin)"),
-    session: Session = Depends(get_session),
+    session: AsyncSession = Depends(get_session),
     current_user: UserContext = Depends(AuthService.get_current_user)
 ):
     """
@@ -991,7 +993,7 @@ async def delete_student(
     que ya no están en la universidad, pero mantener sus datos para auditoría.
     En casos excepcionales, quiero poder eliminar permanentemente.
     """
-    student = session.get(Student, student_id)
+    student = await session.get(Student, student_id)
     if not student:
         raise HTTPException(status_code=404, detail="Estudiante no encontrado")
     
@@ -1005,10 +1007,10 @@ async def delete_student(
     if permanent:
         # Eliminación permanente - solo admin
         try:
-            session.delete(student)
-            session.commit()
+            await session.delete(student)
+            await session.commit()
             
-            _log_audit_action(
+            await _log_audit_action(
                 session, "DELETE_STUDENT_PERMANENT", f"student_id:{student_id}",
                 current_user, details=f"Eliminación permanente de {student.name}"
             )
@@ -1020,7 +1022,7 @@ async def delete_student(
             
         except Exception as e:
             session.rollback()
-            _log_audit_action(
+            await _log_audit_action(
                 session, "DELETE_STUDENT_PERMANENT", f"student_id:{student_id}",
                 current_user, success=False, error_message=str(e)
             )
@@ -1034,9 +1036,9 @@ async def delete_student(
         student.updated_at = datetime.utcnow()
         
         session.add(student)
-        session.commit()
+        await session.commit()
         
-        _log_audit_action(
+        await _log_audit_action(
             session, "DELETE_STUDENT_SOFT", f"student_id:{student_id}",
             current_user, details=f"Desactivación de {student.name}"
         )
@@ -1052,7 +1054,7 @@ async def delete_student(
 @router.post("/{student_id}/reanalyze", response_model=ResumeAnalysisResponse)
 async def reanalyze_student_profile(
     student_id: int,
-    session: Session = Depends(get_session),
+    session: AsyncSession = Depends(get_session),
     current_user: UserContext = Depends(AuthService.get_current_user)
 ):
     """
@@ -1061,7 +1063,7 @@ async def reanalyze_student_profile(
     Historia de usuario: Como administrador, quiero poder re-procesar los currículums
     cuando el sistema de NLP mejore para actualizar automáticamente las habilidades.
     """
-    student = session.get(Student, student_id)
+    student = await session.get(Student, student_id)
     if not student:
         raise HTTPException(status_code=404, detail="Estudiante no encontrado")
     
@@ -1075,7 +1077,7 @@ async def reanalyze_student_profile(
     try:
         analysis = nlp_service.analyze_resume(student.profile_text)
     except Exception as e:
-        _log_audit_action(
+        await _log_audit_action(
             session, "REANALYZE_STUDENT", f"student_id:{student_id}",
             current_user, success=False, error_message=str(e)
         )
@@ -1091,10 +1093,10 @@ async def reanalyze_student_profile(
     student.updated_at = datetime.utcnow()
     
     session.add(student)
-    session.commit()
+    await session.commit()
     session.refresh(student)
     
-    _log_audit_action(
+    await _log_audit_action(
         session, "REANALYZE_STUDENT", f"student_id:{student_id}",
         current_user, details=f"Re-análisis NLP completado para {student.name}"
     )
@@ -1114,7 +1116,7 @@ async def reanalyze_student_profile(
 @router.post("/bulk-reanalyze", response_model=BaseResponse)
 async def bulk_reanalyze_students(
     student_ids: List[int],
-    session: Session = Depends(get_session),
+    session: AsyncSession = Depends(get_session),
     current_user: UserContext = Depends(AuthService.get_current_user)
 ):
     """
@@ -1141,7 +1143,7 @@ async def bulk_reanalyze_students(
     
     for student_id in student_ids:
         try:
-            student = session.get(Student, student_id)
+            student = await session.get(Student, student_id)
             if not student or not student.profile_text:
                 errors.append(f"Estudiante {student_id}: sin texto de currículum")
                 continue
@@ -1159,9 +1161,9 @@ async def bulk_reanalyze_students(
         except Exception as e:
             errors.append(f"Estudiante {student_id}: {str(e)}")
     
-    session.commit()
+    await session.commit()
     
-    _log_audit_action(
+    await _log_audit_action(
         session, "BULK_REANALYZE", f"count:{len(student_ids)}",
         current_user, 
         details=f"Procesados: {processed}, Errores: {len(errors)}"
@@ -1185,7 +1187,7 @@ async def bulk_reanalyze_students(
 @router.get("/{student_id}/resume", response_model=dict)
 async def get_student_resume(
     student_id: int,
-    session: Session = Depends(get_session),
+    session: AsyncSession = Depends(get_session),
     current_user: UserContext = Depends(AuthService.get_current_user)
 ):
     """
@@ -1212,9 +1214,9 @@ async def get_student_resume(
     """
     try:
         # Buscar estudiante
-        student = session.get(Student, student_id)
+        student = await session.get(Student, student_id)
         if not student:
-            _log_audit_action(
+            await _log_audit_action(
                 session, "DOWNLOAD_RESUME", f"student_id:{student_id}",
                 current_user, success=False, error_message="Estudiante no encontrado"
             )
@@ -1225,7 +1227,7 @@ async def get_student_resume(
         
         # Verificar que tenga CV
         if not student.cv_uploaded or not student.profile_text:
-            _log_audit_action(
+            await _log_audit_action(
                 session, "DOWNLOAD_RESUME", f"student_id:{student_id}",
                 current_user, success=False, error_message="CV no disponible"
             )
@@ -1236,7 +1238,7 @@ async def get_student_resume(
         
         # Verificar permisos (solo propietario o admin)
         if current_user.role == "student" and current_user.user_id != student_id:
-            _log_audit_action(
+            await _log_audit_action(
                 session, "DOWNLOAD_RESUME", f"student_id:{student_id}",
                 current_user, success=False, error_message="Acceso denegado"
             )
@@ -1246,7 +1248,7 @@ async def get_student_resume(
             )
         
         # Registrar descarga en auditoría
-        _log_audit_action(
+        await _log_audit_action(
             session, "DOWNLOAD_RESUME", f"student_id:{student_id}",
             current_user, details=f"CV {student.cv_filename} descargado"
         )
@@ -1263,7 +1265,7 @@ async def get_student_resume(
         raise
     except Exception as e:
         print(f"Error downloading resume: {e}")
-        _log_audit_action(
+        await _log_audit_action(
             session, "DOWNLOAD_RESUME", f"student_id:{student_id}",
             current_user, success=False, error_message=str(e)
         )
@@ -1273,7 +1275,7 @@ async def get_student_resume(
 @router.delete("/{student_id}/resume", response_model=BaseResponse)
 async def delete_student_resume(
     student_id: int,
-    session: Session = Depends(get_session),
+    session: AsyncSession = Depends(get_session),
     current_user: UserContext = Depends(AuthService.get_current_user)
 ):
     """
@@ -1304,9 +1306,9 @@ async def delete_student_resume(
     """
     try:
         # Buscar estudiante
-        student = session.get(Student, student_id)
+        student = await session.get(Student, student_id)
         if not student:
-            _log_audit_action(
+            await _log_audit_action(
                 session, "DELETE_RESUME", f"student_id:{student_id}",
                 current_user, success=False, error_message="Estudiante no encontrado"
             )
@@ -1317,7 +1319,7 @@ async def delete_student_resume(
         
         # Verificar permisos
         if current_user.role == "student" and current_user.user_id != student_id:
-            _log_audit_action(
+            await _log_audit_action(
                 session, "DELETE_RESUME", f"student_id:{student_id}",
                 current_user, success=False, error_message="Acceso denegado"
             )
@@ -1328,7 +1330,7 @@ async def delete_student_resume(
         
         # Verificar que tenga CV
         if not student.cv_uploaded:
-            _log_audit_action(
+            await _log_audit_action(
                 session, "DELETE_RESUME", f"student_id:{student_id}",
                 current_user, details="Intento de eliminar CV inexistente"
             )
@@ -1351,11 +1353,11 @@ async def delete_student_resume(
         student.updated_at = datetime.utcnow()
         
         session.add(student)
-        session.commit()
+        await session.commit()
         session.refresh(student)
         
         # Registrar en auditoría
-        _log_audit_action(
+        await _log_audit_action(
             session, "DELETE_RESUME", f"student_id:{student_id}",
             current_user, details=f"CV {old_filename} eliminado"
         )
@@ -1370,7 +1372,7 @@ async def delete_student_resume(
     except Exception as e:
         session.rollback()
         print(f"Error deleting resume: {e}")
-        _log_audit_action(
+        await _log_audit_action(
             session, "DELETE_RESUME", f"student_id:{student_id}",
             current_user, success=False, error_message=str(e)
         )
@@ -1383,7 +1385,7 @@ async def delete_student_resume(
 @router.get("/{student_id}/public", response_model=StudentPublic)
 async def get_student_public_profile(
     student_id: int,
-    session: Session = Depends(get_session)
+    session: AsyncSession = Depends(get_session)
 ):
     """
     Obtener perfil público de estudiante (sin autenticación)
@@ -1392,7 +1394,7 @@ async def get_student_public_profile(
     de estudiantes para evaluar candidatos potenciales sin necesidad de
     autenticación completa.
     """
-    student = session.get(Student, student_id)
+    student = await session.get(Student, student_id)
     if not student or not student.is_active:
         raise HTTPException(status_code=404, detail="Estudiante no encontrado")
     
@@ -1414,7 +1416,7 @@ async def get_student_public_profile(
 @router.post("/{student_id}/update-activity", response_model=BaseResponse)
 async def update_student_activity(
     student_id: int,
-    session: Session = Depends(get_session),
+    session: AsyncSession = Depends(get_session),
     current_user: UserContext = Depends(AuthService.get_current_user)
 ):
     """
@@ -1430,13 +1432,13 @@ async def update_student_activity(
             detail="Solo puede actualizar su propia actividad"
         )
     
-    student = session.get(Student, student_id)
+    student = await session.get(Student, student_id)
     if not student:
         raise HTTPException(status_code=404, detail="Estudiante no encontrado")
     
     student.last_active = datetime.utcnow()
     session.add(student)
-    session.commit()
+    await session.commit()
     
     return BaseResponse(
         success=True,
@@ -1449,7 +1451,7 @@ async def search_students_by_skills(
     skills: List[str] = Query(..., description="Lista de habilidades a buscar"),
     min_matches: int = Query(1, ge=1, description="Mínimo de habilidades que deben coincidir"),
     limit: int = Query(20, ge=1, le=100),
-    session: Session = Depends(get_session),
+    session: AsyncSession = Depends(get_session),
     current_user: UserContext = Depends(AuthService.get_current_user)
 ):
     """
@@ -1480,14 +1482,14 @@ async def search_students_by_skills(
     
     # Si es empresa, verificar que está verificada
     if current_user.role == "company":
-        company = session.get(Company, current_user.user_id)
+        company = await session.get(Company, current_user.user_id)
         if not company or not company.is_verified:
             raise HTTPException(
                 status_code=403,
                 detail="La empresa debe estar verificada para buscar candidatos"
             )
     
-    students = session.exec(
+    students = await session.execute(
         select(Student).where(Student.is_active == True)
     ).all()
     
@@ -1527,7 +1529,7 @@ async def search_students_by_skills(
     # Limitar resultados
     result = [student for student, _ in matching_students[:limit]]
     
-    _log_audit_action(
+    await _log_audit_action(
         session, "SEARCH_BY_SKILLS", f"skills:{','.join(skills)}",
         current_user, details=f"Encontrados {len(result)} estudiantes"
     )
