@@ -87,7 +87,6 @@ async def register_user(
         
         # ✅ ASYNC: Crear API key para el usuario
         import secrets
-        import hashlib
         
         # Generar componentes de la clave
         key_id = secrets.token_urlsafe(16)
@@ -195,18 +194,12 @@ async def login_user(
                 detail="Email o contraseña incorrectos"
             )
         
-        # ✅ ASYNC: Obtener o crear API key para el usuario
-        result = await session.execute(
-            select(ApiKey).where(
-                (ApiKey.user_id == user.id) & (ApiKey.user_type == user_type)
-            ).order_by(ApiKey.created_at.desc())
-        )
-        api_key_record = result.scalars().first()
+        # ✅ SOLUCIÓN DEFINITIVA: Generar NUEVA API key en cada login
+        # Esto garantiza que siempre hay una clave disponible para retornar
+        # Las claves antiguas siguen siendo válidas (no se revocan)
+        import secrets
         
-        if not api_key_record:
-            # Crear nueva API key usando el servicio correcto
-            import secrets
-            
+        try:
             # Generar componentes de la clave
             key_id = secrets.token_urlsafe(16)
             secret_part = secrets.token_urlsafe(32)
@@ -226,7 +219,8 @@ async def login_user(
                 user_id=user.id,
                 user_type=user_type,
                 user_email=credentials.email,
-                name=f"Login API Key - {user.name}",
+                name=f"Sesión - {user.name} - {datetime.utcnow().strftime('%Y-%m-%d %H:%M')}",
+                description="API key generada en login",
                 scopes=json.dumps(["read", "write"]),
                 is_active=True,
                 expires_at=datetime.utcnow().replace(year=datetime.utcnow().year + 1)
@@ -235,11 +229,26 @@ async def login_user(
             await session.commit()
             await session.refresh(api_key_record)
             
-            # Retornar la clave completa solo en login (no se puede recuperar después)
+            # Retornar la clave completa
             api_key_to_return = full_key
-        else:
-            # Si la clave ya existe, no se puede retornar (solo el key_id)
-            api_key_to_return = None
+            
+        except Exception as e:
+            print(f"⚠️ Error generando clave en login: {e}")
+            # Fallback: buscar una clave existente
+            result = await session.execute(
+                select(ApiKey).where(
+                    (ApiKey.user_id == user.id) & (ApiKey.user_type == user_type)
+                ).order_by(ApiKey.created_at.desc())
+            )
+            api_key_record = result.scalars().first()
+            
+            if not api_key_record:
+                raise HTTPException(
+                    status_code=500,
+                    detail="No se pudo generar clave de API"
+                )
+            
+            api_key_to_return = ""  # No retornar clave antigua
         
         # Retornar confirmación de login con API key
         return UserLoginResponse(

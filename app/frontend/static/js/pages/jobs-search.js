@@ -34,6 +34,70 @@ class SearchRateLimiter {
 
 const searchLimiter = new SearchRateLimiter(3, 5000);
 
+/**
+ * ✨ NUEVO: Normalizar datos de jobs desde diferentes fuentes del API
+ * Asegura que los campos están en el formato correcto (arrays, strings, etc)
+ */
+function normalizeJobData(jobs) {
+    if (!Array.isArray(jobs)) return [];
+
+    return jobs.map(job => ({
+        ...job,
+        // Normalizar skills: asegurar que sea un array
+        skills: normalizeSkills(job.skills),
+        // Normalizar otros campos
+        description: job.description || job.job_description || '',
+        title: job.title || job.job_title || '',
+        company: job.company || job.company_name || '',
+        location: job.location || job.job_location || '',
+        salary_min: job.salary_min || job.salary || null,
+        salary_max: job.salary_max || null,
+        currency: job.currency || 'MXN',
+        job_url: job.job_url || job.url || '',
+        source: job.source || job.job_source || 'occ'
+    }));
+}
+
+/**
+ * ✨ NUEVO: Normalizar campo de skills
+ * Maneja múltiples formatos: array, string JSON, string separado por comas, etc
+ */
+function normalizeSkills(skills) {
+    if (!skills) return [];
+    
+    // Si ya es un array, retornarlo
+    if (Array.isArray(skills)) {
+        return skills.filter(s => s).map(s => String(s).trim());
+    }
+    
+    // Si es string, intentar parsear como JSON primero
+    if (typeof skills === 'string') {
+        try {
+            // Intentar parsear como JSON
+            const parsed = JSON.parse(skills);
+            if (Array.isArray(parsed)) {
+                return parsed.filter(s => s).map(s => String(s).trim());
+            }
+        } catch (e) {
+            // No es JSON, continuar
+        }
+        
+        // Si no es JSON, intentar como string separado por comas
+        if (skills.includes(',')) {
+            return skills.split(',')
+                .filter(s => s)
+                .map(s => s.trim());
+        }
+        
+        // Si tiene algún contenido, retornarlo como array de un elemento
+        if (skills.trim()) {
+            return [skills.trim()];
+        }
+    }
+    
+    return [];
+}
+
 // Inicializar página
 document.addEventListener('DOMContentLoaded', () => {
     initJobsSearchPage();
@@ -111,8 +175,9 @@ function setupBackgroundSearchListeners() {
     window.addEventListener('jobsUpdated', (e) => {
         const { keyword, newJobs, totalJobs } = e.detail;
         
-        // Agregar nuevos empleos al catálogo
-        allJobsData.push(...newJobs);
+        // ✨ NORMALIZAR nuevos empleos antes de agregar
+        const normalizedJobs = normalizeJobData(newJobs);
+        allJobsData.push(...normalizedJobs);
         
         // Actualizar UI si no hay filtros activos
         const hasActiveFilters = 
@@ -181,7 +246,7 @@ async function loadInitialJobs() {
         });
 
         if (response && response.jobs && response.jobs.length > 0) {
-            allJobsData = response.jobs;
+            allJobsData = normalizeJobData(response.jobs);
             currentJobs = allJobsData;
             totalJobs = response.total;
             
@@ -208,7 +273,7 @@ async function loadInitialJobs() {
             salary_range: null
         });
         
-        allJobsData = searchResponse.jobs || [];
+        allJobsData = normalizeJobData(searchResponse.jobs || []);
         currentJobs = allJobsData;
         totalJobs = searchResponse.total_results || allJobsData.length;
 
@@ -275,7 +340,7 @@ async function handleSearch() {
             company_verified: false    // Filtrar por empresas verificadas
         });
         
-        allJobsData = response.jobs || [];
+        allJobsData = normalizeJobData(response.jobs || []);
         currentJobs = allJobsData;
         totalJobs = response.total_results || allJobsData.length;
         currentPage = 1;
@@ -535,6 +600,12 @@ async function viewJobDetail(jobId) {
             // Obtener del API si no está en local
             const response = await apiClient.get(`/jobs/${jobId}`);
             job = response.job || response.data;
+            
+            // ✨ Normalizar job si viene del API
+            if (job) {
+                const normalized = normalizeJobData([job]);
+                job = normalized[0];
+            }
 
             notificationManager.hideLoading();
         }
