@@ -34,9 +34,10 @@ sys.path.insert(0, str(Path(__file__).parent))
 def init_from_env():
     """Inicializar admin desde variables .env"""
     from app.core.config import settings
-    from app.core.database import engine
+    from app.core.database import async_engine
     from app.core.admin_init import init_default_admin
-    from sqlmodel import Session
+    from sqlalchemy.ext.asyncio import AsyncSession
+    import asyncio
     
     print("\n🔧 Inicializando admin desde .env...\n")
     
@@ -45,144 +46,161 @@ def init_from_env():
         print("   Cambiar a INIT_DEFAULT_ADMIN=true primero")
         return False
     
-    with Session(engine) as session:
-        admin_id = init_default_admin(session)
-        if admin_id:
-            print(f"\n✅ Admin creado exitosamente!")
-            print(f"   Email: {settings.ADMIN_DEFAULT_EMAIL}")
-            print(f"   Password: {settings.ADMIN_DEFAULT_PASSWORD}")
-            print(f"\n⚠️  IMPORTANTE:")
-            print(f"   1. Cambiar INIT_DEFAULT_ADMIN=false en .env")
-            print(f"   2. Cambiar la contraseña en login")
-            print(f"   3. En producción, usar OAuth2 o tokens seguros")
-            return True
-        else:
-            print("❌ No se pudo crear el admin")
-            return False
+    async def run():
+        async with AsyncSession(async_engine) as session:
+            admin_id = await init_default_admin(session)
+            if admin_id:
+                print(f"\n✅ Admin creado exitosamente!")
+                print(f"   Email: {settings.ADMIN_DEFAULT_EMAIL}")
+                print(f"   Password: {settings.ADMIN_DEFAULT_PASSWORD}")
+                print(f"\n⚠️  IMPORTANTE:")
+                print(f"   1. Cambiar INIT_DEFAULT_ADMIN=false en .env")
+                print(f"   2. Cambiar la contraseña en login")
+                print(f"   3. En producción, usar OAuth2 o tokens seguros")
+                return True
+            else:
+                print("❌ No se pudo crear el admin")
+                return False
+    
+    return asyncio.run(run())
 
 
 def create_admin(name, email, password):
     """Crear admin manualmente"""
-    from app.core.database import engine
+    from app.core.database import async_engine
     from app.services.auth_service import auth_service
     from app.services.api_key_service import api_key_service
     from app.schemas import ApiKeyCreate
-    from sqlmodel import Session
+    from sqlalchemy.ext.asyncio import AsyncSession
+    import asyncio
     
     print(f"\n🔧 Creando admin: {name} ({email})...\n")
     
-    with Session(engine) as session:
-        try:
-            # Crear usuario
-            user_id, user_type = auth_service.create_user(
-                session=session,
-                name=name,
-                email=email,
-                password=password,
-                role="admin"
-            )
-            
-            # Crear API key
-            api_key_data = ApiKeyCreate(
-                name=f"Clave principal - {name}",
-                description="API key de administrador",
-                expires_days=365
-            )
-            
-            api_key_response = api_key_service.create_api_key(
-                session=session,
-                user_id=user_id,
-                user_type=user_type,
-                user_email=email,
-                key_data=api_key_data
-            )
-            
-            print(f"✅ Admin creado exitosamente!\n")
-            print(f"📋 Datos de acceso:")
-            print(f"   ID:       {user_id}")
-            print(f"   Nombre:   {name}")
-            print(f"   Email:    {email}")
-            print(f"   Rol:      admin")
-            print(f"\n🔑 API Key (guardar en lugar seguro):")
-            print(f"   Prefijo:  {api_key_response.key_info.key_prefix}")
-            print(f"   Key ID:   {api_key_response.key_info.key_id}")
-            print(f"\n⚠️  IMPORTANTE:")
-            print(f"   • Cambiar contraseña en login")
-            print(f"   • Guardar API key en lugar seguro")
-            print(f"   • En producción, usar OAuth2")
-            return True
-            
-        except ValueError as e:
-            if "email" in str(e).lower():
-                print(f"❌ Error: Email ya existe")
-            else:
-                print(f"❌ Error: {e}")
-            return False
-        except Exception as e:
-            print(f"❌ Error inesperado: {e}")
-            import traceback
-            traceback.print_exc()
-            return False
+    async def run():
+        async with AsyncSession(async_engine) as session:
+            try:
+                # Crear usuario
+                user_id, user_type = await auth_service.create_user(
+                    session=session,
+                    name=name,
+                    email=email,
+                    password=password,
+                    role="admin"
+                )
+                
+                # Crear API key
+                api_key_data = ApiKeyCreate(
+                    name=f"Clave principal - {name}",
+                    description="API key de administrador",
+                    expires_days=365
+                )
+                
+                api_key_response = await api_key_service.create_api_key(
+                    session=session,
+                    user_id=user_id,
+                    user_type=user_type,
+                    user_email=email,
+                    key_data=api_key_data
+                )
+                
+                print(f"✅ Admin creado exitosamente!\n")
+                print(f"📋 Datos de acceso:")
+                print(f"   ID:       {user_id}")
+                print(f"   Nombre:   {name}")
+                print(f"   Email:    {email}")
+                print(f"   Rol:      admin")
+                print(f"\n🔑 API Key (guardar en lugar seguro):")
+                print(f"   Prefijo:  {api_key_response.key_info.key_prefix}")
+                print(f"   Key ID:   {api_key_response.key_info.key_id}")
+                print(f"\n⚠️  IMPORTANTE:")
+                print(f"   • Cambiar contraseña en login")
+                print(f"   • Guardar API key en lugar seguro")
+                print(f"   • En producción, usar OAuth2")
+                return True
+                
+            except ValueError as e:
+                if "email" in str(e).lower():
+                    print(f"❌ Error: Email ya existe")
+                else:
+                    print(f"❌ Error: {e}")
+                return False
+            except Exception as e:
+                print(f"❌ Error inesperado: {e}")
+                import traceback
+                traceback.print_exc()
+                return False
+    
+    return asyncio.run(run())
 
 
 def list_admins():
     """Listar admins existentes"""
-    from app.core.database import engine
+    from app.core.database import async_engine
     from app.models import Student
-    from sqlmodel import Session, select
+    from sqlmodel import select
+    from sqlalchemy.ext.asyncio import AsyncSession
+    import asyncio
     
     print("\n📋 Admins registrados:\n")
     
-    with Session(engine) as session:
-        admins = session.exec(
-            select(Student).where(Student.program == "Administration")
-        ).all()
-        
-        if not admins:
-            print("❌ No hay admins registrados\n")
-            return False
-        
-        for admin in admins:
-            print(f"  ID: {admin.id}")
-            print(f"  Nombre: {admin.name}")
-            print(f"  Email: {admin.email}")  # Este está encriptado
-            print(f"  Creado: {admin.created_at if hasattr(admin, 'created_at') else 'N/A'}")
-            print()
-        
-        return True
+    async def run():
+        async with AsyncSession(async_engine) as session:
+            result = await session.execute(
+                select(Student).where(Student.program == "Administration")
+            )
+            admins = result.scalars().all()
+            
+            if not admins:
+                print("❌ No hay admins registrados\n")
+                return False
+            
+            for admin in admins:
+                print(f"  ID: {admin.id}")
+                print(f"  Nombre: {admin.name}")
+                print(f"  Email: {admin.email}")  # Este está encriptado
+                print(f"  Creado: {admin.created_at if hasattr(admin, 'created_at') else 'N/A'}")
+                print()
+            
+            return True
+    
+    return asyncio.run(run())
 
 
 def change_password(email, new_password):
     """Cambiar contraseña de admin"""
-    from app.core.database import engine
+    from app.core.database import async_engine
     from app.services.auth_service import auth_service
-    from sqlmodel import Session
+    from sqlalchemy.ext.asyncio import AsyncSession
+    import asyncio
     
     print(f"\n🔧 Cambiando contraseña para: {email}\n")
     
-    with Session(engine) as session:
-        try:
-            user, user_type = auth_service.find_user_by_email(session, email)
-            
-            if not user:
-                print(f"❌ Error: Usuario no encontrado")
+    async def run():
+        async with AsyncSession(async_engine) as session:
+            try:
+                user, user_type = await auth_service.find_user_by_email(session, email)
+                
+                if not user:
+                    print(f"❌ Error: Usuario no encontrado")
+                    return False
+                
+                if user_type != "admin":
+                    print(f"❌ Error: El usuario no es admin (tipo: {user_type})")
+                    return False
+                
+                # Actualizar contraseña
+                user.hashed_password = auth_service._hash_password(new_password)
+                session.add(user)
+                await session.commit()
+                
+                print(f"✅ Contraseña actualizada exitosamente!\n")
+                return True
+                
+            except Exception as e:
+                print(f"❌ Error: {e}")
                 return False
-            
-            if user_type != "admin":
-                print(f"❌ Error: El usuario no es admin (tipo: {user_type})")
-                return False
-            
-            # Actualizar contraseña
-            user.hashed_password = auth_service._hash_password(new_password)
-            session.add(user)
-            session.commit()
-            
-            print(f"✅ Contraseña actualizada exitosamente!\n")
-            return True
-            
-        except Exception as e:
-            print(f"❌ Error: {e}")
-            return False
+    
+    return asyncio.run(run())
 
 
 def main():

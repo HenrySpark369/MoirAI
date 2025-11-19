@@ -101,13 +101,13 @@ async def startup_event():
     # Crear tablas de base de datos (ASYNC)
     await create_db_and_tables()
     
-    # Inicializar admin por defecto desde .env (si está habilitado)
+    # Inicializar admin por defecto desde .env (si está habilitado) - ASYNC
     try:
-        from sqlmodel import Session
-        from app.core.database import engine
+        from sqlalchemy.ext.asyncio import AsyncSession
+        from app.core.database import async_engine
         
-        with Session(engine) as session:
-            admin_id = init_default_admin(session)
+        async with AsyncSession(async_engine) as session:
+            admin_id = await init_default_admin(session)
             if admin_id:
                 print(f"✅ Admin inicializado: ID {admin_id}")
     except Exception as e:

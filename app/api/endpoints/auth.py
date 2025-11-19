@@ -9,6 +9,7 @@ from sqlalchemy import select
 from datetime import datetime
 import json
 import hashlib
+import logging
 
 from app.core.database import get_session
 from app.models import Student, Company, ApiKey, AuditLog
@@ -19,143 +20,156 @@ from app.schemas import (
 from app.services.api_key_service import api_key_service
 from app.services.auth_service import auth_service
 from app.middleware.auth import AuthService
+from app.utils.encryption import EncryptionService
 
 router = APIRouter(prefix="/auth", tags=["authentication"])
+logger = logging.getLogger(__name__)
+
+# ✅ Instancia global del servicio de encriptación (reutilizable)
+_encryption_service = None
+
+def get_encryption_service() -> EncryptionService:
+    """Obtener instancia singleton del servicio de encriptación"""
+    global _encryption_service
+    if _encryption_service is None:
+        _encryption_service = EncryptionService()
+    return _encryption_service
+
+
+def encrypt_email_generic(email: str) -> tuple[str, str]:
+    """
+    Encriptar email de forma genérica para cualquier rol
+    
+    Retorna:
+        (email_encriptado, email_hash)
+    """
+    try:
+        encryption_service = get_encryption_service()
+        email_lower = email.lower().strip()
+        encrypted_email = encryption_service.encrypt(email_lower)
+        email_hash = hashlib.sha256(email_lower.encode()).hexdigest()
+        return encrypted_email, email_hash
+    except Exception as e:
+        logger.error(f"Error encriptando email: {e}")
+        # Fallback: devolver email sin encriptar pero con hash
+        email_lower = email.lower().strip()
+        email_hash = hashlib.sha256(email_lower.encode()).hexdigest()
+        return email_lower, email_hash
 
 
 @router.post("/register", response_model=UserLoginResponse, status_code=201)
-async def register_user(
-    user_data: UserRegister,
-    session: AsyncSession = Depends(get_session)
-):
+async def register_user(user_data: UserRegister):
     """
-    Registrar nuevo usuario y generar API key automáticamente (ASYNC version)
-    
-    Valida los datos, crea el perfil según el rol y genera una API key personal.
-    Lógica unificada para estudiantes y empresas.
+    ✅ UNIFIED Registration: Funciona para STUDENT y COMPANY sin duplicación
+    - Encriptación genérica del email para ambos roles
+    - Crea su propia sesión para controlar el ciclo de vida completo
     """
     import secrets
-    try:
-        # Validar rol
-        if user_data.role not in ["student", "company"]:
+    from app.core.database import async_session
+    
+    # ✅ Crear sesión propia para controlar el ciclo de vida
+    async with async_session() as session:
+        try:
+            # Validar rol
+            if user_data.role not in ["student", "company"]:
+                raise HTTPException(
+                    status_code=400,
+                    detail="El rol debe ser 'student' o 'company'"
+                )
+            
+            # ✅ Verificar si el email ya existe
+            email_lower = user_data.email.lower().strip()
+            email_hash = hashlib.sha256(email_lower.encode()).hexdigest()
+            
+            result = await session.execute(
+                select(Student).where(Student.email_hash == email_hash)
+            )
+            if result.scalars().first():
+                raise HTTPException(status_code=409, detail="Email ya registrado en estudiantes")
+            
+            result = await session.execute(
+                select(Company).where(Company.email_hash == email_hash)
+            )
+            if result.scalars().first():
+                raise HTTPException(status_code=409, detail="Email ya registrado en empresas")
+            
+            # ✅ Encriptar email (GENÉRICO para ambos roles)
+            encrypted_email, email_hash_final = encrypt_email_generic(user_data.email)
+            password_hash = hashlib.sha256(user_data.password.encode()).hexdigest()
+            
+            # ✅ Crear usuario (Student o Company)
+            if user_data.role == "student":
+                user = Student(
+                    name=user_data.name,
+                    email=encrypted_email,
+                    email_hash=email_hash_final,
+                    hashed_password=password_hash,
+                    program=getattr(user_data, "program", None),
+                    is_active=True
+                )
+            else:  # company
+                user = Company(
+                    name=user_data.name,
+                    email=encrypted_email,
+                    email_hash=email_hash_final,
+                    hashed_password=password_hash,
+                    industry=getattr(user_data, "industry", None),
+                    size=getattr(user_data, "company_size", None),
+                    location=getattr(user_data, "location", None),
+                    is_active=True
+                )
+            
+            session.add(user)
+            await session.flush()  # Get user.id
+            
+            # ✅ Generar API key
+            # Usar '-' como separador en lugar de '_' para evitar conflictos
+            key_id = secrets.token_urlsafe(16).replace('_', '-')  # Asegurar que NO contiene '_'
+            secret_part = secrets.token_urlsafe(32)
+            full_key = f"{key_id}_{secret_part}"
+            key_hash = hashlib.sha256(full_key.encode()).hexdigest()
+            
+            prefix_map = {"student": "stu_", "company": "com_", "admin": "adm_"}
+            key_prefix = f"{prefix_map.get(user_data.role, 'key_')}{key_id[:8]}"
+            
+            api_key_record = ApiKey(
+                key_id=key_id,
+                key_hash=key_hash,
+                key_prefix=key_prefix,
+                user_id=user.id,
+                user_type=user_data.role,
+                user_email=email_lower,
+                name=f"Registration API Key - {user_data.name}",
+                scopes=json.dumps(["read", "write"]),
+                is_active=True,
+                expires_at=datetime.utcnow().replace(year=datetime.utcnow().year + 1)
+            )
+            session.add(api_key_record)
+            
+            # ✅ Commit final
+            await session.commit()
+            logger.info(f"✅ Registration completado: uid={user.id}, role={user_data.role}, key={key_id[:8]}...")
+            
+            return UserLoginResponse(
+                user_id=user.id,
+                name=user_data.name,
+                email=user_data.email,
+                role=user_data.role,
+                api_key=full_key,
+                key_id=key_id,
+                expires_at=api_key_record.expires_at,
+                scopes=json.loads(api_key_record.scopes)
+            )
+            
+        except HTTPException:
+            raise
+        except Exception as e:
+            await session.rollback()
+            logger.error(f"❌ Error en registro: {type(e).__name__}: {str(e)}", exc_info=True)
             raise HTTPException(
-                status_code=400,
-                detail="El rol debe ser 'student' o 'company'"
+                status_code=500,
+                detail=f"Error en registro: {str(e)}"
             )
-        
-        # ✅ ASYNC: Verificar si el email ya existe
-        email_hash = hashlib.sha256(user_data.email.lower().strip().encode()).hexdigest()
-        
-        result = await session.execute(
-            select(Student).where(Student.email_hash == email_hash)
-        )
-        if result.scalars().first():
-            raise HTTPException(status_code=409, detail="Email ya registrado en estudiantes")
-        
-        result = await session.execute(
-            select(Company).where(Company.email_hash == email_hash)
-        )
-        if result.scalars().first():
-            raise HTTPException(status_code=409, detail="Email ya registrado en empresas")
-        
-        # ✅ ASYNC: Crear usuario
-        password_hash = hashlib.sha256(user_data.password.encode()).hexdigest()
-        
-        # ✅ Extraer first_name y last_name del nombre combinado
-        name_parts = user_data.name.split(' ', 1)
-        first_name = name_parts[0] if name_parts else user_data.name
-        last_name = name_parts[1] if len(name_parts) > 1 else ""
-        
-        if user_data.role == "student":
-            user = Student(
-                name=user_data.name,
-                first_name=first_name,
-                last_name=last_name,
-                email=user_data.email,  # Se encripta en el setter
-                email_hash=email_hash,
-                hashed_password=password_hash,
-                program=getattr(user_data, "program", None),
-                is_active=True
-            )
-        else:  # company
-            user = Company(
-                name=user_data.name,
-                email=user_data.email,  # Se encripta en el setter
-                email_hash=email_hash,
-                hashed_password=password_hash,
-                industry=getattr(user_data, "industry", None),
-                company_size=getattr(user_data, "company_size", None),
-                location=getattr(user_data, "location", None),
-                is_active=True
-            )
-        
-        session.add(user)
-        await session.flush()  # Get user.id without committing
-        
-        # ✅ ASYNC: Crear API key para el usuario
-        import secrets
-        
-        # Generar componentes de la clave
-        key_id = secrets.token_urlsafe(16)
-        secret_part = secrets.token_urlsafe(32)
-        full_key = f"{key_id}_{secret_part}"
-        key_hash = hashlib.sha256(full_key.encode()).hexdigest()
-        
-        # Determinar prefijo según tipo de usuario
-        prefix_map = {"student": "stu_", "company": "com_", "admin": "adm_"}
-        prefix = prefix_map.get(user_data.role, "key_")
-        key_prefix = f"{prefix}{key_id[:8]}"
-        
-        # Crear registro de API key
-        api_key_record = ApiKey(
-            key_id=key_id,
-            key_hash=key_hash,
-            key_prefix=key_prefix,
-            user_id=user.id,
-            user_type=user_data.role,
-            user_email=user_data.email,
-            name=f"Registration API Key - {user_data.name}",
-            scopes=json.dumps(["read", "write"]),
-            is_active=True,
-            expires_at=datetime.utcnow().replace(year=datetime.utcnow().year + 1)
-        )
-        session.add(api_key_record)
-        await session.commit()
-        await session.refresh(api_key_record)
-        
-        return UserLoginResponse(
-            user_id=user.id,
-            name=user_data.name,
-            email=user_data.email,
-            role=user_data.role,
-            api_key=full_key,
-            key_id=api_key_record.key_id,
-            expires_at=api_key_record.expires_at,
-            scopes=json.loads(api_key_record.scopes) if api_key_record.scopes else []
-        )
-        
-    except HTTPException:
-        raise
-    except Exception as e:
-        print(f"❌ Error en registro: {type(e).__name__}: {str(e)}")
-        import traceback
-        traceback.print_exc()
-        
-        # Registrar error en auditoría
-        await auth_service.log_audit(
-            session=session,
-            actor_role=user_data.role,
-            actor_id=user_data.email,
-            action="register_user",
-            resource="registration_attempt",
-            success=False,
-            error_message=str(e)
-        )
-        
-        raise HTTPException(
-            status_code=500,
-            detail=f"Error en registro: {str(e)}"
-        )
 
 
 @router.post("/login", response_model=UserLoginResponse, status_code=200)
@@ -338,6 +352,157 @@ async def logout_user(
         raise HTTPException(
             status_code=500,
             detail=f"Error en logout: {str(e)}"
+        )
+
+
+@router.get("/me", response_model=dict)
+async def get_current_user_profile(
+    session: AsyncSession = Depends(get_session),
+    current_user: UserContext = Depends(AuthService.get_current_user)
+):
+    """
+    ✅ UNIFIED ENDPOINT: Obtener perfil del usuario autenticado
+    
+    Retorna:
+    - StudentProfile si el usuario es un estudiante
+    - CompanyProfile si el usuario es una empresa
+    - AdminProfile si el usuario es admin
+    
+    SIEMPRE retorna el role en la response para que el frontend sepa qué es el usuario.
+    """
+    from app.models import Student, Company
+    from app.schemas import StudentProfile, CompanyProfile
+    
+    if current_user.role == "anonymous":
+        raise HTTPException(
+            status_code=401,
+            detail="Debe autenticarse para acceder a su perfil"
+        )
+    
+    try:
+        if current_user.role == "student":
+            # Obtener perfil de estudiante
+            student = await session.get(Student, current_user.user_id)
+            
+            if not student:
+                raise HTTPException(
+                    status_code=404,
+                    detail="Perfil de estudiante no encontrado"
+                )
+            
+            # ✅ Conversión segura a StudentProfile
+            # Maneja casos donde algunos campos podrían no existir en BD antigua
+            
+            # Helper para parsear listas de JSON de forma segura
+            def safe_parse_list(value):
+                """Parsear lista de JSON con fallback seguro"""
+                try:
+                    if isinstance(value, list):
+                        return value
+                    if isinstance(value, str) and value:
+                        return json.loads(value)
+                    return []
+                except (json.JSONDecodeError, ValueError):
+                    return []
+            
+            # ✅ Desencriptar email de forma segura, manejando excepciones
+            student_email = None
+            if hasattr(student, 'get_email') and callable(student.get_email):
+                try:
+                    student_email = student.get_email()
+                except Exception as e:
+                    logger.warning(f"⚠️ Error desencriptando email del estudiante {student.id}: {str(e)}")
+                    # Fallback: usar email encriptado o marcar como indisponible
+                    student_email = "[Email no disponible]"
+            else:
+                student_email = student.email
+
+            # ✅ Desencriptar teléfono de forma segura
+            student_phone = None
+            if hasattr(student, 'get_phone') and callable(student.get_phone):
+                try:
+                    student_phone = student.get_phone()
+                except Exception as e:
+                    logger.warning(f"⚠️ Error desencriptando teléfono del estudiante {student.id}: {str(e)}")
+                    student_phone = None
+
+            profile = {
+                "id": student.id,
+                "name": student.name,
+                "role": "student",
+                "first_name": getattr(student, 'first_name', None),
+                "last_name": getattr(student, 'last_name', None),
+                "email": student_email,
+                "phone": student_phone,
+                "bio": getattr(student, 'bio', None),
+                "program": student.program,
+                "career": getattr(student, 'career', None),
+                "year": getattr(student, 'year', None),
+                "skills": safe_parse_list(getattr(student, 'skills', None)),
+                "soft_skills": safe_parse_list(getattr(student, 'soft_skills', None)),
+                "projects": safe_parse_list(getattr(student, 'projects', None)),
+                "cv_uploaded": student.cv_uploaded or False,
+                "cv_filename": student.cv_filename,
+                "cv_upload_date": student.cv_upload_date,
+                "created_at": student.created_at.isoformat() if student.created_at else None,
+                "last_active": student.last_active.isoformat() if student.last_active else None,
+                "is_active": student.is_active or True,
+            }
+            
+        elif current_user.role == "company":
+            # Obtener perfil de empresa
+            company = await session.get(Company, current_user.user_id)
+            
+            if not company:
+                raise HTTPException(
+                    status_code=404,
+                    detail="Perfil de empresa no encontrado"
+                )
+            
+            # ✅ Desencriptar email de forma segura, manejando excepciones
+            company_email = None
+            if hasattr(company, 'get_email') and callable(company.get_email):
+                try:
+                    company_email = company.get_email()
+                except Exception as e:
+                    logger.warning(f"⚠️ Error desencriptando email de la empresa {company.id}: {str(e)}")
+                    company_email = "[Email no disponible]"
+            else:
+                company_email = company.email
+
+            # ✅ Conversión segura a CompanyProfile
+            profile = {
+                "id": company.id,
+                "name": company.name,
+                "role": "company",
+                "email": company_email,
+                "industry": company.industry,
+                "size": company.size,
+                "location": company.location,
+                "is_verified": company.is_verified or False,
+                "is_active": company.is_active or True,
+                "created_at": company.created_at.isoformat() if company.created_at else None,
+            }
+            
+        else:
+            # Admin o rol desconocido - retornar contexto básico
+            profile = {
+                "id": current_user.user_id,
+                "role": current_user.role,
+                "email": current_user.email,
+                "permissions": current_user.permissions
+            }
+        
+        return profile
+        
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"❌ Error en GET /auth/me: {type(e).__name__}: {str(e)}", exc_info=True)
+        
+        raise HTTPException(
+            status_code=500,
+            detail=f"Error obteniendo perfil: {str(e)}"
         )
 
 

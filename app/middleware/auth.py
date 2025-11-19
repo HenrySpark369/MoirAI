@@ -35,10 +35,16 @@ class AuthService:
         x_api_key: Optional[str] = Header(default=None),
         session = Depends(get_session)  # AsyncSession
     ) -> UserContext:
-        """Obtener usuario actual basado en API key dinámica"""
+        """
+        ✅ UNIFIED AUTHENTICATION: Usar SOLO X-API-Key header
+        
+        No soportamos Authorization Bearer para evitar confusiones.
+        Toda autenticación debe usar: X-API-Key: <api_key_value>
+        """
         
         # Usuario anónimo si no hay API key
         if not x_api_key:
+            logger.debug(f"⚠️  No hay X-API-Key en la request - retornando usuario anónimo")
             return UserContext(
                 role=Role.ANONYMOUS,
                 user_id=None,
@@ -46,12 +52,12 @@ class AuthService:
                 permissions=[]
             )
         
-        # Verificar API key dinámica primero
-        # Ahora api_key_service.validate_api_key es async
+        logger.debug(f"🔑 X-API-Key detectada: {x_api_key[:20]}...")
+        
+        # Verificar API key dinámica
         try:
             key_info = await api_key_service.validate_api_key(session, x_api_key)
         except AttributeError as e:
-            # AsyncSession incompatible, usar fallback a static keys
             logger.warning(f"⚠️  Error validando API key dinámica: {e}, usando fallback")
             key_info = None
         except Exception as e:
@@ -59,7 +65,8 @@ class AuthService:
             key_info = None
         
         if key_info:
-            # API key válida - crear contexto de usuario
+            # ✅ API key válida - crear contexto de usuario
+            logger.info(f"✅ API key válida: user_id={key_info['user_id']}, role={key_info['user_type']}")
             user_context = UserContext(
                 role=key_info["user_type"],
                 user_id=key_info["user_id"],
@@ -68,6 +75,7 @@ class AuthService:
             )
         else:
             # Fallback a API keys estáticas (para compatibilidad)
+            logger.debug(f"⚠️  Fallback a API keys estáticas")
             user_context = AuthService._check_static_api_keys(x_api_key)
         
         # Registrar actividad en log de auditoría (async)

@@ -270,17 +270,25 @@ async def get_my_company_profile(
     }
     """
     try:
+        # 🔍 DEBUGGING: Log detallado de la request
+        import logging
+        logger = logging.getLogger(__name__)
+        logger.info(f"🔍 GET /me: current_user.role={current_user.role}, user_id={current_user.user_id}")
+        
         # Verificar que es empresa
         if current_user.role != "company":
+            logger.warning(f"⚠️  Acceso denegado: role={current_user.role} != 'company'")
             raise HTTPException(
                 status_code=403,
                 detail="Solo empresas pueden acceder a este endpoint"
             )
         
         # Buscar empresa por su ID
+        logger.info(f"🔍 Buscando company con ID={current_user.user_id}")
         company = await session.get(Company, current_user.user_id)
         
         if not company:
+            logger.error(f"❌ Empresa no encontrada: ID={current_user.user_id}")
             await _log_audit_action(
                 session, "GET_PROFILE_ME", f"user_id:{current_user.user_id}",
                 current_user, success=False, error_message="Empresa no encontrada"
@@ -290,22 +298,31 @@ async def get_my_company_profile(
                 detail="Empresa no encontrada"
             )
         
+        logger.info(f"✅ Company encontrada: ID={company.id}, name={company.name}")
+        
+        # Convertir a profile
+        logger.info(f"🔄 Convirtiendo a CompanyProfile...")
+        profile = _convert_to_company_profile(company)
+        logger.info(f"✅ CompanyProfile convertido exitosamente")
+        
         await _log_audit_action(
             session, "GET_PROFILE_ME", f"company_id:{company.id}",
             current_user, details="Perfil completo de la empresa autenticada"
         )
         
-        return _convert_to_company_profile(company)
+        return profile
         
     except HTTPException:
         raise
     except Exception as e:
-        print(f"Error getting my company profile: {e}")
+        import logging
+        logger = logging.getLogger(__name__)
+        logger.error(f"❌ Error en GET /me: {type(e).__name__}: {str(e)}", exc_info=True)
         await _log_audit_action(
             session, "GET_PROFILE_ME", f"user_id:{current_user.user_id}",
             current_user, success=False, error_message=str(e)
         )
-        raise HTTPException(status_code=500, detail=str(e))
+        raise HTTPException(status_code=500, detail=f"Error: {str(e)}")
 
 
 # ============================================================================

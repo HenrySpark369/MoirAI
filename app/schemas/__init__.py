@@ -121,13 +121,23 @@ class CompanyCreate(CompanyBase):
     pass
 
 
-class CompanyProfile(CompanyBase):
-    """Esquema para perfil de empresa"""
+class CompanyProfile(BaseModel):
+    """
+    ✅ UNIFIED: Esquema para perfil de empresa
+    
+    NOTA CRÍTICA: email es str (no EmailStr) porque puede estar encriptado
+    Nunca retornamos EmailStr en APIs públicas para evitar validación de formato
+    """
     id: int
+    name: str
     role: str = "company"  # ✅ Incluir role para que frontend siempre sepa el rol
-    is_verified: bool
-    is_active: bool
-    created_at: datetime
+    email: str  # ✅ ALWAYS str, NEVER EmailStr (puede estar encriptado)
+    industry: Optional[str] = None
+    size: Optional[str] = None
+    location: Optional[str] = None
+    is_verified: bool = False
+    is_active: bool = True
+    created_at: datetime = None
 
 
 # Job Position schemas
@@ -250,6 +260,44 @@ class UserContext(BaseModel):
     user_id: Optional[int] = None
     email: Optional[str] = None
     permissions: List[str] = []
+
+
+class UnifiedUserProfile(BaseModel):
+    """
+    ✅ UNIFIED: Perfil unificado de usuario (student, company, admin)
+    
+    Este schema se retorna en `/auth/me` para TODOS los roles.
+    Los campos específicos se incluyen según el rol.
+    """
+    id: int
+    name: str
+    role: str  # student, company, admin
+    email: str  # SIEMPRE str (puede estar encriptado)
+    
+    # Campos de estudiante (None para otros roles)
+    first_name: Optional[str] = None
+    last_name: Optional[str] = None
+    phone: Optional[str] = None
+    bio: Optional[str] = None
+    program: Optional[str] = None
+    career: Optional[str] = None
+    year: Optional[str] = None
+    skills: Optional[List[str]] = None
+    soft_skills: Optional[List[str]] = None
+    projects: Optional[List[str]] = None
+    cv_uploaded: Optional[bool] = None
+    cv_filename: Optional[str] = None
+    cv_upload_date: Optional[datetime] = None
+    
+    # Campos de empresa (None para otros roles)
+    industry: Optional[str] = None
+    size: Optional[str] = None
+    location: Optional[str] = None
+    is_verified: Optional[bool] = None
+    
+    # Metadatos comunes
+    is_active: bool = True
+    created_at: datetime
 
 
 class UserRegister(BaseModel):

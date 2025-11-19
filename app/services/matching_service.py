@@ -13,7 +13,6 @@ from app.models import Student, JobMatchEvent
 from app.schemas import JobItem, MatchResult, StudentPublic, MatchingCriteria
 from app.services.nlp_service import nlp_service
 from app.providers import job_provider_manager
-from app.core.database import engine
 
 
 class MatchingService:

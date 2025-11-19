@@ -36,7 +36,9 @@ class ApiClient {
 
   /**
    * Construir headers con API key
-   * ✅ CORRECCIÓN: Usa X-API-Key header en lugar de Bearer token
+   * 
+   * ✅ UNIFIED: SOLO usamos X-API-Key header
+   * No soportamos Authorization Bearer para evitar confusiones
    */
   getHeaders(additionalHeaders = {}) {
     const headers = {
@@ -45,7 +47,7 @@ class ApiClient {
     }
 
     if (this.token) {
-      // ✅ Backend espera X-API-Key header, no Authorization Bearer
+      // ✅ UNIFIED: Usar SIEMPRE X-API-Key header
       headers['X-API-Key'] = this.token
     }
 

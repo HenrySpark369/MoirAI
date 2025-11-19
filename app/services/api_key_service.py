@@ -56,8 +56,9 @@ class ApiKeyService:
         Returns: (full_key, key_id, key_hash)
         """
         # Generar componentes
-        key_id = secrets.token_urlsafe(16)  # Identificador público
-        secret_part = secrets.token_urlsafe(32)  # Parte secreta
+        # Usar '-' como separador en lugar de '_' para evitar conflictos en parsing
+        key_id = secrets.token_urlsafe(16).replace('_', '-')  # Asegurar que NO contiene '_'
+        secret_part = secrets.token_urlsafe(32)
         
         # Clave completa: keyid_secret
         full_key = f"{key_id}_{secret_part}"
@@ -141,14 +142,17 @@ class ApiKeyService:
         if not api_key or "_" not in api_key:
             return None
         
-        # Extraer key_id
+        # Extraer key_id (parte antes del primer '_')
         key_id = api_key.split("_")[0]
         
         # Buscar en BD
+        from sqlalchemy import and_
         result = await session.execute(
             select(ApiKey).where(
-                ApiKey.key_id == key_id,
-                ApiKey.is_active == True
+                and_(
+                    ApiKey.key_id == key_id,
+                    ApiKey.is_active == True
+                )
             )
         )
         db_key = result.scalars().first()
@@ -184,10 +188,13 @@ class ApiKeyService:
     @staticmethod
     async def get_user_api_keys(session: AsyncSession, user_id: int, user_type: str) -> List[ApiKeyResponse]:
         """Obtener todas las API keys de un usuario - ASYNC"""
+        from sqlalchemy import and_
         result = await session.execute(
             select(ApiKey).where(
-                ApiKey.user_id == user_id,
-                ApiKey.user_type == user_type
+                and_(
+                    ApiKey.user_id == user_id,
+                    ApiKey.user_type == user_type
+                )
             ).order_by(ApiKey.created_at.desc())
         )
         keys = result.scalars().all()
@@ -212,10 +219,13 @@ class ApiKeyService:
     @staticmethod
     async def revoke_api_key(session: AsyncSession, key_id: str, user_id: int) -> bool:
         """Revocar una API key específica - ASYNC"""
+        from sqlalchemy import and_
         result = await session.execute(
             select(ApiKey).where(
-                ApiKey.key_id == key_id,
-                ApiKey.user_id == user_id
+                and_(
+                    ApiKey.key_id == key_id,
+                    ApiKey.user_id == user_id
+                )
             )
         )
         api_key = result.scalars().first()
@@ -233,10 +243,13 @@ class ApiKeyService:
     @staticmethod
     async def cleanup_expired_keys(session: AsyncSession) -> int:
         """Limpiar claves expiradas (tarea de mantenimiento) - ASYNC"""
+        from sqlalchemy import and_
         result = await session.execute(
             select(ApiKey).where(
-                ApiKey.expires_at < datetime.utcnow(),
-                ApiKey.is_active == True
+                and_(
+                    ApiKey.expires_at < datetime.utcnow(),
+                    ApiKey.is_active == True
+                )
             )
         )
         expired_keys = result.scalars().all()

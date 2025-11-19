@@ -42,11 +42,11 @@ elif is_postgresql:
     logger.info(f"   Pool recycle: {settings.DB_POOL_RECYCLE}s")
 
 # Create async engine
-engine = create_async_engine(db_url, **engine_kwargs)
+async_engine = create_async_engine(db_url, **engine_kwargs)
 
 # Session factory para usar con async/await
 async_session = sessionmaker(
-    engine, 
+    async_engine, 
     class_=AsyncSession, 
     expire_on_commit=False,
     autocommit=False,
@@ -56,7 +56,7 @@ async_session = sessionmaker(
 
 async def create_db_and_tables():
     """Crear todas las tablas de la base de datos (async)"""
-    async with engine.begin() as conn:
+    async with async_engine.begin() as conn:
         await conn.run_sync(SQLModel.metadata.create_all)
 
 

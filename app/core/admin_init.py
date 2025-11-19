@@ -5,7 +5,7 @@ Se ejecuta al iniciar la aplicación si INIT_DEFAULT_ADMIN=true en .env
 
 import logging
 from typing import Optional
-from sqlmodel import Session, select
+from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.config import settings
 from app.models import Student
@@ -16,7 +16,7 @@ from app.schemas import ApiKeyCreate
 logger = logging.getLogger(__name__)
 
 
-def init_default_admin(session: Session) -> Optional[int]:
+async def init_default_admin(session: AsyncSession) -> Optional[int]:
     """
     Inicializa el usuario admin por defecto desde .env
     
@@ -25,7 +25,7 @@ def init_default_admin(session: Session) -> Optional[int]:
     2. No existe un admin con el email configurado
     
     Args:
-        session: Sesión de base de datos
+        session: Sesión de base de datos (ASYNC)
         
     Returns:
         int: ID del usuario admin creado, o None si no se creó
@@ -49,8 +49,8 @@ def init_default_admin(session: Session) -> Optional[int]:
         return None
     
     try:
-        # Verificar si el admin ya existe
-        existing_user, user_type = auth_service.find_user_by_email(
+        # Verificar si el admin ya existe (ASYNC)
+        existing_user, user_type = await auth_service.find_user_by_email(
             session,
             settings.ADMIN_DEFAULT_EMAIL
         )
@@ -72,7 +72,7 @@ def init_default_admin(session: Session) -> Optional[int]:
         # Crear nuevo admin
         logger.info(f"🔧 Creando usuario admin por defecto: {settings.ADMIN_DEFAULT_NAME}")
         
-        user_id, user_type = auth_service.create_user(
+        user_id, user_type = await auth_service.create_user(
             session=session,
             name=settings.ADMIN_DEFAULT_NAME,
             email=settings.ADMIN_DEFAULT_EMAIL,
@@ -80,14 +80,14 @@ def init_default_admin(session: Session) -> Optional[int]:
             role="admin"
         )
         
-        # Crear API key para el admin
+        # Crear API key para el admin (ASYNC)
         api_key_data = ApiKeyCreate(
             name="Clave principal - Admin Sistema",
             description="API key generada automáticamente al iniciar",
             expires_days=365
         )
         
-        api_key_response = api_key_service.create_api_key(
+        api_key_response = await api_key_service.create_api_key(
             session=session,
             user_id=user_id,
             user_type=user_type,
