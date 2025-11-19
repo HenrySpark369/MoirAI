@@ -191,27 +191,69 @@ class AuthManager {
   /**
    * Obtener usuario actual
    */
+  /**
+   * ✅ Obtener usuario COMPLETO de BD
+   * Usa GET /students/me en lugar de GET /auth/me
+   * Retorna StudentProfile con TODOS los datos (CV, skills, etc.)
+   */
   async getCurrentUser() {
     try {
       if (!this.api.isAuthenticated()) {
         return null
       }
 
-      if (this.currentUser) {
-        return this.currentUser
-      }
-
-      const response = await this.api.get('/auth/me')
+      // ✅ CAMBIO CRÍTICO: Usar /students/me (no /auth/me)
+      // Retorna StudentProfile completo, no solo info básica
+      const response = await this.api.get('/students/me')
+      
       this.currentUser = response.user || response
 
+      // ✅ Sincronizar con localStorage como caché (robusto)
+      try {
+        localStorage.setItem('currentUserProfile', JSON.stringify(this.currentUser))
+        localStorage.setItem('currentUserProfile_timestamp', Date.now().toString())
+        console.log('✅ User profile cached:', { 
+          userId: this.currentUser.id,
+          cvUploaded: this.currentUser.cv_uploaded 
+        })
+      } catch (storageError) {
+        console.warn('⚠️ localStorage no disponible:', storageError)
+      }
+
+      this.notifyListeners()
       return this.currentUser
 
     } catch (error) {
-      console.error('Error obtener usuario actual:', error)
+      console.error('❌ Error obtener usuario actual:', error)
+      
+      // ✅ Fallback a localStorage si falla
+      try {
+        const cached = localStorage.getItem('currentUserProfile')
+        if (cached) {
+          const profile = JSON.parse(cached)
+          if (profile && profile.id) {
+            console.warn('⚠️ BD no disponible, usando caché:', profile)
+            this.currentUser = profile
+            this.notifyListeners()
+            return this.currentUser
+          }
+        }
+      } catch (e) {
+        console.error('❌ Caché corrupto, limpiando')
+        try {
+          localStorage.removeItem('currentUserProfile')
+          localStorage.removeItem('currentUserProfile_timestamp')
+        } catch (clearError) {
+          console.error('Error limpiando localStorage:', clearError)
+        }
+      }
+      
+      // Si es error 401, limpiar sesión
       if (error.status === 401) {
         this.api.clearToken()
         this.currentUser = null
       }
+      
       return null
     }
   }
@@ -225,73 +267,98 @@ class AuthManager {
 
   /**
    * Renovar token si es necesario
+   * ⚠️ DESHABILITADO: El endpoint /auth/refresh no existe en el backend (MVP)
+   * En producción, considerar agregar JWT refresh token mechanism
    */
   async refreshToken() {
-    try {
-      const response = await this.api.post('/auth/refresh')
-      if (response.token) {
-        this.api.setToken(response.token)
-        return true
-      }
-      return false
-    } catch (error) {
-      console.error('Error renovando token:', error)
-      return false
-    }
+    console.warn('refreshToken() deshabilitado - endpoint /auth/refresh no implementado en MVP')
+    return false
+    // try {
+    //   const response = await this.api.post('/auth/refresh')
+    //   if (response.token) {
+    //     this.api.setToken(response.token)
+    //     return true
+    //   }
+    //   return false
+    // } catch (error) {
+    //   console.error('Error renovando token:', error)
+    //   return false
+    // }
   }
 
   /**
    * Cambiar contraseña
+   * ⚠️ DESHABILITADO: El endpoint /auth/change-password no existe en el backend (MVP)
+   * En producción, considerar agregar este endpoint de seguridad
    */
   async changePassword(currentPassword, newPassword) {
-    try {
-      const response = await this.api.post('/auth/change-password', {
-        current_password: currentPassword,
-        new_password: newPassword
-      })
-      return response
-    } catch (error) {
-      console.error('Error cambiando contraseña:', error)
-      throw {
-        message: error.message || 'Error al cambiar contraseña',
-        code: error.status
-      }
+    console.warn('changePassword() deshabilitado - endpoint /auth/change-password no implementado en MVP')
+    throw {
+      message: 'Cambio de contraseña no disponible en esta versión',
+      code: 'NOT_AVAILABLE'
     }
+    // try {
+    //   const response = await this.api.post('/auth/change-password', {
+    //     current_password: currentPassword,
+    //     new_password: newPassword
+    //   })
+    //   return response
+    // } catch (error) {
+    //   console.error('Error cambiando contraseña:', error)
+    //   throw {
+    //     message: error.message || 'Error al cambiar contraseña',
+    //     code: error.status
+    //   }
+    // }
   }
 
   /**
    * Solicitar reset de contraseña
+   * ⚠️ DESHABILITADO: El endpoint /auth/forgot-password no existe en el backend (MVP)
+   * En producción, considerar agregar este endpoint de recuperación
    */
   async requestPasswordReset(email) {
-    try {
-      const response = await this.api.post('/auth/forgot-password', { email })
-      return response
-    } catch (error) {
-      console.error('Error solicitando reset:', error)
-      throw {
-        message: error.message || 'Error al solicitar reset de contraseña',
-        code: error.status
-      }
+    console.warn('requestPasswordReset() deshabilitado - endpoint /auth/forgot-password no implementado en MVP')
+    throw {
+      message: 'Recuperación de contraseña no disponible en esta versión',
+      code: 'NOT_AVAILABLE'
     }
+    // try {
+    //   const response = await this.api.post('/auth/forgot-password', { email })
+    //   return response
+    // } catch (error) {
+    //   console.error('Error solicitando reset:', error)
+    //   throw {
+    //     message: error.message || 'Error al solicitar reset de contraseña',
+    //     code: error.status
+    //   }
+    // }
   }
 
   /**
    * Confirmar reset de contraseña
+   * ⚠️ DESHABILITADO: El endpoint /auth/reset-password no existe en el backend (MVP)
+   * En producción, considerar agregar este endpoint de recuperación
    */
   async resetPassword(token, newPassword) {
-    try {
-      const response = await this.api.post('/auth/reset-password', {
-        token,
-        new_password: newPassword
-      })
-      return response
-    } catch (error) {
-      console.error('Error confirmando reset:', error)
-      throw {
-        message: error.message || 'Error al confirmar reset de contraseña',
-        code: error.status
-      }
+    console.warn('resetPassword() deshabilitado - endpoint /auth/reset-password no implementado en MVP')
+    throw {
+      message: 'Confirmación de reset no disponible en esta versión',
+      code: 'NOT_AVAILABLE'
     }
+    // try {
+    //   const response = await this.api.post('/auth/reset-password', {
+    //     token,
+    //     new_password: newPassword
+    //   })
+    //   return response
+    // } catch (error) {
+    //   console.error('Error confirmando reset:', error)
+    //   throw {
+    //     message: error.message || 'Error al confirmar reset de contraseña',
+    //     code: error.status
+    //   }
+    // }
   }
 
   /**

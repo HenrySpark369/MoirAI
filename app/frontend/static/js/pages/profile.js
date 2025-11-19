@@ -27,17 +27,29 @@ async function initProfilePage() {
 }
 
 /**
- * Cargar datos del perfil del usuario
+ * ✅ Cargar perfil del usuario desde BD (NO localStorage)
+ * Usa GET /students/me (datos frescos)
+ * Si falla, usa localStorage como fallback
  */
 async function loadUserProfile() {
     try {
+        console.log('📥 Cargando perfil del usuario desde BD...');
+        
+        // ✅ Obtener perfil COMPLETO de BD
         currentUser = await authManager.getCurrentUser();
 
         if (!currentUser) {
             throw new Error('No se pudo obtener datos del usuario');
         }
 
-        // Llenar formulario con datos existentes
+        console.log('✅ Perfil cargado exitosamente:', {
+            id: currentUser.id,
+            email: currentUser.email,
+            cvUploaded: currentUser.cv_uploaded,
+            skillsCount: currentUser.skills?.length || 0
+        });
+
+        // Llenar formulario con datos existentes (de BD)
         const form = document.getElementById('profile-form');
         if (form) {
             form.querySelector('[name="first_name"]').value = currentUser.first_name || '';
@@ -52,23 +64,41 @@ async function loadUserProfile() {
                 if (studentForm) {
                     studentForm.querySelector('[name="career"]').value = currentUser.career || '';
                     studentForm.querySelector('[name="year"]').value = currentUser.year || '';
+                    studentForm.querySelector('[name="program"]').value = currentUser.program || '';
                 }
             }
         }
 
-        // Mostrar CV cargado si existe
-        if (currentUser.cv_file) {
-            showCVStatus(true, currentUser.cv_file);
+        // ✅ Mostrar CV si BD indica que existe (NO localStorage)
+        if (currentUser.cv_uploaded && currentUser.cv_filename) {
+            console.log('📄 CV encontrado:', currentUser.cv_filename);
+            showCVStatus(true, currentUser.cv_filename, currentUser.cv_upload_date);
+        } else {
+            console.log('⚪ Sin CV');
+            showCVStatus(false);
         }
 
-        // Mostrar habilidades inferidas
-        if (currentUser.inferred_skills) {
-            displayInferredSkills(currentUser.inferred_skills);
+        // ✅ Mostrar habilidades de BD
+        const allSkills = [];
+        
+        if (currentUser.skills && Array.isArray(currentUser.skills)) {
+            allSkills.push(...currentUser.skills);
+            console.log(`📚 ${currentUser.skills.length} habilidades técnicas`);
+        }
+        
+        if (currentUser.soft_skills && Array.isArray(currentUser.soft_skills)) {
+            allSkills.push(...currentUser.soft_skills);
+            console.log(`💬 ${currentUser.soft_skills.length} habilidades blandas`);
+        }
+        
+        if (allSkills.length > 0) {
+            displayInferredSkills(allSkills);
         }
 
         return currentUser;
 
     } catch (error) {
+        console.error('❌ Error cargando perfil:', error);
         notificationManager.error('Error al cargar perfil');
         throw error;
     }
@@ -164,15 +194,16 @@ function setupCVUpload() {
 }
 
 /**
- * Manejar upload de CV
+ * ✅ Manejar upload de CV
+ * Sincroniza correctamente con BD y localStorage
  */
 async function handleCVUpload(file) {
     if (!file) return;
 
     // Validar tipo de archivo
-    const allowedTypes = ['application/pdf', 'application/msword', 'application/vnd.openxmlformats-officedocument.wordprocessingml.document'];
-    if (!allowedTypes.includes(file.type)) {
-        notificationManager.error('Solo se permiten archivos PDF o DOCX');
+    const allowedTypes = ['application/pdf', 'application/msword', 'application/vnd.openxmlformats-officedocument.wordprocessingml.document', 'text/plain'];
+    if (!allowedTypes.includes(file.type) && !file.name.endsWith('.txt')) {
+        notificationManager.error('Solo se permiten archivos PDF, DOCX o TXT');
         return;
     }
 
@@ -192,38 +223,58 @@ async function handleCVUpload(file) {
     notificationManager.loading(`Subiendo CV...`);
 
     try {
-        // Crear FormData
-        const formData = new FormData();
-        formData.append('file', file);
-        formData.append('student_id', currentUser.id);
+        // Preparar metadatos JSON para el endpoint
+        const metadata = {
+            name: currentUser.name || `${currentUser.first_name || ''} ${currentUser.last_name || ''}`.trim(),
+            email: currentUser.email,
+            program: currentUser.career || currentUser.program || ''
+        };
 
-        // Usar XMLHttpRequest para obtener progress
+        // Usar XMLHttpRequest para obtener progress con FormData
         const response = await uploadFileWithProgress(
-            `/students/${currentUser.id}/upload-resume`,
+            `/students/upload_resume`,
             file,
+            metadata,
             (percentComplete) => {
                 notificationManager.loading(`Subiendo CV... ${Math.round(percentComplete)}%`);
             }
         );
 
-        // Procesar respuesta
-        currentUser.cv_file = response.file_path;
-        currentUser.cv_uploaded = true;
+        // ✅ Procesar respuesta: ResumeAnalysisResponse contiene student y skills extraídas
+        if (response.student) {
+            // ✅ CAMBIO: Usar respuesta de BD, NO localStorage solo
+            // Actualizar currentUser con datos de la respuesta (de BD)
+            currentUser = { ...currentUser, ...response.student };
+            
+            // ✅ Guardar en localStorage como caché (robusto, sin dependencias)
+            try {
+                localStorage.setItem('currentUserProfile', JSON.stringify(currentUser));
+                localStorage.setItem('currentUserProfile_timestamp', Date.now().toString());
+                console.log('✅ CV profile cached:', {
+                    fileName: response.student.cv_filename,
+                    skillsCount: response.extracted_skills?.length || 0
+                });
+            } catch (storageError) {
+                console.warn('⚠️ localStorage no disponible:', storageError);
+            }
 
-        // Guardar en localStorage
-        StorageManager.set('currentUser', currentUser);
+            notificationManager.hideLoading();
+            notificationManager.success('CV subido y analizado exitosamente');
 
-        notificationManager.hideLoading();
-        notificationManager.success('CV subido exitosamente');
+            // Mostrar estado del CV
+            showCVStatus(true, response.student.cv_filename || response.student.name, response.student.cv_upload_date);
 
-        // Mostrar estado del CV
-        showCVStatus(true, response.file_path);
-
-        // Mostrar habilidades inferidas si están disponibles
-        if (response.inferred_skills) {
-            currentUser.inferred_skills = response.inferred_skills;
-            displayInferredSkills(response.inferred_skills);
-            notificationManager.success('¡Habilidades analizadas!');
+            // ✅ Mostrar habilidades extraídas
+            if (response.extracted_skills || response.extracted_soft_skills) {
+                const allSkills = [
+                    ...(response.extracted_skills || []),
+                    ...(response.extracted_soft_skills || [])
+                ];
+                displayInferredSkills(allSkills);
+                notificationManager.success(`¡${allSkills.length} habilidades analizadas!`);
+            }
+        } else {
+            throw new Error('Respuesta inesperada del servidor');
         }
 
         uploadInProgress = false;
@@ -236,14 +287,17 @@ async function handleCVUpload(file) {
 }
 
 /**
- * Upload de archivo con progress (Fix: progress bar real)
+ * Upload de archivo con progress
+ * 
+ * Utiliza FormData para enviar:
+ * - meta: JSON string con metadatos del estudiante
+ * - file: archivo de CV
  */
-function uploadFileWithProgress(url, file, onProgress) {
+function uploadFileWithProgress(url, file, metadata, onProgress) {
     return new Promise((resolve, reject) => {
         const xhr = new XMLHttpRequest();
-        const token = typeof storageManager !== 'undefined' 
-            ? storageManager.get('moirai_token')
-            : localStorage.getItem('moirai_token');
+        // ✅ Usar localStorage directamente sin dependencias condicionales
+        const apiKey = localStorage.getItem('api_key') || localStorage.getItem('authToken');
 
         // Setup xhr
         xhr.upload.addEventListener('progress', (e) => {
@@ -264,7 +318,7 @@ function uploadFileWithProgress(url, file, onProgress) {
             } else {
                 try {
                     const error = JSON.parse(xhr.responseText);
-                    reject(new Error(error.message || 'Upload failed'));
+                    reject(new Error(error.detail || error.message || 'Upload failed'));
                 } catch (e) {
                     reject(new Error(`Upload failed with status ${xhr.status}`));
                 }
@@ -279,14 +333,14 @@ function uploadFileWithProgress(url, file, onProgress) {
             reject(new Error('Upload cancelled'));
         });
 
-        // Preparar y enviar
+        // Preparar FormData con meta como JSON string y file
         const formData = new FormData();
+        formData.append('meta', JSON.stringify(metadata));
         formData.append('file', file);
-        formData.append('student_id', currentUser.id);
 
         xhr.open('POST', `${window.API_BASE_URL}${url}`, true);
-        if (token) {
-            xhr.setRequestHeader('Authorization', `Bearer ${token}`);
+        if (apiKey) {
+            xhr.setRequestHeader('X-API-Key', apiKey);
         }
         xhr.send(formData);
     });
@@ -368,19 +422,28 @@ async function deleteCVFile() {
 function displayInferredSkills(skills) {
     const container = document.getElementById('inferred-skills');
 
-    if (!container || !skills) return;
+    if (!container || !skills || skills.length === 0) {
+        if (container) {
+            container.innerHTML = `
+                <div class="empty-state">
+                    <i class="fas fa-brain"></i>
+                    <p>Sube tu CV para que analicemos tus habilidades</p>
+                </div>
+            `;
+        }
+        return;
+    }
 
     let html = '<div class="skills-grid">';
 
-    skills.forEach(skill => {
-        const skillType = skill.type || 'technical'; // 'technical' o 'soft'
-        const badge = skillType === 'soft' ? 'skill-badge-soft' : 'skill-badge-tech';
+    skills.forEach((skill, index) => {
+        // Mostrar solo el texto tal como viene
+        const skillName = typeof skill === 'string' ? skill : (skill.name || 'Desconocida');
 
         html += `
-            <div class="skill-item ${badge}">
-                <span class="skill-name">${skill.name}</span>
-                <span class="skill-score">${Math.round(skill.score * 100)}%</span>
-                <button class="skill-remove" onclick="removeSkill('${skill.id}')" title="Remover">
+            <div class="skill-item skill-badge">
+                <span class="skill-name">${skillName}</span>
+                <button class="skill-remove" onclick="removeSkill('${index}')" title="Remover">
                     <i class="fas fa-times"></i>
                 </button>
             </div>
@@ -388,18 +451,7 @@ function displayInferredSkills(skills) {
     });
 
     html += '</div>';
-
     container.innerHTML = html;
-
-    // Mostrar mensaje si no hay skills
-    if (skills.length === 0) {
-        container.innerHTML = `
-            <div class="empty-state">
-                <i class="fas fa-brain"></i>
-                <p>Sube tu CV para que analicemos tus habilidades</p>
-            </div>
-        `;
-    }
 }
 
 /**
@@ -407,7 +459,21 @@ function displayInferredSkills(skills) {
  */
 async function removeSkill(skillId) {
     try {
-        currentUser.inferred_skills = currentUser.inferred_skills.filter(s => s.id !== skillId);
+        // Si es índice numérico (string skills)
+        if (!isNaN(skillId)) {
+            const index = parseInt(skillId);
+            if (currentUser.inferred_skills) {
+                currentUser.inferred_skills = currentUser.inferred_skills.filter((_, i) => i !== index);
+            }
+        } else {
+            // Si es ID de objeto
+            if (currentUser.inferred_skills) {
+                currentUser.inferred_skills = currentUser.inferred_skills.filter(s => 
+                    typeof s === 'string' ? true : s.id !== skillId
+                );
+            }
+        }
+        
         displayInferredSkills(currentUser.inferred_skills);
         notificationManager.success('Habilidad removida');
     } catch (error) {

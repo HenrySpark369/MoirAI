@@ -51,13 +51,16 @@ async function initJobsSearchPage() {
         loadingMessage: 'Cargando oportunidades...',
         onInit: async () => {
             setupEventListeners();
+            setupBackgroundSearchListeners();
             await loadInitialJobs();
+            // Iniciar búsqueda en segundo plano después de cargar inicial
+            startBackgroundSearch();
         }
     });
 }
 
 /**
- * Setup de event listeners
+ * Setup de event listeners - Refactorizado para modelo JobPosition
  */
 function setupEventListeners() {
     // Búsqueda por texto
@@ -66,24 +69,24 @@ function setupEventListeners() {
         searchInput.addEventListener('input', debounce(handleSearch, 500));
     }
 
-    // Filtros
+    // Filtros - Mapeados a campos del modelo JobPosition
     const filterElements = document.querySelectorAll(
-        '.location-filter, .modality-filter, .level-filter, .skill-filter, ' +
-        '#sectorFilter, #sortFilter, #locationFilter'
+        '.modality-filter, .level-filter, .skill-filter, ' +
+        '#locationFilter, #jobTypeFilter, #sortFilter'
     );
 
     filterElements.forEach(element => {
         element.addEventListener('change', handleFilterChange);
     });
 
-    // Botón de filtros avanzados
-    const advancedFilterBtn = document.getElementById('advancedFilterBtn');
-    if (advancedFilterBtn) {
-        advancedFilterBtn.addEventListener('click', toggleAdvancedFilters);
+    // Evento adicional para input de ubicación (búsqueda en tiempo real)
+    const locationInput = document.getElementById('locationFilter');
+    if (locationInput && locationInput.type === 'text') {
+        locationInput.addEventListener('input', debounce(handleFilterChange, 300));
     }
 
     // Botón de limpiar filtros
-    const clearFiltersBtn = document.getElementById('clearFiltersBtn');
+    const clearFiltersBtn = document.querySelector('.clear-filters-btn');
     if (clearFiltersBtn) {
         clearFiltersBtn.addEventListener('click', clearAllFilters);
     }
@@ -101,17 +104,113 @@ function setupEventListeners() {
 }
 
 /**
- * Cargar empleos iniciales
+ * Setup de listeners para búsqueda en segundo plano
+ */
+function setupBackgroundSearchListeners() {
+    // Escuchar actualizaciones de empleos en segundo plano
+    window.addEventListener('jobsUpdated', (e) => {
+        const { keyword, newJobs, totalJobs } = e.detail;
+        
+        // Agregar nuevos empleos al catálogo
+        allJobsData.push(...newJobs);
+        
+        // Actualizar UI si no hay filtros activos
+        const hasActiveFilters = 
+            document.getElementById('searchJobs')?.value ||
+            document.getElementById('locationFilter')?.value ||
+            document.querySelectorAll('.modality-filter:checked').length > 0;
+            
+        if (!hasActiveFilters) {
+            currentJobs = allJobsData;
+            currentPage = 1;
+            renderJobs();
+        }
+        
+        // Actualizar contador
+        updateJobCount(totalJobs);
+    });
+
+    // Escuchar cuando se completa la búsqueda en segundo plano
+    window.addEventListener('backgroundJobsReady', (e) => {
+        const { jobs, count } = e.detail;
+        console.log(`🎉 Búsqueda en segundo plano completada: ${count} empleos`);
+        notificationManager.success(`Se encontraron ${count} empleos en total`);
+    });
+}
+
+/**
+ * Iniciar búsqueda en segundo plano
+ */
+function startBackgroundSearch() {
+    if (typeof backgroundJobSearch === 'undefined') {
+        console.warn('⚠️ backgroundJobSearch no está definido');
+        return;
+    }
+    
+    // Solo iniciar si no está corriendo ya
+    if (!backgroundJobSearch.isRunning) {
+        backgroundJobSearch.start();
+    }
+}
+
+/**
+ * Actualizar contador de empleos
+ */
+function updateJobCount(count) {
+    const countElement = document.getElementById('jobCount');
+    if (countElement) {
+        countElement.textContent = count;
+    }
+}
+
+/**
+ * Cargar empleos iniciales desde cache persistente (BD)
+ * ✨ MEJORADO: Usa parámetros para búsqueda inicial más relevante
  */
 async function loadInitialJobs() {
     notificationManager.loading('Cargando empleos disponibles...');
 
     try {
-        // Obtener empleos destacados o trending
-        const response = await apiClient.get('/jobs/trending-jobs?limit=50');
-        allJobsData = response.jobs || response.data || [];
+        // ✨ NUEVO: Intentar cargar del cache persistente (BD) primero
+        // GET /job-scraping/cache/list - Mucho más rápido que scraping
+        const response = await apiClient.get('/job-scraping/cache/list', {
+            params: {
+                limit: 100,
+                offset: 0
+            }
+        });
+
+        if (response && response.jobs && response.jobs.length > 0) {
+            allJobsData = response.jobs;
+            currentJobs = allJobsData;
+            totalJobs = response.total;
+            
+            console.log(`✅ Cache cargado: ${allJobsData.length} de ${totalJobs} empleos`);
+            notificationManager.hideLoading();
+            renderJobs();
+            return;
+        }
+
+        // Fallback: Si no hay cache, buscar empleos generales con parámetros enriquecidos
+        console.log('📦 Cache vacío, buscando empleos iniciales...');
+        const searchResponse = await apiClient.post('/job-scraping/search', {
+            keyword: 'empleo trabajo oportunidad',  // Múltiples keywords para máxima cobertura
+            location: null,
+            detailed: true,
+            sort_by: 'relevance',  // Ordenar por relevancia
+            page: 1,
+            category: null,
+            experience_level: null,
+            work_mode: null,
+            job_type: null,
+            company_verified: false,
+            salary_min: null,
+            salary_range: null
+        });
+        
+        allJobsData = searchResponse.jobs || [];
         currentJobs = allJobsData;
-        totalJobs = allJobsData.length;
+        totalJobs = searchResponse.total_results || allJobsData.length;
 
         notificationManager.hideLoading();
         renderJobs();
@@ -119,18 +218,14 @@ async function loadInitialJobs() {
     } catch (error) {
         notificationManager.hideLoading();
         
-        // Si no hay endpoint de trending, cargar desde búsqueda general
-        try {
-            await handleSearch();
-        } catch (err) {
-            notificationManager.error('Error al cargar empleos');
-            console.error(err);
-        }
+        // Si falla todo, mostrar mensaje de error
+        console.error('Error al cargar empleos:', error);
+        notificationManager.error('Error al cargar empleos. Intenta más tarde.');
     }
 }
 
 /**
- * Realizar búsqueda
+ * Realizar búsqueda - ✨ MEJORADO: Usa todos los parámetros disponibles del endpoint
  */
 async function handleSearch() {
     // Rate limiting
@@ -145,6 +240,16 @@ async function handleSearch() {
     try {
         const keyword = document.getElementById('searchJobs')?.value || '';
         const location = document.getElementById('locationFilter')?.value || '';
+        const jobType = document.getElementById('jobTypeFilter')?.value || '';
+        
+        // Obtener filtros seleccionados
+        const workModes = Array.from(
+            document.querySelectorAll('.modality-filter:checked')
+        ).map(el => el.value).join(',') || null;
+        
+        const experienceLevels = Array.from(
+            document.querySelectorAll('.level-filter:checked')
+        ).map(el => el.value).join(',') || null;
 
         if (!keyword.trim()) {
             notificationManager.warning('Por favor ingresa un término de búsqueda');
@@ -154,17 +259,25 @@ async function handleSearch() {
 
         notificationManager.loading('Buscando empleos...');
 
-        // Construir query
-        let url = `/jobs/search?keyword=${encodeURIComponent(keyword)}&detailed=true`;
-        if (location) {
-            url += `&location=${encodeURIComponent(location)}`;
-        }
-
-        const response = await apiClient.get(url);
+        // ✅ MEJORADO: POST /job-scraping/search con TODOS los parámetros disponibles
+        const response = await apiClient.post('/job-scraping/search', {
+            keyword: keyword,
+            location: location || null,
+            job_type: jobType || null,
+            work_mode: workModes ? workModes.split(',')[0] : null,  // Primer modo seleccionado
+            experience_level: experienceLevels ? experienceLevels.split(',')[0] : null,  // Primer nivel
+            sort_by: 'relevance',      // Ordenar por relevancia
+            detailed: true,           // Datos básicos (rápido)
+            page: 1,
+            category: null,            // Categoría (opcional)
+            salary_min: null,          // Salario mínimo (opcional)
+            salary_range: null,        // Rango salarial (opcional)
+            company_verified: false    // Filtrar por empresas verificadas
+        });
         
-        allJobsData = response.jobs || response.data || [];
+        allJobsData = response.jobs || [];
         currentJobs = allJobsData;
-        totalJobs = allJobsData.length;
+        totalJobs = response.total_results || allJobsData.length;
         currentPage = 1;
 
         notificationManager.hideLoading();
@@ -195,82 +308,102 @@ async function handleFilterChange() {
 }
 
 /**
- * Aplicar filtros
+ * Aplicar filtros basados en el modelo JobPosition
+ * Campos disponibles: work_mode, experience_level, skills, category, job_type, location, salary_range
  */
 async function applyFilters() {
     try {
-        const modalities = Array.from(
+        // Obtener valores de filtros del DOM
+        const workModes = Array.from(
             document.querySelectorAll('.modality-filter:checked')
         ).map(el => el.value);
 
-        const levels = Array.from(
+        const experienceLevels = Array.from(
             document.querySelectorAll('.level-filter:checked')
         ).map(el => el.value);
 
-        const skills = Array.from(
+        const selectedSkills = Array.from(
             document.querySelectorAll('.skill-filter:checked')
         ).map(el => el.value);
 
-        const sector = document.getElementById('sectorFilter')?.value || '';
+        const location = document.getElementById('locationFilter')?.value || '';
+        const jobType = document.getElementById('jobTypeFilter')?.value || '';
         const sortBy = document.getElementById('sortFilter')?.value || 'recent';
 
-        // Filtrar datos
+        // Filtrar datos basado en modelo JobPosition
         let filtered = [...allJobsData];
 
-        // Filtro por modalidad
-        if (modalities.length > 0) {
-            filtered = filtered.filter(job =>
-                modalities.includes(job.work_mode?.toLowerCase())
-            );
-        }
-
-        // Filtro por nivel
-        if (levels.length > 0) {
-            filtered = filtered.filter(job =>
-                levels.includes(job.level?.toLowerCase())
-            );
-        }
-
-        // Filtro por habilidades (al menos una coincidencia)
-        if (skills.length > 0) {
+        // Filtro por modalidad (work_mode)
+        if (workModes.length > 0) {
             filtered = filtered.filter(job => {
-                const jobSkills = (job.skills || []).map(s => s.toLowerCase());
-                return skills.some(skill =>
+                const jobWorkMode = job.work_mode?.toLowerCase() || '';
+                return workModes.some(mode => jobWorkMode.includes(mode.toLowerCase()));
+            });
+        }
+
+        // Filtro por nivel de experiencia (experience_level)
+        if (experienceLevels.length > 0) {
+            filtered = filtered.filter(job => {
+                const jobLevel = job.experience_level?.toLowerCase() || '';
+                return experienceLevels.some(level => jobLevel.includes(level.toLowerCase()));
+            });
+        }
+
+        // Filtro por habilidades (skills - JSON field)
+        if (selectedSkills.length > 0) {
+            filtered = filtered.filter(job => {
+                const jobSkills = Array.isArray(job.skills) 
+                    ? job.skills.map(s => s.toLowerCase())
+                    : (job.skills || '').toLowerCase().split(',').map(s => s.trim());
+                
+                return selectedSkills.some(skill =>
                     jobSkills.some(js => js.includes(skill.toLowerCase()))
                 );
             });
         }
 
-        // Filtro por sector
-        if (sector) {
+        // Filtro por ubicación (location field)
+        if (location) {
             filtered = filtered.filter(job =>
-                job.sector?.toLowerCase() === sector.toLowerCase()
+                job.location?.toLowerCase().includes(location.toLowerCase())
             );
         }
 
-        // Ordenar
+        // Filtro por tipo de trabajo (job_type)
+        if (jobType) {
+            filtered = filtered.filter(job =>
+                job.job_type?.toLowerCase() === jobType.toLowerCase()
+            );
+        }
+
+        // Ordenar resultados
         switch (sortBy) {
             case 'match':
+                // Ordenar por match_score si disponible
                 filtered.sort((a, b) => (b.match_score || 0) - (a.match_score || 0));
                 break;
             case 'salary-high':
+                // Ordenar por salary_max de mayor a menor
                 filtered.sort((a, b) => {
-                    const aSalary = parseInt(b.salary_max || 0);
-                    const bSalary = parseInt(a.salary_max || 0);
+                    const aSalary = parseFloat(b.salary_max || 0);
+                    const bSalary = parseFloat(a.salary_max || 0);
                     return aSalary - bSalary;
                 });
                 break;
             case 'salary-low':
+                // Ordenar por salary_min de menor a mayor
                 filtered.sort((a, b) => {
-                    const aSalary = parseInt(a.salary_min || 0);
-                    const bSalary = parseInt(b.salary_min || 0);
+                    const aSalary = parseFloat(a.salary_min || 0);
+                    const bSalary = parseFloat(b.salary_min || 0);
                     return aSalary - bSalary;
                 });
                 break;
             case 'recent':
             default:
+                // Ordenar por fecha de publicación más reciente
                 filtered.sort((a, b) =>
-                    new Date(b.published_at || 0) - new Date(a.published_at || 0)
+                    new Date(b.publication_date || b.published_at || 0) - 
+                    new Date(a.publication_date || a.published_at || 0)
                 );
         }
 
@@ -345,8 +478,8 @@ function renderJobs() {
                             ${capitalizeFirst(job.work_mode)}
                         </span>
                     ` : ''}
-                    ${job.level ? `
-                        <span class="job-level">${capitalizeFirst(job.level)}</span>
+                    ${job.experience_level ? `
+                        <span class="job-level">${capitalizeFirst(job.experience_level)}</span>
                     ` : ''}
                 </div>
 
@@ -458,8 +591,8 @@ function openJobDetailsModal(job) {
                             </span>
                         </div>
                         <div class="detail-item">
-                            <strong>Nivel:</strong>
-                            <span>${capitalizeFirst(job.level || 'No especificado')}</span>
+                            <strong>Nivel de Experiencia:</strong>
+                            <span>${capitalizeFirst(job.experience_level || 'No especificado')}</span>
                         </div>
                         <div class="detail-item">
                             <strong>Tipo de Contrato:</strong>
@@ -603,16 +736,18 @@ function toggleAdvancedFilters() {
 }
 
 /**
- * Limpiar todos los filtros
+ * Limpiar todos los filtros - Refactorizado para modelo JobPosition
  */
 function clearAllFilters() {
-    // Limpiar inputs
+    // Limpiar inputs de texto
     document.getElementById('searchJobs').value = '';
     document.getElementById('locationFilter').value = '';
-    document.getElementById('sectorFilter').value = '';
+    
+    // Limpiar selects
+    document.getElementById('jobTypeFilter').value = '';
     document.getElementById('sortFilter').value = 'recent';
 
-    // Desmarcar checkboxes
+    // Desmarcar todos los checkboxes
     document.querySelectorAll(
         '.modality-filter, .level-filter, .skill-filter'
     ).forEach(checkbox => {

@@ -7,6 +7,7 @@ from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlmodel import Session, select, func
 from datetime import datetime, timedelta, date
 import json
+import logging
 
 from app.core.database import get_session
 from app.models import Student, Company, JobPosition, JobApplicationDB, AuditLog, ApiKey
@@ -15,6 +16,7 @@ from app.middleware.auth import AuthService
 from app.core.config import settings
 
 router = APIRouter(prefix="/admin", tags=["admin"])
+logger = logging.getLogger(__name__)
 
 
 def _log_audit_action(session: Session, action: str, resource: str,

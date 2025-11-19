@@ -40,9 +40,16 @@ document.addEventListener('DOMContentLoaded', () => {
 });
 
 /**
- * Inicializar página
+ * Inicializar página con verificación de protectedPageManager
  */
 async function initCompanySearchPage() {
+    // Verificar que protectedPageManager está definido
+    if (typeof protectedPageManager === 'undefined') {
+        console.warn('⚠️ ProtectedPageManager no está definido aún, reintentando...');
+        setTimeout(initCompanySearchPage, 500);
+        return;
+    }
+
     // Proteger ruta - solo empresas y admins
     await protectedPageManager.initProtectedPage({
         requiredRoles: ['company', 'admin'],
@@ -95,12 +102,15 @@ function setupEventListeners() {
 
 /**
  * Cargar estudiantes inicialmente
+ * ⚠️ ACTUALIZADO: Usar /students/search/skills en lugar de /matching/featured-students
+ * ya que el router matching.py no está registrado en el backend MVP
  */
 async function loadInitialStudents() {
     notificationManager.loading('Cargando candidatos disponibles...');
 
     try {
-        const response = await apiClient.get('/matching/featured-students?limit=50');
+        // ✅ ALTERNATIVA: Usar endpoint de búsqueda por skills (disponible)
+        const response = await apiClient.get('/students/search/skills?limit=50');
         allStudents = response.students || response.data || [];
         filteredStudents = allStudents;
         totalStudents = allStudents.length;
@@ -139,13 +149,20 @@ async function handleSearch() {
 
         notificationManager.loading('Buscando candidatos...');
 
-        // Buscar con criterios
-        const criteria = {
-            keyword: searchTerm,
-            search_type: 'student_profile'
-        };
+        // ✅ CORRECCIÓN: Usar endpoint correcto GET /{company_id}/search-students
+        // Obtener company_id del usuario actual (si es empresa)
+        const currentUser = authManager.getCurrentUser();
+        if (!currentUser || !currentUser.user_id) {
+            throw new Error('Usuario no autenticado');
+        }
 
-        const response = await apiClient.post('/companies/search-students', criteria);
+        // El endpoint espera query parameters, no POST body
+        const queryParams = new URLSearchParams({
+            skills: searchTerm,  // Buscar por skill
+            limit: 50
+        }).toString();
+
+        const response = await apiClient.get(`/companies/${currentUser.user_id}/search-students?${queryParams}`);
 
         allStudents = response.students || response.data || [];
         filteredStudents = allStudents;
@@ -500,31 +517,14 @@ function openStudentProfileModal(student) {
 
 /**
  * Enviar propuesta al estudiante
+ * ⚠️ DESHABILITADO: El endpoint /companies/send-proposal no existe en el backend (MVP)
+ * En producción, considerar agregar este endpoint para comunicación entre empresas y estudiantes
  */
 async function sendProposal(studentId) {
     try {
-        const message = prompt('Escribe tu propuesta o mensaje:');
-        if (message === null) return; // Cancelado
-
-        if (!message.trim()) {
-            notificationManager.warning('Por favor escribe un mensaje');
-            return;
-        }
-
-        notificationManager.loading('Enviando propuesta...');
-
-        await apiClient.post('/companies/send-proposal', {
-            student_id: studentId,
-            message: message
-        });
-
-        notificationManager.hideLoading();
-        notificationManager.success('¡Propuesta enviada exitosamente!');
-
-        // Cerrar modal
-        const modal = document.getElementById(`studentModal-${studentId}`);
-        if (modal) modal.remove();
-
+        notificationManager.error('Esta funcionalidad no está disponible en esta versión');
+        console.warn('sendProposal() deshabilitado - endpoint /companies/send-proposal no implementado en MVP');
+        return;
     } catch (error) {
         notificationManager.hideLoading();
         notificationManager.error(error.message || 'Error al enviar propuesta');

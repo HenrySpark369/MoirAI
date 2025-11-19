@@ -17,7 +17,7 @@ class Settings(BaseSettings):
     
     # Database - Core Configuration
     DATABASE_URL: str = Field(
-        default="sqlite:///./moirai.db",
+        default="postgresql://postgres:postgres@localhost:5432/moirai",
         description="URL de conexión a la base de datos"
     )
     

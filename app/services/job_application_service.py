@@ -6,6 +6,7 @@ from datetime import datetime, timedelta
 from typing import Dict, List, Optional, Tuple
 import asyncio
 import logging
+import json
 
 from sqlmodel import Session, select, func
 from ..core.database import get_session
@@ -29,7 +30,14 @@ class JobApplicationManager:
         self.db_session = db_session
     
     def save_job_offer(self, job_offer: JobOffer) -> JobPosition:
-        """Guarda una oferta de trabajo en la base de datos usando el modelo unificado"""
+        """
+        Guarda una oferta de trabajo en la base de datos usando el modelo unificado.
+        
+        ✨ MEJORADO: Mapeo completo de todos los campos disponibles
+        - Convierte listas (skills, benefits) a JSON
+        - Llena TODOS los campos disponibles en JobPosition
+        - Maneja actualización y creación de registros
+        """
         try:
             # Verificar si la oferta ya existe
             existing_job = self.db_session.exec(
@@ -37,42 +45,81 @@ class JobApplicationManager:
             ).first()
             
             if existing_job:
-                # Actualizar oferta existente
-                existing_job.title = job_offer.title
-                existing_job.company = job_offer.company
-                existing_job.location = job_offer.location
-                existing_job.salary_range = job_offer.salary
-                existing_job.benefits = job_offer.benefits
+                # ✅ ACTUALIZAR oferta existente con TODOS los campos
+                existing_job.title = job_offer.title or existing_job.title
+                existing_job.company = job_offer.company or existing_job.company
+                existing_job.location = job_offer.location or existing_job.location
+                existing_job.description = job_offer.description or existing_job.description
+                existing_job.salary_range = job_offer.salary or existing_job.salary_range
+                
+                # ✅ Convertir listas a JSON
+                existing_job.skills = json.dumps(job_offer.skills) if job_offer.skills else None
+                existing_job.benefits = json.dumps(job_offer.benefits) if job_offer.benefits else None
+                
+                # ✅ Mapear TODOS los campos disponibles
+                existing_job.requirements = job_offer.full_description or job_offer.requirements or existing_job.requirements
+                existing_job.work_mode = job_offer.work_mode or existing_job.work_mode
+                existing_job.experience_level = job_offer.experience_level or existing_job.experience_level
+                existing_job.category = job_offer.category or existing_job.category
+                existing_job.job_type = job_offer.job_type or existing_job.job_type
+                existing_job.education_required = job_offer.education_required or existing_job.education_required
+                existing_job.company_verified = job_offer.company_verified if job_offer.company_verified else existing_job.company_verified
+                existing_job.company_logo = job_offer.company_logo or existing_job.company_logo
+                existing_job.publication_date = job_offer.publication_date or existing_job.publication_date
+                existing_job.is_featured = job_offer.is_featured if job_offer.is_featured else existing_job.is_featured
+                existing_job.external_url = job_offer.url or existing_job.external_url
+                
+                # ✅ Metadatos de cache
+                existing_job.source = "occ"
+                existing_job.scraped_at = datetime.utcnow()
+                existing_job.is_active = True
+                existing_job.expires_at = datetime.utcnow() + timedelta(days=7)
                 existing_job.updated_at = datetime.utcnow()
                 
                 self.db_session.add(existing_job)
-                self.db_session.commit()
-                self.db_session.refresh(existing_job)
+                # ✅ NO hacer commit aquí, lo hace save_scraped_jobs()
                 return existing_job
             
-            # Crear nueva oferta usando modelo unificado
+            # ✅ CREAR nueva oferta con TODOS los campos mapeados
             job_db = JobPosition(
-                external_job_id=job_offer.job_id,  # Mapeo correcto
-                title=job_offer.title,
-                company=job_offer.company,
-                location=job_offer.location,
-                salary_range=job_offer.salary,  # Mapeo correcto
-                description=job_offer.description,
-                benefits=job_offer.benefits,
-                requirements=job_offer.skills,  # Mapear skills a requirements
-                source="occ",  # Identificar origen
-                scraped_at=datetime.utcnow(),  # Fecha de scraping
-                is_active=True  # Estado inicial
+                external_job_id=job_offer.job_id,
+                external_url=job_offer.url,
+                title=job_offer.title or "Sin título",
+                company=job_offer.company or "Sin empresa",
+                location=job_offer.location or "No especificada",
+                description=job_offer.description or job_offer.full_description or "",
+                
+                # ✅ Convertir listas a JSON strings
+                skills=json.dumps(job_offer.skills) if job_offer.skills else None,
+                benefits=json.dumps(job_offer.benefits) if job_offer.benefits else None,
+                
+                # ✅ Mapear TODOS los campos disponibles
+                salary_range=job_offer.salary,
+                requirements=job_offer.full_description or job_offer.requirements,
+                work_mode=job_offer.work_mode,
+                experience_level=job_offer.experience_level,
+                category=job_offer.category,
+                job_type=job_offer.job_type,
+                education_required=job_offer.education_required,
+                company_verified=job_offer.company_verified,
+                company_logo=job_offer.company_logo,
+                publication_date=job_offer.publication_date,
+                is_featured=job_offer.is_featured,
+                
+                # ✅ Metadatos de cache
+                source="occ",
+                scraped_at=datetime.utcnow(),
+                is_active=True,
+                expires_at=datetime.utcnow() + timedelta(days=7),
             )
             
             self.db_session.add(job_db)
-            self.db_session.commit()
-            self.db_session.refresh(job_db)
+            # ✅ NO hacer commit aquí, lo hace save_scraped_jobs()
             return job_db
             
         except Exception as e:
             self.db_session.rollback()
-            logger.error(f"Error al guardar oferta de trabajo: {e}")
+            logger.error(f"❌ Error al guardar oferta de trabajo {job_offer.job_id}: {e}")
             raise
     
     def create_application(self, user_id: int, job_position_id: int, 
@@ -443,4 +490,281 @@ class JobAlertManager:
             
         except Exception as e:
             logger.error(f"Error procesando alerta {alert.id}: {e}")
+            raise
+
+
+# ============================================================================
+# CACHE MANAGEMENT
+# ============================================================================
+
+class JobCacheManager:
+    """
+    Gestiona caché persistente de empleos scrapeados en la base de datos.
+    
+    Estrategia:
+    - Guarda empleos scrapeados en tabla job_positions con source="occ"
+    - Valida TTL (time-to-live) por edad de scraping
+    - Deduplicación por external_job_id
+    - Soft-delete por is_active flag en lugar de borrar
+    """
+    
+    def __init__(self, db_session: Session):
+        self.db_session = db_session
+        self.app_manager = JobApplicationManager(db_session)
+        self.cache_ttl_days = 7  # 1 semana de vida máxima
+    
+    def save_scraped_jobs(self, jobs: List[JobOffer], source: str = "occ", 
+                         keyword: str = None) -> int:
+        """
+        Guarda lista de empleos scrapeados sin crear registros de búsqueda.
+        
+        Args:
+            jobs: Lista de JobOffer del scraper
+            source: Fuente del empleo (default: "occ")
+            keyword: Palabra clave de búsqueda (solo para logging)
+            
+        Returns:
+            Cantidad de empleos guardados o actualizados
+        """
+        try:
+            saved_count = 0
+            
+            for job in jobs:
+                try:
+                    # Reutiliza save_job_offer() que ya hace deduplicación
+                    job_db = self.app_manager.save_job_offer(job)
+                    
+                    # Actualizar campos de cache específicos
+                    job_db.source = source
+                    job_db.scraped_at = datetime.utcnow()
+                    job_db.is_active = True
+                    job_db.expires_at = datetime.utcnow() + timedelta(days=self.cache_ttl_days)
+                    
+                    self.db_session.add(job_db)
+                    saved_count += 1
+                    
+                except Exception as e:
+                    logger.warning(f"⚠️  Error guardando job {job.job_id}: {e}")
+                    continue
+            
+            # Commit una sola vez al final
+            try:
+                self.db_session.commit()
+                logger.info(f"✅ {saved_count} empleos guardados en cache (keyword: {keyword})")
+            except Exception as e:
+                self.db_session.rollback()
+                logger.error(f"❌ Error al commitear empleos en cache: {e}")
+                raise
+            
+            return saved_count
+            
+        except Exception as e:
+            self.db_session.rollback()
+            logger.error(f"Error guardando empleos scrapeados: {e}")
+            raise
+    
+    def get_cached_jobs(self, filters: Optional[Dict] = None, 
+                       limit: int = 100, offset: int = 0) -> Tuple[List[JobPosition], int]:
+        """
+        Obtiene empleos del cache con filtros aplicados.
+        
+        Filtros soportados:
+        - location: Ubicación (búsqueda parcial)
+        - work_mode: Modalidad (presencial, remoto, híbrido)
+        - experience_level: Nivel de experiencia
+        - skills: Habilidades requeridas (búsqueda en JSON)
+        - job_type: Tipo de trabajo (full-time, part-time, etc.)
+        
+        Args:
+            filters: Dict con filtros a aplicar (opcional)
+            limit: Máximo número de resultados
+            offset: Número de resultados a saltar
+            
+        Returns:
+            Tupla (lista de empleos, total sin limit/offset)
+        """
+        try:
+            filters = filters or {}
+            
+            # Query base: empleos activos, no expirados, de fuente OCC
+            query = select(JobPosition).where(
+                JobPosition.source == "occ",
+                JobPosition.is_active == True,
+                JobPosition.expires_at > datetime.utcnow()
+            )
+            
+            # Aplicar filtros
+            if filters.get("location"):
+                query = query.where(
+                    JobPosition.location.ilike(f"%{filters['location']}%")
+                )
+            
+            if filters.get("work_mode"):
+                query = query.where(
+                    JobPosition.work_mode == filters["work_mode"]
+                )
+            
+            if filters.get("experience_level"):
+                query = query.where(
+                    JobPosition.experience_level == filters["experience_level"]
+                )
+            
+            if filters.get("job_type"):
+                query = query.where(
+                    JobPosition.job_type == filters["job_type"]
+                )
+            
+            if filters.get("skills"):
+                # Búsqueda en JSON (simple búsqueda de texto)
+                query = query.where(
+                    JobPosition.skills.ilike(f"%{filters['skills']}%")
+                )
+            
+            # Contar total sin paginación
+            count_query = select(func.count(JobPosition.id)).select_from(JobPosition).where(
+                JobPosition.source == "occ",
+                JobPosition.is_active == True,
+                JobPosition.expires_at > datetime.utcnow()
+            )
+            
+            # Aplicar los mismos filtros al conteo
+            if filters.get("location"):
+                count_query = count_query.where(
+                    JobPosition.location.ilike(f"%{filters['location']}%")
+                )
+            if filters.get("work_mode"):
+                count_query = count_query.where(JobPosition.work_mode == filters["work_mode"])
+            if filters.get("experience_level"):
+                count_query = count_query.where(JobPosition.experience_level == filters["experience_level"])
+            if filters.get("job_type"):
+                count_query = count_query.where(JobPosition.job_type == filters["job_type"])
+            if filters.get("skills"):
+                count_query = count_query.where(JobPosition.skills.ilike(f"%{filters['skills']}%"))
+            
+            total = self.db_session.exec(count_query).first() or 0
+            
+            # Ordenar por más reciente primero
+            query = query.order_by(JobPosition.scraped_at.desc())
+            query = query.offset(offset).limit(limit)
+            
+            jobs = self.db_session.exec(query).all()
+            
+            logger.info(f"📦 Cache query: total={total}, returned={len(jobs)}, filters={filters}")
+            
+            return jobs, total
+            
+        except Exception as e:
+            logger.error(f"Error obteniendo empleos del cache: {e}")
+            raise
+    
+    def invalidate_expired_jobs(self, max_age_days: int = 7) -> int:
+        """
+        Marca como inactivos empleos más antiguos que max_age_days.
+        
+        Implementa soft-delete: solo marca is_active=False en lugar de borrar.
+        
+        Args:
+            max_age_days: Edad máxima en días para considerar un empleo válido
+            
+        Returns:
+            Cantidad de empleos invalidados
+        """
+        try:
+            cutoff_date = datetime.utcnow() - timedelta(days=max_age_days)
+            
+            # Query para encontrar empleos expirados
+            query = select(JobPosition).where(
+                JobPosition.source == "occ",
+                JobPosition.is_active == True,
+                JobPosition.scraped_at < cutoff_date
+            )
+            
+            expired_jobs = self.db_session.exec(query).all()
+            
+            # Soft-delete: marcar como inactivos
+            for job in expired_jobs:
+                job.is_active = False
+                job.updated_at = datetime.utcnow()
+                self.db_session.add(job)
+            
+            self.db_session.commit()
+            
+            logger.info(f"♻️  {len(expired_jobs)} empleos invalidados (edad > {max_age_days} días)")
+            
+            return len(expired_jobs)
+            
+        except Exception as e:
+            self.db_session.rollback()
+            logger.error(f"Error invalidando empleos expirados: {e}")
+            raise
+    
+    def get_cache_stats(self) -> Dict:
+        """
+        Retorna estadísticas del cache actual.
+        
+        Incluye:
+        - Total de empleos en cache
+        - Empleos expirados pero no invalidados
+        - Distribución por fuente
+        - Edad promedio
+        - Próxima limpieza recomendada
+        """
+        try:
+            # Total en cache
+            total_query = select(func.count(JobPosition.id)).where(
+                JobPosition.is_active == True,
+                JobPosition.source == "occ"
+            )
+            total_active = self.db_session.exec(total_query).first() or 0
+            
+            # Empleos expirados (is_active=True pero expires_at < now)
+            expired_query = select(func.count(JobPosition.id)).where(
+                JobPosition.is_active == True,
+                JobPosition.source == "occ",
+                JobPosition.expires_at <= datetime.utcnow()
+            )
+            expired_count = self.db_session.exec(expired_query).first() or 0
+            
+            # Empleos inactivos (soft-deleted)
+            inactive_query = select(func.count(JobPosition.id)).where(
+                JobPosition.is_active == False,
+                JobPosition.source == "occ"
+            )
+            inactive_count = self.db_session.exec(inactive_query).first() or 0
+            
+            # Distribución por location (top 5)
+            location_query = select(
+                JobPosition.location,
+                func.count(JobPosition.id).label("count")
+            ).where(
+                JobPosition.is_active == True,
+                JobPosition.source == "occ"
+            ).group_by(JobPosition.location).order_by(func.count(JobPosition.id).desc()).limit(5)
+            
+            top_locations = dict(self.db_session.exec(location_query).all())
+            
+            # Edad promedio
+            avg_age_query = select(
+                func.avg(func.extract('epoch', datetime.utcnow() - JobPosition.scraped_at))
+            ).where(
+                JobPosition.is_active == True,
+                JobPosition.source == "occ"
+            )
+            avg_age_seconds = self.db_session.exec(avg_age_query).first() or 0
+            avg_age_hours = avg_age_seconds / 3600 if avg_age_seconds else 0
+            
+            return {
+                "total_active": total_active,
+                "expired_but_active": expired_count,
+                "soft_deleted": inactive_count,
+                "total_db_records": total_active + inactive_count,
+                "avg_age_hours": round(avg_age_hours, 2),
+                "top_locations": top_locations,
+                "cache_efficiency": round((total_active / max(total_active + inactive_count, 1)) * 100, 2),
+                "next_cleanup_recommended": expired_count > 100,  # Recomendar si hay >100 expirados
+                "timestamp": datetime.utcnow().isoformat()
+            }
+            
+        except Exception as e:
+            logger.error(f"Error obteniendo estadísticas de cache: {e}")
             raise

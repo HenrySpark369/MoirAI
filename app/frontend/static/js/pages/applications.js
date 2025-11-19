@@ -35,7 +35,8 @@ async function initApplicationsPage() {
  */
 async function loadApplications() {
     try {
-        const response = await apiClient.get('/applications');
+        // ✅ CORRECCIÓN: Usar endpoint correcto /students/my-applications en lugar de /applications
+        const response = await apiClient.get('/students/my-applications');
         applications = response.applications || response.data || [];
 
         // Organizar por estado

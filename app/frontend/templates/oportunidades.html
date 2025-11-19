@@ -33,29 +33,38 @@
     </section>
 
     <div class="listing-container">
-        <!-- Sidebar con Filtros -->
+        <!-- Sidebar con Filtros - Adaptado a modelo JobPosition -->
         <aside class="listing-sidebar">
             <div class="filter-section">
                 <h3 class="filter-title">
                     <i class="fas fa-filter"></i> Filtros
-                    <button class="clear-filters-btn" onclick="clearFilters()">Limpiar</button>
+                    <button class="clear-filters-btn" onclick="clearAllFilters()">Limpiar</button>
                 </h3>
 
-                <!-- Ubicación -->
+                <!-- Ubicación (location field) -->
                 <div class="filter-group">
                     <label class="filter-label">
                         <i class="fas fa-map-marker-alt"></i> Ubicación
                     </label>
-                    <select id="locationFilter" class="filter-select">
-                        <option value="">Todas las ciudades</option>
-                        <option value="córdoba">Córdoba</option>
-                        <option value="mendoza">Mendoza</option>
-                        <option value="buenos-aires">Buenos Aires</option>
-                        <option value="remote">Remoto</option>
+                    <input type="text" id="locationFilter" class="filter-input" placeholder="Buscar ubicación...">
+                </div>
+
+                <!-- Tipo de Trabajo (job_type field) -->
+                <div class="filter-group">
+                    <label class="filter-label">
+                        <i class="fas fa-briefcase"></i> Tipo de Contrato
+                    </label>
+                    <select id="jobTypeFilter" class="filter-select">
+                        <option value="">Todos los tipos</option>
+                        <option value="full-time">Tiempo Completo</option>
+                        <option value="part-time">Tiempo Parcial</option>
+                        <option value="contract">Contratista</option>
+                        <option value="freelance">Freelance</option>
+                        <option value="internship">Pasantía</option>
                     </select>
                 </div>
 
-                <!-- Modalidad -->
+                <!-- Modalidad de Trabajo (work_mode field) -->
                 <div class="filter-group">
                     <label class="filter-label">
                         <i class="fas fa-laptop-house"></i> Modalidad
@@ -73,25 +82,10 @@
                     </div>
                 </div>
 
-                <!-- Sector -->
+                <!-- Nivel de Experiencia (experience_level field) -->
                 <div class="filter-group">
                     <label class="filter-label">
-                        <i class="fas fa-industry"></i> Sector
-                    </label>
-                    <select id="sectorFilter" class="filter-select">
-                        <option value="">Todos los sectores</option>
-                        <option value="tecnologia">Tecnología</option>
-                        <option value="finanzas">Finanzas</option>
-                        <option value="administracion">Administración</option>
-                        <option value="marketing">Marketing</option>
-                        <option value="rrhh">Recursos Humanos</option>
-                    </select>
-                </div>
-
-                <!-- Experiencia -->
-                <div class="filter-group">
-                    <label class="filter-label">
-                        <i class="fas fa-chart-line"></i> Nivel
+                        <i class="fas fa-chart-line"></i> Nivel de Experiencia
                     </label>
                     <div class="filter-checkbox-group">
                         <label class="checkbox-label">
@@ -103,42 +97,98 @@
                         <label class="checkbox-label">
                             <input type="checkbox" value="senior" class="level-filter"> Senior
                         </label>
+                        <label class="checkbox-label">
+                            <input type="checkbox" value="lead" class="level-filter"> Lead/Management
+                        </label>
                     </div>
                 </div>
 
-                <!-- Fecha de publicación -->
+                <!-- Habilidades Técnicas (skills field - JSON) -->
                 <div class="filter-group">
                     <label class="filter-label">
-                        <i class="fas fa-calendar"></i> Fecha
-                    </label>
-                    <select id="dateFilter" class="filter-select">
-                        <option value="">Todas las fechas</option>
-                        <option value="1">Última hora</option>
-                        <option value="24">Últimas 24 horas</option>
-                        <option value="7">Esta semana</option>
-                        <option value="30">Este mes</option>
-                    </select>
-                </div>
-
-                <!-- Skills -->
-                <div class="filter-group">
-                    <label class="filter-label">
-                        <i class="fas fa-code"></i> Tecnologías
+                        <i class="fas fa-code"></i> Habilidades Técnicas
                     </label>
                     <div class="filter-checkbox-group">
-                        <label class="checkbox-label">
-                            <input type="checkbox" value="python" class="skill-filter"> Python
-                        </label>
-                        <label class="checkbox-label">
-                            <input type="checkbox" value="javascript" class="skill-filter"> JavaScript
-                        </label>
-                        <label class="checkbox-label">
-                            <input type="checkbox" value="react" class="skill-filter"> React
-                        </label>
-                        <label class="checkbox-label">
-                            <input type="checkbox" value="sql" class="skill-filter"> SQL
-                        </label>
+                        <!-- Backend -->
+                        <optgroup label="Backend">
+                            <label class="checkbox-label">
+                                <input type="checkbox" value="python" class="skill-filter"> Python
+                            </label>
+                            <label class="checkbox-label">
+                                <input type="checkbox" value="nodejs" class="skill-filter"> Node.js
+                            </label>
+                            <label class="checkbox-label">
+                                <input type="checkbox" value="java" class="skill-filter"> Java
+                            </label>
+                            <label class="checkbox-label">
+                                <input type="checkbox" value="csharp" class="skill-filter"> C#/.NET
+                            </label>
+                            <label class="checkbox-label">
+                                <input type="checkbox" value="golang" class="skill-filter"> Go
+                            </label>
+                        </optgroup>
+                        <!-- Frontend -->
+                        <optgroup label="Frontend">
+                            <label class="checkbox-label">
+                                <input type="checkbox" value="javascript" class="skill-filter"> JavaScript
+                            </label>
+                            <label class="checkbox-label">
+                                <input type="checkbox" value="react" class="skill-filter"> React
+                            </label>
+                            <label class="checkbox-label">
+                                <input type="checkbox" value="vue" class="skill-filter"> Vue.js
+                            </label>
+                            <label class="checkbox-label">
+                                <input type="checkbox" value="angular" class="skill-filter"> Angular
+                            </label>
+                            <label class="checkbox-label">
+                                <input type="checkbox" value="typescript" class="skill-filter"> TypeScript
+                            </label>
+                        </optgroup>
+                        <!-- Datos -->
+                        <optgroup label="Datos">
+                            <label class="checkbox-label">
+                                <input type="checkbox" value="sql" class="skill-filter"> SQL
+                            </label>
+                            <label class="checkbox-label">
+                                <input type="checkbox" value="nosql" class="skill-filter"> NoSQL
+                            </label>
+                            <label class="checkbox-label">
+                                <input type="checkbox" value="bigdata" class="skill-filter"> Big Data
+                            </label>
+                            <label class="checkbox-label">
+                                <input type="checkbox" value="machinelearning" class="skill-filter"> Machine Learning
+                            </label>
+                        </optgroup>
+                        <!-- DevOps -->
+                        <optgroup label="DevOps">
+                            <label class="checkbox-label">
+                                <input type="checkbox" value="docker" class="skill-filter"> Docker
+                            </label>
+                            <label class="checkbox-label">
+                                <input type="checkbox" value="kubernetes" class="skill-filter"> Kubernetes
+                            </label>
+                            <label class="checkbox-label">
+                                <input type="checkbox" value="aws" class="skill-filter"> AWS
+                            </label>
+                            <label class="checkbox-label">
+                                <input type="checkbox" value="cicd" class="skill-filter"> CI/CD
+                            </label>
+                        </optgroup>
                     </div>
+                </div>
+
+                <!-- Ordenamiento -->
+                <div class="filter-group">
+                    <label class="filter-label">
+                        <i class="fas fa-sort"></i> Ordenar por
+                    </label>
+                    <select id="sortFilter" class="filter-select">
+                        <option value="recent">Más Reciente</option>
+                        <option value="match">Mejor Coincidencia</option>
+                        <option value="salary-high">Mayor Salario</option>
+                        <option value="salary-low">Menor Salario</option>
+                    </select>
                 </div>
             </div>
         </aside>
@@ -230,6 +280,7 @@
     <script src="/static/js/utils/form-validator.js"></script>
     <script src="/static/js/protected-page-manager.js"></script>
     <script src="/static/js/navbar-manager.js"></script>
+    <script src="/static/js/services/background-job-search.js"></script>
     <script src="/static/js/pages/jobs-search.js"></script>
 </body>
 

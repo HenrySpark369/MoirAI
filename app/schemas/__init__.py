@@ -51,19 +51,44 @@ class StudentProfile(BaseModel):
     skills: List[str] = []
     soft_skills: List[str] = []
     projects: List[str] = []
+    cv_uploaded: bool = False
+    cv_filename: Optional[str] = None
     created_at: datetime
     last_active: Optional[datetime] = None
     is_active: bool
 
 
 class StudentPublic(BaseModel):
-    """Esquema público de estudiante (para empresas)"""
+    """
+    ✅ Esquema PÚBLICO de estudiante (para empresas sin autenticación)
+    
+    Incluye SOLO información no-sensible:
+    - Datos básicos del perfil
+    - Habilidades técnicas y blandas
+    - Proyectos completados
+    - Indicadores de CV (pero NO contenido)
+    - Metadatos públicos
+    
+    EXCLUYE datos sensibles:
+    - Email (encriptado)
+    - Teléfono (encriptado)  
+    - Historiales académicos detallados
+    - Contenido del CV (profile_text)
+    """
     id: int
     name: str
     program: Optional[str]
     skills: List[str] = []
     soft_skills: List[str] = []
     projects: List[str] = []
+    
+    # ✅ NUEVO: Información de CV (metadata, pero NO contenido)
+    cv_uploaded: bool = False
+    cv_filename: Optional[str] = None
+    
+    # ✅ NUEVO: Metadatos no-sensibles
+    created_at: datetime
+    last_active: Optional[datetime] = None
 
 
 # Company schemas

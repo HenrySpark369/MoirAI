@@ -312,12 +312,15 @@ async function handleForgotPassword() {
     notificationManager.loading('Enviando instrucciones...');
 
     try {
-        await apiClient.post('/auth/forgot-password', { email });
-        notificationManager.hideLoading();
-        notificationManager.success('Revisa tu email para resetear la contraseña');
+        // ⚠️ DESHABILITADO: El endpoint /auth/forgot-password no existe en el backend (MVP)
+        // await apiClient.post('/auth/forgot-password', { email });
+        // notificationManager.hideLoading();
+        // notificationManager.success('Revisa tu email para resetear la contraseña');
+        
+        throw new Error('Recuperación de contraseña no disponible en esta versión');
     } catch (error) {
         notificationManager.hideLoading();
-        notificationManager.error('Error al enviar instrucciones');
+        notificationManager.error('Funcionalidad no disponible: ' + error.message);
     }
 }
 

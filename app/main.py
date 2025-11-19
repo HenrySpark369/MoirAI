@@ -127,18 +127,6 @@ if static_path.exists():
     app.mount("/static", StaticFiles(directory=str(static_path)), name="static")
 
 
-# Event handlers
-@app.on_event("startup")
-async def startup_event():
-    """Inicializar aplicación"""
-    # Crear tablas de base de datos
-    create_db_and_tables()
-    print(f"🚀 {settings.PROJECT_NAME} iniciado correctamente")
-    print(f"📊 Base de datos: {settings.DATABASE_URL}")
-    print(f"🔐 Audit logging: {'✅' if settings.ENABLE_AUDIT_LOGGING else '❌'}")
-    print(f"🌐 Landing page disponible en: http://localhost:8000/")
-
-
 @app.on_event("shutdown")
 async def shutdown_event():
     """Limpiar recursos al cerrar"""
@@ -415,16 +403,15 @@ app.include_router(companies.router, prefix=settings.API_V1_STR)
 from app.api.endpoints import jobs
 app.include_router(jobs.router, prefix=settings.API_V1_STR)
 
-# Phase 2: Admin endpoints - ✅ IMPLEMENTED
-from app.api.endpoints import admin
-app.include_router(admin.router, prefix=settings.API_V1_STR)
-
 # NOTE: suggestions.py ha sido consolidado en jobs.py (autocomplete endpoints)
 # NOTE: matching.py ha sido consolidado en students.py (búsqueda por skills)
 
-# TODO: Otros routers opcionales
-# app.include_router(matching.router, prefix=settings.API_V1_STR)
-# app.include_router(admin.router, prefix=settings.API_V1_STR)
+# ✅ HABILITADOS: Routers de matching y admin para acceso a todos los endpoints
+from app.api.endpoints import matching
+app.include_router(matching.router, prefix=settings.API_V1_STR)
+
+from app.api.endpoints import admin
+app.include_router(admin.router, prefix=settings.API_V1_STR)
 
 
 if __name__ == "__main__":

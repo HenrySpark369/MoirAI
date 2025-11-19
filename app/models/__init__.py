@@ -27,7 +27,7 @@ class Student(SQLModel, table=True):
     
     id: Optional[int] = Field(default=None, primary_key=True)
     name: str = Field(max_length=100, description="Nombre completo del estudiante")
-    email: str = Field(unique=True, max_length=100, description="Email institucional (encriptado)")
+    email: str = Field(unique=True, max_length=255, description="Email institucional (encriptado con Fernet)")
     email_hash: str = Field(default="", max_length=64, description="Hash SHA256 del email para búsquedas")
     phone: Optional[str] = Field(default=None, max_length=255, description="Teléfono (encriptado)")
     phone_hash: Optional[str] = Field(default=None, max_length=64, description="Hash SHA256 del teléfono para búsquedas")
@@ -129,7 +129,7 @@ class Company(SQLModel, table=True):
     
     id: Optional[int] = Field(default=None, primary_key=True)
     name: str = Field(max_length=100, description="Nombre de la empresa")
-    email: str = Field(unique=True, max_length=100, description="Email de contacto (encriptado)")
+    email: str = Field(unique=True, max_length=255, description="Email de contacto (encriptado con Fernet)")
     email_hash: str = Field(default="", max_length=64, description="Hash SHA256 del email para búsquedas")
     industry: Optional[str] = Field(max_length=50, description="Sector industrial")
     size: Optional[str] = Field(max_length=20, description="Tamaño de empresa (startup, pequeña, mediana, grande)")
@@ -301,12 +301,12 @@ class ApiKey(SQLModel, table=True):
     id: Optional[int] = Field(default=None, primary_key=True)
     key_id: str = Field(unique=True, max_length=32, description="Identificador público de la clave")
     key_hash: str = Field(max_length=256, description="Hash de la clave secreta")
-    key_prefix: str = Field(max_length=10, description="Prefijo visible de la clave")
+    key_prefix: str = Field(max_length=50, description="Prefijo visible de la clave (ej: stu_abc123)")
     
     # Usuario propietario
     user_id: int = Field(description="ID del usuario propietario")
     user_type: str = Field(max_length=20, description="Tipo de usuario (student, company, admin)")
-    user_email: str = Field(max_length=100, description="Email del usuario")
+    user_email: str = Field(max_length=255, description="Email del usuario (encriptado con Fernet)")
     
     # Metadatos de la clave
     name: str = Field(max_length=100, description="Nombre descriptivo de la clave")

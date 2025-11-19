@@ -293,6 +293,110 @@ const storageManager = {
     console.log('Authenticated:', this.isAuthenticated());
     console.log('Valid:', this.validate());
     console.groupEnd();
+  },
+
+  // ============================================
+  // ✅ NUEVOS: Profile Management (BD Sync)
+  // ============================================
+
+  /**
+   * ✅ Guardar perfil completo del usuario
+   * Maneja arrays y objetos complejos
+   */
+  setUserProfile(profile) {
+    if (!profile) {
+      console.warn('⚠️ setUserProfile called with empty data');
+      return;
+    }
+
+    try {
+      // Guardar como JSON para preservar estructura
+      localStorage.setItem('currentUserProfile', JSON.stringify(profile));
+      
+      // Guardar timestamp para detectar caducidad
+      localStorage.setItem('currentUserProfile_timestamp', Date.now().toString());
+
+      console.log('✅ User profile saved to cache:', {
+        userId: profile.id,
+        email: profile.email,
+        cvUploaded: profile.cv_uploaded,
+        skillsCount: profile.skills?.length || 0
+      });
+    } catch (error) {
+      console.error('❌ Error saving profile to cache:', error);
+      localStorage.removeItem('currentUserProfile');
+      localStorage.removeItem('currentUserProfile_timestamp');
+    }
+  },
+
+  /**
+   * ✅ Obtener perfil del caché
+   */
+  getUserProfile() {
+    try {
+      const cached = localStorage.getItem('currentUserProfile');
+      if (!cached) {
+        return null;
+      }
+      
+      const profile = JSON.parse(cached);
+      return profile;
+    } catch (error) {
+      console.error('❌ Corrupted profile in cache:', error);
+      localStorage.removeItem('currentUserProfile');
+      localStorage.removeItem('currentUserProfile_timestamp');
+      return null;
+    }
+  },
+
+  /**
+   * ✅ Validar que caché sea válido
+   */
+  validateUserProfile() {
+    const profile = this.getUserProfile();
+    if (!profile) {
+      return false;
+    }
+
+    // Verificar campos críticos
+    const required = ['id', 'email', 'name'];
+    const valid = required.every(field => !!profile[field]);
+    
+    if (!valid) {
+      console.warn('⚠️ Profile missing required fields');
+      this.clearUserProfile();
+      return false;
+    }
+
+    return true;
+  },
+
+  /**
+   * ✅ Limpiar perfil del caché
+   */
+  clearUserProfile() {
+    localStorage.removeItem('currentUserProfile');
+    localStorage.removeItem('currentUserProfile_timestamp');
+    console.log('✅ User profile cleared from cache');
+  },
+
+  /**
+   * ✅ Verificar si caché está expirado
+   */
+  isProfileExpired(maxAgeMinutes = 60) {
+    const timestamp = localStorage.getItem('currentUserProfile_timestamp');
+    if (!timestamp) {
+      return true;
+    }
+
+    const ageMinutes = (Date.now() - parseInt(timestamp)) / (1000 * 60);
+    const expired = ageMinutes > maxAgeMinutes;
+    
+    if (expired) {
+      console.warn(`⚠️ Profile cache expired (${ageMinutes.toFixed(2)} min)`);
+    }
+    
+    return expired;
   }
 };
 

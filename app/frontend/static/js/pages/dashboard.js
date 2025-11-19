@@ -293,7 +293,8 @@ async function loadUserData() {
  */
 async function loadRecommendations() {
     try {
-        const response = await apiClient.get('/matching/student/recommendations');
+        // ✅ CORRECCIÓN: Usar endpoint correcto /students/recommendations
+        const response = await apiClient.get('/students/recommendations');
 
         dashboardData.recommendations = response.recommendations || [];
 
@@ -312,7 +313,8 @@ async function loadRecommendations() {
  */
 async function loadApplications() {
     try {
-        const response = await apiClient.get('/applications/my-applications');
+        // ✅ CORRECCIÓN: Usar endpoint correcto /students/my-applications
+        const response = await apiClient.get('/students/my-applications');
 
         dashboardData.applications = response.applications || [];
 
@@ -327,11 +329,13 @@ async function loadApplications() {
 
 /**
  * Cargar vacantes publicadas (Empresa)
+ * ⚠️ DESHABILITADO: El endpoint /jobs/company/posted no existe en el backend (MVP)
+ * En producción, considerar agregar este endpoint
  */
 async function loadPostedJobs() {
     try {
-        const response = await apiClient.get('/jobs/company/posted');
-        dashboardData.posted_jobs = response.jobs || [];
+        console.warn('loadPostedJobs() deshabilitado - endpoint /jobs/company/posted no implementado en MVP');
+        dashboardData.posted_jobs = [];
         renderPostedJobs();
     } catch (error) {
         notificationManager.warning('No se pudieron cargar las vacantes publicadas');
@@ -341,11 +345,13 @@ async function loadPostedJobs() {
 
 /**
  * Cargar candidatos destacados (Empresa)
+ * ⚠️ DESHABILITADO: El endpoint /matching/company/top-candidates no existe en el backend (MVP)
+ * En producción, considerar agregar este endpoint
  */
 async function loadTopCandidates() {
     try {
-        const response = await apiClient.get('/matching/company/top-candidates');
-        dashboardData.top_candidates = response.candidates || [];
+        console.warn('loadTopCandidates() deshabilitado - endpoint /matching/company/top-candidates no implementado en MVP');
+        dashboardData.top_candidates = [];
         renderTopCandidates();
     } catch (error) {
         notificationManager.warning('No se pudieron cargar los candidatos destacados');
@@ -358,7 +364,8 @@ async function loadTopCandidates() {
  */
 async function loadKPIs() {
     try {
-        const response = await apiClient.get('/admin/kpis');
+        // ✅ CORRECCIÓN: Usar endpoint correcto /admin/analytics/kpis
+        const response = await apiClient.get('/admin/analytics/kpis');
         dashboardData.kpis = response.kpis || {};
         renderKPIs();
     } catch (error) {
@@ -369,11 +376,13 @@ async function loadKPIs() {
 
 /**
  * Cargar monitoreo de servicios (Admin)
+ * ⚠️ DESHABILITADO: El endpoint /admin/monitoring no existe en el backend (MVP)
+ * En producción, considerar agregar este endpoint
  */
 async function loadMonitoring() {
     try {
-        const response = await apiClient.get('/admin/monitoring');
-        dashboardData.monitoring = response.monitoring || {};
+        console.warn('loadMonitoring() deshabilitado - endpoint /admin/monitoring no implementado en MVP');
+        dashboardData.monitoring = {};
         renderMonitoring();
     } catch (error) {
         notificationManager.warning('No se pudieron cargar los datos de monitoreo');
@@ -386,7 +395,8 @@ async function loadMonitoring() {
  */
 async function loadActivityLog() {
     try {
-        const response = await apiClient.get('/admin/activity-log');
+        // ✅ CORRECCIÓN: Usar endpoint correcto /admin/audit-log
+        const response = await apiClient.get('/admin/audit-log');
         dashboardData.activityLog = response.logs || [];
         renderActivityLog();
     } catch (error) {
@@ -601,7 +611,7 @@ function renderStats() {
         'applications-count': stats.applications_count || 0,
         'match-score': stats.avg_match_score ? Math.round(stats.avg_match_score) + '%' : '0%',
         'recommendations-count': stats.recommendations_count || 0,
-        'cv-status': currentUser.cv_uploaded ? 'Sí ✓' : 'No'
+        'cv-status': (currentUser && currentUser.cv_uploaded) ? 'Sí ✓' : 'No'
     };
 
     Object.keys(statsElements).forEach(id => {
