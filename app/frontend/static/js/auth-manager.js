@@ -202,11 +202,32 @@ class AuthManager {
         return null
       }
 
-      // ✅ CAMBIO CRÍTICO: Usar /students/me (no /auth/me)
-      // Retorna StudentProfile completo, no solo info básica
-      const response = await this.api.get('/students/me')
+      // ✅ CAMBIO CRÍTICO: Usar endpoint correcto según el rol
+      // Estudiantes: /students/me
+      // Empresas: /companies/me
+      // Obtener rol de this.currentUser O de localStorage como fallback
+      let role = this.currentUser?.role
+      
+      // Si no hay rol en this.currentUser, obtener del localStorage
+      if (!role) {
+        role = localStorage.getItem('user_role')
+        console.log(`📍 Rol obtenido del localStorage: ${role}`)
+      }
+      
+      const endpoint = role === 'company' ? '/companies/me' : '/students/me'
+      
+      console.log(`📍 getCurrentUser: Usando endpoint ${endpoint} para rol: ${role}`)
+      
+      const response = await this.api.get(endpoint)
       
       this.currentUser = response.user || response
+
+      // ✅ NUEVA LÓGICA: Guardar el rol de la respuesta en localStorage
+      // Esto asegura que siempre tenemos el rol correcto para la próxima llamada
+      if (this.currentUser && this.currentUser.role) {
+        localStorage.setItem('user_role', this.currentUser.role)
+        console.log(`✅ Rol actualizado en localStorage: ${this.currentUser.role}`)
+      }
 
       // ✅ Sincronizar con localStorage como caché (robusto)
       try {
@@ -214,7 +235,7 @@ class AuthManager {
         localStorage.setItem('currentUserProfile_timestamp', Date.now().toString())
         console.log('✅ User profile cached:', { 
           userId: this.currentUser.id,
-          cvUploaded: this.currentUser.cv_uploaded 
+          role: this.currentUser.role || role
         })
       } catch (storageError) {
         console.warn('⚠️ localStorage no disponible:', storageError)

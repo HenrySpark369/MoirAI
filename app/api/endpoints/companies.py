@@ -47,7 +47,8 @@ def _convert_to_company_profile(company: Company) -> CompanyProfile:
     return CompanyProfile(
         id=company.id,
         name=company.name,
-        email=company.email,
+        role="company",  # ✅ INCLUIR role para que frontend siempre sepa el rol
+        email=company.get_email(),  # ✅ DESENCRIPTAR email antes de retornar
         industry=company.industry,
         size=company.size,
         location=company.location,
@@ -231,6 +232,80 @@ async def list_companies(
         "limit": limit,
         "data": data
     }
+
+
+# ============================================================================
+# ✅ NUEVO ENDPOINT CRÍTICO: GET /me
+# Obtiene el perfil COMPLETO de la empresa autenticada desde BD
+# Usado por frontend para sincronización de datos
+# ============================================================================
+
+@router.get("/me", response_model=CompanyProfile)
+async def get_my_company_profile(
+    session: AsyncSession = Depends(get_session),
+    current_user: UserContext = Depends(AuthService.get_current_user)
+):
+    """
+    ✅ ENDPOINT CRÍTICO: Obtener perfil COMPLETO de la empresa autenticada
+    
+    Este es el endpoint que el frontend DEBE usar para obtener datos frescos de BD.
+    
+    Características:
+    - ✅ No requiere parámetro de ID (usa usuario autenticado)
+    - ✅ Retorna CompanyProfile completo
+    - ✅ Sincronización de datos del usuario
+    - ✅ Recuperación de datos si localStorage fue borrado
+    
+    Retorna: CompanyProfile con TODOS los campos:
+    {
+        "id": 1,
+        "name": "Tech Solutions",
+        "email": "contact@techsolutions.com",
+        "industry": "Tecnología",
+        "size": "mediana",
+        "location": "México DF",
+        "is_verified": true,
+        "is_active": true,
+        "created_at": "2025-11-19T10:30:00"
+    }
+    """
+    try:
+        # Verificar que es empresa
+        if current_user.role != "company":
+            raise HTTPException(
+                status_code=403,
+                detail="Solo empresas pueden acceder a este endpoint"
+            )
+        
+        # Buscar empresa por su ID
+        company = await session.get(Company, current_user.user_id)
+        
+        if not company:
+            await _log_audit_action(
+                session, "GET_PROFILE_ME", f"user_id:{current_user.user_id}",
+                current_user, success=False, error_message="Empresa no encontrada"
+            )
+            raise HTTPException(
+                status_code=404,
+                detail="Empresa no encontrada"
+            )
+        
+        await _log_audit_action(
+            session, "GET_PROFILE_ME", f"company_id:{company.id}",
+            current_user, details="Perfil completo de la empresa autenticada"
+        )
+        
+        return _convert_to_company_profile(company)
+        
+    except HTTPException:
+        raise
+    except Exception as e:
+        print(f"Error getting my company profile: {e}")
+        await _log_audit_action(
+            session, "GET_PROFILE_ME", f"user_id:{current_user.user_id}",
+            current_user, success=False, error_message=str(e)
+        )
+        raise HTTPException(status_code=500, detail=str(e))
 
 
 # ============================================================================

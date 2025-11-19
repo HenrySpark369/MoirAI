@@ -28,7 +28,7 @@ async function initProfilePage() {
 
 /**
  * ✅ Cargar perfil del usuario desde BD (NO localStorage)
- * Usa GET /students/me (datos frescos)
+ * Funciona para estudiantes y empresas
  * Si falla, usa localStorage como fallback
  */
 async function loadUserProfile() {
@@ -42,9 +42,13 @@ async function loadUserProfile() {
             throw new Error('No se pudo obtener datos del usuario');
         }
 
+        const isStudent = authManager.isStudent();
+        const isCompany = authManager.isCompany();
+
         console.log('✅ Perfil cargado exitosamente:', {
             id: currentUser.id,
             email: currentUser.email,
+            role: isStudent ? 'student' : isCompany ? 'company' : 'unknown',
             cvUploaded: currentUser.cv_uploaded,
             skillsCount: currentUser.skills?.length || 0
         });
@@ -52,47 +56,64 @@ async function loadUserProfile() {
         // Llenar formulario con datos existentes (de BD)
         const form = document.getElementById('profile-form');
         if (form) {
+            // Campos comunes a ambos roles
             form.querySelector('[name="first_name"]').value = currentUser.first_name || '';
             form.querySelector('[name="last_name"]').value = currentUser.last_name || '';
             form.querySelector('[name="email"]').value = currentUser.email || '';
             form.querySelector('[name="phone"]').value = currentUser.phone || '';
             form.querySelector('[name="bio"]').value = currentUser.bio || '';
 
-            // Llenar campos específicos de estudiante
-            if (authManager.isStudent()) {
+            // Campos específicos de estudiante
+            if (isStudent) {
                 const studentForm = document.getElementById('student-fields');
                 if (studentForm) {
+                    studentForm.style.display = 'block';
                     studentForm.querySelector('[name="career"]').value = currentUser.career || '';
                     studentForm.querySelector('[name="year"]').value = currentUser.year || '';
                     studentForm.querySelector('[name="program"]').value = currentUser.program || '';
                 }
+            } else if (isCompany) {
+                // Ocultar campos específicos de estudiante si es empresa
+                const studentForm = document.getElementById('student-fields');
+                if (studentForm) {
+                    studentForm.style.display = 'none';
+                }
             }
         }
 
-        // ✅ Mostrar CV si BD indica que existe (NO localStorage)
-        if (currentUser.cv_uploaded && currentUser.cv_filename) {
-            console.log('📄 CV encontrado:', currentUser.cv_filename);
-            showCVStatus(true, currentUser.cv_filename, currentUser.cv_upload_date);
-        } else {
-            console.log('⚪ Sin CV');
-            showCVStatus(false);
-        }
+        // ✅ Mostrar CV solo para estudiantes
+        if (isStudent) {
+            if (currentUser.cv_uploaded && currentUser.cv_filename) {
+                console.log('📄 CV encontrado:', currentUser.cv_filename);
+                showCVStatus(true, currentUser.cv_filename, currentUser.cv_upload_date);
+            } else {
+                console.log('⚪ Sin CV');
+                showCVStatus(false);
+            }
 
-        // ✅ Mostrar habilidades de BD
-        const allSkills = [];
-        
-        if (currentUser.skills && Array.isArray(currentUser.skills)) {
-            allSkills.push(...currentUser.skills);
-            console.log(`📚 ${currentUser.skills.length} habilidades técnicas`);
-        }
-        
-        if (currentUser.soft_skills && Array.isArray(currentUser.soft_skills)) {
-            allSkills.push(...currentUser.soft_skills);
-            console.log(`💬 ${currentUser.soft_skills.length} habilidades blandas`);
-        }
-        
-        if (allSkills.length > 0) {
-            displayInferredSkills(allSkills);
+            // ✅ Mostrar habilidades de BD (solo para estudiantes)
+            const allSkills = [];
+            
+            if (currentUser.skills && Array.isArray(currentUser.skills)) {
+                allSkills.push(...currentUser.skills);
+                console.log(`📚 ${currentUser.skills.length} habilidades técnicas`);
+            }
+            
+            if (currentUser.soft_skills && Array.isArray(currentUser.soft_skills)) {
+                allSkills.push(...currentUser.soft_skills);
+                console.log(`💬 ${currentUser.soft_skills.length} habilidades blandas`);
+            }
+            
+            if (allSkills.length > 0) {
+                displayInferredSkills(allSkills);
+            }
+        } else if (isCompany) {
+            // Ocultar secciones de CV y habilidades para empresas
+            const cvCard = document.querySelector('.profile-card:has(#cv-upload-area)');
+            if (cvCard) cvCard.style.display = 'none';
+            
+            const skillsCard = document.querySelector('.profile-card:has(#inferred-skills)');
+            if (skillsCard) skillsCard.style.display = 'none';
         }
 
         return currentUser;
@@ -229,6 +250,10 @@ async function handleCVUpload(file) {
             email: currentUser.email,
             program: currentUser.career || currentUser.program || ''
         };
+        
+        // ✨ DEBUG: Loguear metadatos antes de enviar
+        console.log('📤 Enviando metadatos de CV:', metadata);
+        console.log('📄 Archivo:', { name: file.name, size: file.size, type: file.type });
 
         // Usar XMLHttpRequest para obtener progress con FormData
         const response = await uploadFileWithProgress(
@@ -318,9 +343,12 @@ function uploadFileWithProgress(url, file, metadata, onProgress) {
             } else {
                 try {
                     const error = JSON.parse(xhr.responseText);
+                    console.error('❌ Upload error response:', error);
                     reject(new Error(error.detail || error.message || 'Upload failed'));
                 } catch (e) {
-                    reject(new Error(`Upload failed with status ${xhr.status}`));
+                    // Si no puede parsear JSON, loguear la respuesta como texto
+                    console.error('❌ Upload error (non-JSON):', xhr.responseText);
+                    reject(new Error(`Upload failed with status ${xhr.status}: ${xhr.responseText}`));
                 }
             }
         });

@@ -61,9 +61,16 @@ async def register_user(
         # ✅ ASYNC: Crear usuario
         password_hash = hashlib.sha256(user_data.password.encode()).hexdigest()
         
+        # ✅ Extraer first_name y last_name del nombre combinado
+        name_parts = user_data.name.split(' ', 1)
+        first_name = name_parts[0] if name_parts else user_data.name
+        last_name = name_parts[1] if len(name_parts) > 1 else ""
+        
         if user_data.role == "student":
             user = Student(
                 name=user_data.name,
+                first_name=first_name,
+                last_name=last_name,
                 email=user_data.email,  # Se encripta en el setter
                 email_hash=email_hash,
                 hashed_password=password_hash,

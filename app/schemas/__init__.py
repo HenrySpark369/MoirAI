@@ -32,7 +32,14 @@ class StudentCreate(StudentBase):
 class StudentUpdate(BaseModel):
     """Esquema para actualizar estudiante"""
     name: Optional[str] = Field(None, min_length=1, max_length=100)
+    first_name: Optional[str] = Field(None, max_length=50)
+    last_name: Optional[str] = Field(None, max_length=50)
+    email: Optional[str] = Field(None)  # No editable en el formulario, pero permitido en API
+    phone: Optional[str] = Field(None, max_length=20)
+    bio: Optional[str] = Field(None)
     program: Optional[str] = Field(None, max_length=100)
+    career: Optional[str] = Field(None, max_length=100)
+    year: Optional[str] = Field(None, max_length=20)
 
 
 class StudentSkillsUpdate(BaseModel):
@@ -46,13 +53,21 @@ class StudentProfile(BaseModel):
     """Esquema para perfil completo de estudiante"""
     id: int
     name: str
+    role: str = "student"  # ✅ Incluir role para que frontend siempre sepa el rol
+    first_name: Optional[str] = None
+    last_name: Optional[str] = None
     email: str
-    program: Optional[str]
+    phone: Optional[str] = None
+    bio: Optional[str] = None
+    program: Optional[str] = None
+    career: Optional[str] = None
+    year: Optional[str] = None
     skills: List[str] = []
     soft_skills: List[str] = []
     projects: List[str] = []
     cv_uploaded: bool = False
     cv_filename: Optional[str] = None
+    cv_upload_date: Optional[datetime] = None
     created_at: datetime
     last_active: Optional[datetime] = None
     is_active: bool
@@ -109,6 +124,7 @@ class CompanyCreate(CompanyBase):
 class CompanyProfile(CompanyBase):
     """Esquema para perfil de empresa"""
     id: int
+    role: str = "company"  # ✅ Incluir role para que frontend siempre sepa el rol
     is_verified: bool
     is_active: bool
     created_at: datetime

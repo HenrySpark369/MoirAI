@@ -45,16 +45,35 @@ async def _log_audit_action(session: AsyncSession, action: str, resource: str,
 
 def _convert_to_student_profile(student: Student) -> StudentProfile:
     """Convierte modelo Student a StudentProfile"""
+    # Extraer first_name y last_name del nombre combinado si no están presentes
+    first_name = student.first_name
+    last_name = student.last_name
+    
+    if not first_name or not last_name:
+        parts = student.name.split(' ', 1)
+        if not first_name:
+            first_name = parts[0] if parts else ""
+        if not last_name:
+            last_name = parts[1] if len(parts) > 1 else ""
+    
     return StudentProfile(
         id=student.id,
         name=student.name,
-        email=student.email,
+        role="student",  # ✅ INCLUIR role para que frontend siempre sepa el rol
+        first_name=first_name,
+        last_name=last_name,
+        email=student.get_email(),  # ✅ DESENCRIPTAR email antes de retornar
+        phone=student.get_phone(),  # ✅ DESENCRIPTAR phone antes de retornar
+        bio=student.bio,
         program=student.program,
+        career=student.career,
+        year=student.year,
         skills=json.loads(student.skills or "[]"),
         soft_skills=json.loads(student.soft_skills or "[]"),
         projects=json.loads(student.projects or "[]"),
         cv_uploaded=student.cv_uploaded or False,
         cv_filename=student.cv_filename,
+        cv_upload_date=student.cv_upload_date,
         created_at=student.created_at,
         last_active=student.last_active,
         is_active=student.is_active
@@ -160,21 +179,43 @@ async def upload_resume(
     try:
         meta_dict = json.loads(meta)
         student_data = ResumeUploadRequest(**meta_dict)
-    except Exception as e:
+    except json.JSONDecodeError as e:
+        print(f"❌ JSON decode error: {str(e)}")
         await _log_audit_action(
-            session, "UPLOAD_RESUME", f"email:{meta[:50]}...",
-            current_user, success=False, error_message=f"Metadatos inválidos: {str(e)}"
+            session, "UPLOAD_RESUME", f"email:{meta[:50] if meta else 'unknown'}...",
+            current_user, success=False, error_message=f"JSON inválido: {str(e)}"
         )
         raise HTTPException(
             status_code=400, 
-            detail=f"Metadatos inválidos: {str(e)}"
+            detail=f"Metadatos JSON inválidos: {str(e)}"
+        )
+    except ValueError as e:
+        print(f"❌ Validation error: {str(e)}")
+        await _log_audit_action(
+            session, "UPLOAD_RESUME", f"email:{meta_dict.get('email', 'unknown')}",
+            current_user, success=False, error_message=f"Validación fallida: {str(e)}"
+        )
+        raise HTTPException(
+            status_code=400, 
+            detail=f"Validación de metadatos fallida: {str(e)}"
+        )
+    except Exception as e:
+        print(f"❌ Unexpected error in metadata parsing: {str(e)}")
+        await _log_audit_action(
+            session, "UPLOAD_RESUME", f"email:unknown",
+            current_user, success=False, error_message=f"Error inesperado: {str(e)}"
+        )
+        raise HTTPException(
+            status_code=400, 
+            detail=f"Error procesando metadatos: {str(e)}"
         )
     
     # Verificar si ya existe estudiante con ese email (usando hash para comparación segura)
     email_hash = hashlib.sha256(student_data.email.lower().encode()).hexdigest()
-    existing = await session.execute(
+    result = await session.execute(
         select(Student).where(Student.email_hash == email_hash)
-    ).first()
+    )
+    existing = result.scalars().first()
     
     # Extraer texto del archivo
     try:
@@ -825,7 +866,13 @@ async def update_student(
     # Registrar valores anteriores para auditoría
     old_values = {
         "name": student.name,
-        "program": student.program
+        "first_name": student.first_name,
+        "last_name": student.last_name,
+        "phone": student.phone,
+        "bio": student.bio,
+        "program": student.program,
+        "career": student.career,
+        "year": student.year
     }
     
     # Actualizar campos proporcionados
@@ -833,9 +880,27 @@ async def update_student(
     if student_update.name is not None:
         student.name = student_update.name
         updated_fields.append("name")
+    if student_update.first_name is not None:
+        student.first_name = student_update.first_name
+        updated_fields.append("first_name")
+    if student_update.last_name is not None:
+        student.last_name = student_update.last_name
+        updated_fields.append("last_name")
+    if student_update.phone is not None:
+        student.set_phone(student_update.phone)
+        updated_fields.append("phone")
+    if student_update.bio is not None:
+        student.bio = student_update.bio
+        updated_fields.append("bio")
     if student_update.program is not None:
         student.program = student_update.program
         updated_fields.append("program")
+    if student_update.career is not None:
+        student.career = student_update.career
+        updated_fields.append("career")
+    if student_update.year is not None:
+        student.year = student_update.year
+        updated_fields.append("year")
     
     student.updated_at = datetime.utcnow()
     
