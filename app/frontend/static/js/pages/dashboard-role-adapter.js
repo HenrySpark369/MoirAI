@@ -22,9 +22,9 @@ class DashboardRoleAdapter {
                 this.role = localStorage.getItem('user_role') || 'student';
             }
             
-            // Renderizar interfaz según role
+            // ✅ Solo renderizar la interfaz de contenido, NO la navbar
+            // La navbar es responsabilidad EXCLUSIVA de navbar-manager.js
             this.setupRoleInterface();
-            this.setupNavMenu();
             
         } catch (error) {
             console.error('Error inicializando role adapter:', error);
@@ -63,64 +63,6 @@ class DashboardRoleAdapter {
                 document.getElementById('student-content').style.display = 'block';
                 this.setupStudentStats();
         }
-    }
-
-    /**
-     * Configurar menú de navegación según el rol
-     */
-    setupNavMenu() {
-        const navList = document.querySelector('.nav-list');
-        if (!navList) return;
-
-        // Limpiar items adicionales (excepto Dashboard)
-        const items = navList.querySelectorAll('.nav-item');
-        if (items.length > 1) {
-            items.forEach((item, index) => {
-                if (index > 0) item.remove();
-            });
-        }
-
-        // Agregar items según role
-        const menuItems = this.getMenuItemsByRole();
-        menuItems.forEach(item => {
-            const li = document.createElement('li');
-            li.className = 'nav-item';
-            li.innerHTML = `
-                <a href="${item.href}" class="nav-link">
-                    <i class="fas ${item.icon}"></i>
-                    <span>${item.label}</span>
-                </a>
-            `;
-            navList.appendChild(li);
-        });
-    }
-
-    /**
-     * Obtener items del menú según el role
-     */
-    getMenuItemsByRole() {
-        const menus = {
-            'student': [
-                { href: '/dashboard', icon: 'fa-home', label: 'Dashboard' },
-                { href: '/oportunidades', icon: 'fa-briefcase', label: 'Oportunidades' },
-                { href: '/profile', icon: 'fa-user', label: 'Mi Perfil' },
-                { href: '/applications', icon: 'fa-file-alt', label: 'Mis Aplicaciones' }
-            ],
-            'company': [
-                { href: '/dashboard', icon: 'fa-home', label: 'Dashboard' },
-                { href: '/buscar-candidatos', icon: 'fa-search', label: 'Buscar Candidatos' },
-                { href: '/profile', icon: 'fa-building', label: 'Mi Empresa' },
-                { href: '/mis-vacantes', icon: 'fa-briefcase', label: 'Mis Vacantes' }
-            ],
-            'admin': [
-                { href: '/dashboard', icon: 'fa-home', label: 'Dashboard' },
-                { href: '/admin/users', icon: 'fa-users', label: 'Usuarios' },
-                { href: '/admin/analytics', icon: 'fa-chart-line', label: 'Analítica' },
-                { href: '/admin/settings', icon: 'fa-cog', label: 'Configuración' }
-            ]
-        };
-
-        return menus[this.role] || menus['student'];
     }
 
     /**

@@ -101,9 +101,9 @@ async def create_student(
             detail="Solo estudiantes y administradores pueden crear perfiles"
         )
     # Verificar si ya existe estudiante con ese email
-    existing = await session.execute(
+    existing = (await session.execute(
         select(Student).where(Student.email == student_data.email)
-    ).first()
+    )).scalars().first()
     
     if existing:
         await _log_audit_action(
@@ -395,25 +395,25 @@ async def get_students_stats(
         )
     # Contadores básicos
     total_students = await session.execute(select(func.count(Student.id))).scalars().first()
-    active_students = await session.execute(
+    active_students = (await session.execute(
         select(func.count(Student.id)).where(Student.is_active == True)
-    ).first()
+    )).scalars().first()
     
     # Estudiantes por programa
-    programs_query = await session.execute(
+    programs_query = (await session.execute(
         select(Student.program, func.count(Student.id))
         .where(Student.is_active == True)
         .group_by(Student.program)
-    ).all()
+    )).all()
     
     programs_stats = {program: count for program, count in programs_query if program}
     
     # Estudiantes recientes (últimos 30 días)
     thirty_days_ago = datetime.utcnow() - timedelta(days=30)
-    recent_students = await session.execute(
+    recent_students = (await session.execute(
         select(func.count(Student.id))
         .where(Student.created_at >= thirty_days_ago)
-    ).first()
+    )).scalars().first()
     
     stats = {
         "total_students": total_students,
@@ -459,9 +459,9 @@ async def get_student_profile(
             )
         
         # Buscar estudiante
-        student = await session.execute(
+        student = (await session.execute(
             select(Student).where(Student.email_hash == hashlib.sha256(current_user.email.encode()).hexdigest())
-        ).first()
+        )).scalars().first()
         
         if not student:
             raise HTTPException(status_code=404, detail="Perfil de estudiante no encontrado")
@@ -516,9 +516,9 @@ async def get_my_applications(
             )
         
         # Buscar estudiante
-        student = await session.execute(
+        student = (await session.execute(
             select(Student).where(Student.email_hash == hashlib.sha256(current_user.email.encode()).hexdigest())
-        ).first()
+        )).scalars().first()
         
         if not student:
             raise HTTPException(status_code=404, detail="Perfil de estudiante no encontrado")
@@ -535,11 +535,10 @@ async def get_my_applications(
         total_query = select(JobApplicationDB).where(JobApplicationDB.user_id == student.id)
         if status:
             total_query = total_query.where(JobApplicationDB.status == status)
-        total = len(await session.execute(total_query).scalars().all())
+        total = len((await session.execute(total_query)).scalars().all())
         
         # Aplicar paginación
-        applications = await session.execute(query.offset(offset).limit(limit)).scalars().all()
-        
+        applications = (await session.execute(query.offset(offset).limit(limit))).scalars().all()
         # Enriquecer con detalles de empleos
         result = []
         for app in applications:
@@ -606,9 +605,9 @@ async def get_student_recommendations(
             )
         
         # Buscar estudiante
-        student = await session.execute(
+        student = (await session.execute(
             select(Student).where(Student.email_hash == hashlib.sha256(current_user.email.encode()).hexdigest())
-        ).first()
+        )).scalars().first()
         
         if not student:
             raise HTTPException(status_code=404, detail="Perfil de estudiante no encontrado")
@@ -618,9 +617,9 @@ async def get_student_recommendations(
         
         # Buscar empleos activos
         from app.models import JobPosition
-        all_jobs = await session.execute(
+        all_jobs = (await session.execute(
             select(JobPosition).where(JobPosition.is_active == True)
-        ).all()
+        )).scalars().all()
         
         # Calcular scores de compatibilidad y ordenar
         scored_jobs = []
@@ -818,9 +817,9 @@ async def get_student_by_email(
             detail="Solo administradores pueden buscar por email"
         )
     
-    student = await session.execute(
+    student = (await session.execute(
         select(Student).where(Student.email == email)
-    ).first()
+    )).scalars().first()
     
     if not student:
         await _log_audit_action(
@@ -1554,9 +1553,9 @@ async def search_students_by_skills(
                 detail="La empresa debe estar verificada para buscar candidatos"
             )
     
-    students = await session.execute(
+    students = (await session.execute(
         select(Student).where(Student.is_active == True)
-    ).all()
+    )).scalars().all()
     
     matching_students = []
     

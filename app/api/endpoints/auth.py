@@ -222,7 +222,8 @@ async def login_user(
         
         try:
             # Generar componentes de la clave
-            key_id = secrets.token_urlsafe(16)
+            # Usar '-' como separador en lugar de '_' para evitar conflictos en parsing
+            key_id = secrets.token_urlsafe(16).replace('_', '-')  # Asegurar que NO contiene '_'
             secret_part = secrets.token_urlsafe(32)
             full_key = f"{key_id}_{secret_part}"
             key_hash = hashlib.sha256(full_key.encode()).hexdigest()

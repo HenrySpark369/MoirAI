@@ -12,22 +12,24 @@ class NavbarManager {
         this.userRole = null;
         this.userName = null;
         this.currentPage = null;
+        this.initialized = false;
     }
 
-    /**
-     * Inicializar navbar manager
-     */
     async initialize() {
+        if (this.initialized) {
+            console.log('ℹ️ NavbarManager ya inicializado');
+            return;
+        }
+        this.initialized = true;
+        
         console.log('🔄 Inicializando NavbarManager...');
         
         try {
-            // Detectar si está autenticado (usando storageManager si disponible)
             if (typeof storageManager !== 'undefined') {
                 this.isAuthenticated = storageManager.isAuthenticated();
                 this.userRole = storageManager.getUserRole();
                 this.userName = storageManager.getUserName() || storageManager.getUserEmail() || 'Usuario';
             } else {
-                // Fallback a localStorage directo
                 this.isAuthenticated = !!localStorage.getItem('api_key');
                 this.userRole = localStorage.getItem('user_role') || null;
                 this.userName = localStorage.getItem('user_name') || localStorage.getItem('user_email') || 'Usuario';
@@ -41,7 +43,6 @@ class NavbarManager {
                 currentPage: this.currentPage
             });
 
-            // Actualizar navbar según estado
             if (this.isAuthenticated) {
                 this.setupAuthenticatedNavbar();
             } else {
@@ -54,9 +55,6 @@ class NavbarManager {
         }
     }
 
-    /**
-     * Obtener página actual desde URL
-     */
     getCurrentPage() {
         const path = window.location.pathname;
         if (path === '/' || path === '') return 'home';
@@ -64,32 +62,32 @@ class NavbarManager {
         if (path === '/oportunidades') return 'oportunidades';
         if (path === '/profile') return 'profile';
         if (path === '/applications') return 'applications';
-        if (path === '/buscar-candidatos') return 'buscar-candidatos';
-        if (path === '/mis-vacantes') return 'mis-vacantes';
-        if (path === '/company/mis-vacantes') return 'mis-vacantes';
-        if (path === '/admin/users') return 'admin-users';
-        if (path === '/admin/analytics') return 'admin-analytics';
-        if (path === '/admin/settings') return 'admin-settings';
-        if (path === '/login') return 'login';
-        if (path === '/registro') return 'registro';
-        return 'other';
+        if (path === '/admin') return 'admin';
+        return 'home';
     }
 
-    /**
-     * Configurar navbar para usuario autenticado
-     */
     setupAuthenticatedNavbar() {
-        console.log('🔐 Configurando navbar autenticada...');
+        console.log('🔐 Configurando navbar autenticada para:', this.userRole);
         
         const navbarContainer = document.getElementById('navbar-container') || document.querySelector('.navbar');
         if (!navbarContainer) {
-            console.warn('⚠️ Navbar container no encontrada en el DOM');
+            console.warn('⚠️ Navbar container no encontrada');
             return;
         }
 
-        const menuItems = this.getMenuItemsByRole();
-        
-        // Renderizar navbar completo dinámicamente
+        navbarContainer.innerHTML = '';
+
+        const menuItems = this.getMenuItemsByRole().map(item => {
+            return `
+                <li class="nav-item">
+                    <a href="${item.href}" class="nav-link ${this.currentPage === item.page ? 'active' : ''}">
+                        <i class="fas ${item.icon}"></i>
+                        <span>${item.label}</span>
+                    </a>
+                </li>
+            `;
+        }).join('');
+
         navbarContainer.innerHTML = `
             <div class="nav-container">
                 <div class="nav-logo">
@@ -101,17 +99,7 @@ class NavbarManager {
 
                 <div class="nav-menu" id="nav-menu">
                     <ul class="nav-list">
-                        ${menuItems.map(item => {
-                            const isActive = item.page === this.currentPage ? 'active' : '';
-                            return `
-                                <li class="nav-item">
-                                    <a href="${item.href}" class="nav-link ${isActive}">
-                                        <i class="fas ${item.icon}"></i>
-                                        <span>${item.label}</span>
-                                    </a>
-                                </li>
-                            `;
-                        }).join('')}
+                        ${menuItems}
                     </ul>
                 </div>
 
@@ -129,9 +117,6 @@ class NavbarManager {
         console.log('✅ Navbar autenticada configurada para role:', this.userRole);
     }
 
-    /**
-     * Configurar navbar para usuario no autenticado
-     */
     setupPublicNavbar() {
         console.log('🌐 Configurando navbar pública...');
         
@@ -141,7 +126,8 @@ class NavbarManager {
             return;
         }
 
-        // Renderizar navbar pública dinámicamente
+        navbarContainer.innerHTML = '';
+
         navbarContainer.innerHTML = `
             <div class="nav-container">
                 <div class="nav-logo">
@@ -177,9 +163,8 @@ class NavbarManager {
         `;
 
         console.log('✅ Navbar pública configurada');
-    }    /**
-     * Obtener items del menú según el role
-     */
+    }
+
     getMenuItemsByRole() {
         const menus = {
             'student': [
@@ -205,9 +190,6 @@ class NavbarManager {
         return menus[this.userRole] || menus['student'];
     }
 
-    /**
-     * Redirigir si no está autenticado
-     */
     requireAuth() {
         if (!this.isAuthenticated) {
             console.log('🔒 No autenticado, redirigiendo a /login...');
@@ -217,9 +199,6 @@ class NavbarManager {
         return true;
     }
 
-    /**
-     * Redirigir si está autenticado
-     */
     requirePublic() {
         if (this.isAuthenticated) {
             console.log('✅ Ya autenticado, redirigiendo a /dashboard...');
@@ -229,9 +208,6 @@ class NavbarManager {
         return true;
     }
 
-    /**
-     * Redirigir si no es el rol correcto
-     */
     requireRole(allowedRoles) {
         if (!Array.isArray(allowedRoles)) {
             allowedRoles = [allowedRoles];
@@ -246,60 +222,58 @@ class NavbarManager {
     }
 }
 
-
-// Instancia global
+// ✅ CREAR INSTANCIA GLOBAL
 const navbarManager = new NavbarManager();
+console.log('✅ NavbarManager instance created:', navbarManager);
 
-// Función de logout global
-function navbar_logout() {
-    console.log('🔓 Logout desde navbar...');
-    // Usar storageManager si disponible, fallback a directo
-    if (typeof storageManager !== 'undefined') {
-        storageManager.clear();
-    } else {
-        localStorage.clear();
-        sessionStorage.clear();
+// ✅ INICIALIZACIÓN ROBUSTA
+let navbarInitialized = false;
+
+function initializeNavbar() {
+    if (navbarInitialized) {
+        console.log('ℹ️ Navbar ya inicializada, previniendo duplicados...');
+        return;
     }
-    window.location.href = '/login';
+    navbarInitialized = true;
+    
+    console.log('📍 Iniciando navbar (global)...');
+    console.log('navbarManager:', navbarManager);
+    
+    if (!navbarManager) {
+        console.error('❌ CRÍTICO: navbarManager no está definido');
+        navbarInitialized = false;
+        return;
+    }
+    
+    navbarManager.initialize().then(() => {
+        console.log('✅ Navbar inicializada exitosamente');
+        setupMobileMenu();
+        setupScrollEffects();
+    }).catch(error => {
+        console.error('❌ Error inicializando navbar:', error);
+        navbarInitialized = false;
+    });
 }
 
 // Inicializar cuando el DOM esté listo
-document.addEventListener('DOMContentLoaded', () => {
-    setTimeout(() => {
-        navbarManager.initialize();
-        setupMobileMenu();
-        setupScrollEffects();
-    }, 50);
-});
-
-// También inicializar si está al final del body
 if (document.readyState === 'loading') {
     document.addEventListener('DOMContentLoaded', () => {
         setTimeout(() => {
-            navbarManager.initialize();
-            setupMobileMenu();
-            setupScrollEffects();
+            initializeNavbar();
         }, 50);
     });
 } else {
-    // Si ya está cargado, inicializar inmediatamente
     setTimeout(() => {
-        navbarManager.initialize();
-        setupMobileMenu();
-        setupScrollEffects();
+        initializeNavbar();
     }, 50);
 }
 
-/**
- * Configurar menú móvil (funcionalidad de sidebar.js)
- */
 function setupMobileMenu() {
     const navbar = document.querySelector('.navbar');
     const navContainer = document.querySelector('.nav-container');
     
     if (!navbar || !navContainer) return;
 
-    // Crear botón de toggle móvil
     let mobileToggle = document.getElementById('mobileToggle');
     if (!mobileToggle) {
         mobileToggle = document.createElement('button');
@@ -309,13 +283,11 @@ function setupMobileMenu() {
         navContainer.appendChild(mobileToggle);
     }
 
-    // Handler para toggle
     mobileToggle.addEventListener('click', () => {
         navbar.classList.toggle('show');
         mobileToggle.classList.toggle('active');
     });
 
-    // Cerrar menu al hacer clic en un link (mobile)
     const navLinks = navbar.querySelectorAll('.nav-link');
     navLinks.forEach(link => {
         link.addEventListener('click', () => {
@@ -326,7 +298,6 @@ function setupMobileMenu() {
         });
     });
 
-    // Cerrar menu al hacer clic fuera (mobile)
     document.addEventListener('click', (event) => {
         if (window.innerWidth <= 768) {
             const isClickInsideNavbar = navbar.contains(event.target);
@@ -339,7 +310,6 @@ function setupMobileMenu() {
         }
     });
 
-    // Manejar resize
     window.addEventListener('resize', () => {
         if (window.innerWidth > 768) {
             navbar.classList.remove('show');
@@ -351,9 +321,6 @@ function setupMobileMenu() {
     });
 }
 
-/**
- * Configurar scroll effects (funcionalidad de sidebar.js)
- */
 function setupScrollEffects() {
     const navbar = document.querySelector('.navbar');
     if (!navbar) return;
@@ -369,9 +336,6 @@ function setupScrollEffects() {
     });
 }
 
-/**
- * Marcar link activo según la página actual (funcionalidad de sidebar.js)
- */
 function setActiveLink() {
     const currentPath = window.location.pathname;
     const navLinks = document.querySelectorAll('.nav-link');
@@ -386,9 +350,6 @@ function setActiveLink() {
     });
 }
 
-/**
- * Smooth scroll para anchor links
- */
 function smoothScroll(target) {
     const element = document.querySelector(target);
     if (element) {
@@ -399,7 +360,6 @@ function smoothScroll(target) {
     }
 }
 
-// Exportar utilidades para uso en otros scripts
 window.megaMenuUtils = {
     setActiveLink,
     smoothScroll
