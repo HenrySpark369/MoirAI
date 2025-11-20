@@ -27,11 +27,18 @@ class Student(SQLModel, table=True):
     
     id: Optional[int] = Field(default=None, primary_key=True)
     name: str = Field(max_length=100, description="Nombre completo del estudiante")
+    first_name: Optional[str] = Field(default=None, max_length=50, description="Nombre")
+    last_name: Optional[str] = Field(default=None, max_length=50, description="Apellido")
     email: str = Field(unique=True, max_length=255, description="Email institucional (encriptado con Fernet)")
     email_hash: str = Field(default="", max_length=64, description="Hash SHA256 del email para búsquedas")
     phone: Optional[str] = Field(default=None, max_length=255, description="Teléfono (encriptado)")
     phone_hash: Optional[str] = Field(default=None, max_length=64, description="Hash SHA256 del teléfono para búsquedas")
     program: Optional[str] = Field(max_length=100, description="Programa académico")
+    
+    # Perfil adicional
+    bio: Optional[str] = Field(default=None, description="Biografía del estudiante")
+    career: Optional[str] = Field(default=None, max_length=100, description="Carrera profesional")
+    year: Optional[str] = Field(default=None, max_length=20, description="Año de estudio")
     
     # Seguridad - Contraseña (aunque en MVP se usa API key después del login)
     hashed_password: str = Field(max_length=255, description="Hash SHA256 de la contraseña")

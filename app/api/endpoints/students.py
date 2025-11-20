@@ -129,7 +129,7 @@ async def create_student(
     try:
         session.add(student)
         await session.commit()
-        session.refresh(student)
+        await session.refresh(student)
         
         await _log_audit_action(
             session, "CREATE_STUDENT", f"student_id:{student.id}",
@@ -217,9 +217,9 @@ async def upload_resume(
     )
     existing = result.scalars().first()
     
-    # Extraer texto del archivo
+    # Extraer texto del archivo (usando versión async para no bloquear)
     try:
-        resume_text = extract_text_from_upload(file)
+        resume_text = await extract_text_from_upload_async(file)
         if len(resume_text.strip()) < 50:
             raise HTTPException(
                 status_code=400,
@@ -256,6 +256,11 @@ async def upload_resume(
         # Actualizar datos
         if student_data.name:
             student.name = student_data.name
+            # Actualizar first_name y last_name del nombre
+            name_parts = student_data.name.split(' ', 1)
+            student.first_name = name_parts[0] if len(name_parts) > 0 else ""
+            student.last_name = name_parts[1] if len(name_parts) > 1 else ""
+        
         if student_data.program:
             student.program = student_data.program
         
@@ -278,8 +283,15 @@ async def upload_resume(
     # Si el estudiante NO EXISTE: crear uno nuevo
     else:
         action_type = "CREATE"
+        # Extraer first_name y last_name del nombre completo
+        name_parts = student_data.name.split(' ', 1) if student_data.name else ["", ""]
+        first_name = name_parts[0] if len(name_parts) > 0 else ""
+        last_name = name_parts[1] if len(name_parts) > 1 else ""
+        
         student = Student(
             name=student_data.name,
+            first_name=first_name,
+            last_name=last_name,
             program=student_data.program,
             consent_data_processing=True,
             profile_text=resume_text[:20000],  # Limitar texto almacenado
@@ -303,7 +315,7 @@ async def upload_resume(
         )
     
     await session.commit()
-    session.refresh(student)
+    await session.refresh(student)
     
     await _log_audit_action(
         session, "UPLOAD_RESUME", f"student_id:{student.id}",

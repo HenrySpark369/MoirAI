@@ -56,21 +56,35 @@ async function loadUserProfile() {
         // Llenar formulario con datos existentes (de BD)
         const form = document.getElementById('profile-form');
         if (form) {
-            // Campos comunes a ambos roles
-            form.querySelector('[name="first_name"]').value = currentUser.first_name || '';
-            form.querySelector('[name="last_name"]').value = currentUser.last_name || '';
-            form.querySelector('[name="email"]').value = currentUser.email || '';
-            form.querySelector('[name="phone"]').value = currentUser.phone || '';
-            form.querySelector('[name="bio"]').value = currentUser.bio || '';
+            // ✅ Campos comunes a ambos roles (con validación defensiva)
+            const firstNameField = form.querySelector('[name="first_name"]');
+            if (firstNameField) firstNameField.value = currentUser.first_name || '';
+            
+            const lastNameField = form.querySelector('[name="last_name"]');
+            if (lastNameField) lastNameField.value = currentUser.last_name || '';
+            
+            const emailField = form.querySelector('[name="email"]');
+            if (emailField) emailField.value = currentUser.email || '';
+            
+            const phoneField = form.querySelector('[name="phone"]');
+            if (phoneField) phoneField.value = currentUser.phone || '';
+            
+            const bioField = form.querySelector('[name="bio"]');
+            if (bioField) bioField.value = currentUser.bio || '';
 
-            // Campos específicos de estudiante
+            // ✅ Campos específicos de estudiante
             if (isStudent) {
                 const studentForm = document.getElementById('student-fields');
                 if (studentForm) {
                     studentForm.style.display = 'block';
-                    studentForm.querySelector('[name="career"]').value = currentUser.career || '';
-                    studentForm.querySelector('[name="year"]').value = currentUser.year || '';
-                    studentForm.querySelector('[name="program"]').value = currentUser.program || '';
+                    const careerField = studentForm.querySelector('[name="career"]');
+                    if (careerField) careerField.value = currentUser.career || '';
+                    
+                    const yearField = studentForm.querySelector('[name="year"]');
+                    if (yearField) yearField.value = currentUser.year || '';
+                    
+                    const programField = studentForm.querySelector('[name="program"]');
+                    if (programField) programField.value = currentUser.program || '';
                 }
             } else if (isCompany) {
                 // Ocultar campos específicos de estudiante si es empresa
