@@ -211,8 +211,22 @@ class NotificationManager {
 
   /**
    * Mostrar loading
+   * ✅ MEJORADO: Actualiza notificación existente en lugar de crear nuevas
    */
   loading(message = 'Cargando...') {
+    // ✅ NUEVO: Buscar si ya existe una notificación de loading
+    const existingLoading = this.container.querySelector('[data-is-loading="true"]')
+    
+    if (existingLoading) {
+      // ✅ Actualizar solo el mensaje de la notificación existente
+      const messageSpan = existingLoading.querySelector('span:last-child')
+      if (messageSpan) {
+        messageSpan.textContent = message
+      }
+      return existingLoading
+    }
+    
+    // ✅ Si no existe, crear una nueva
     const notification = this.createNotificationElement(message, 'loading')
     
     // Agregar spinner animado

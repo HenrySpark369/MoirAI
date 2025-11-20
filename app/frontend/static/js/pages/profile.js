@@ -275,7 +275,10 @@ async function handleCVUpload(file) {
             file,
             metadata,
             (percentComplete) => {
-                notificationManager.loading(`Subiendo CV... ${Math.round(percentComplete)}%`);
+                // Solo actualizar si no estamos cerca del 100%
+                if (percentComplete < 100) {
+                    notificationManager.loading(`Subiendo CV... ${Math.round(percentComplete)}%`);
+                }
             }
         );
 
@@ -297,6 +300,7 @@ async function handleCVUpload(file) {
                 console.warn('⚠️ localStorage no disponible:', storageError);
             }
 
+            // ✅ IMPORTANTE: Cerrar notificación de carga ANTES de mostrar éxito
             notificationManager.hideLoading();
             notificationManager.success('CV subido y analizado exitosamente');
 
