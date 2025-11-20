@@ -106,7 +106,7 @@ class NavbarManager {
                 <div class="nav-cta">
                     <div class="user-info" style="display: flex; align-items: center; gap: 15px; margin-right: 20px;">
                         <span class="user-name" style="font-size: 14px; color: #333;">${this.userName}</span>
-                        <button class="btn btn-secondary" onclick="navbar_logout()" style="cursor: pointer;">
+                        <button class="btn btn-secondary" onclick="logout()" style="cursor: pointer;">
                             <i class="fas fa-sign-out-alt"></i> Salir
                         </button>
                     </div>
@@ -360,7 +360,54 @@ function smoothScroll(target) {
     }
 }
 
+/**
+ * GLOBAL LOGOUT FUNCTION
+ * Consolidated from multiple logout implementations
+ * Used by navbar, dashboard, profile, and all pages
+ * Available in navbar context (loaded on all pages)
+ */
+async function logout() {
+    try {
+        // Call core logout from authManager if available
+        if (typeof authManager !== 'undefined' && authManager) {
+            await authManager.logout();
+        }
+        
+        // Show success notification
+        if (typeof notificationManager !== 'undefined' && notificationManager) {
+            notificationManager.success('Hasta luego 👋');
+        }
+        
+        // Redirect after notification is shown
+        setTimeout(() => {
+            window.location.href = '/';
+        }, 1000);
+    } catch (error) {
+        console.error('Error en logout:', error);
+        
+        // Fallback logout if authManager fails
+        if (typeof storageManager !== 'undefined' && storageManager) {
+            storageManager.clearUserSession();
+        } else {
+            localStorage.removeItem('api_key');
+            localStorage.removeItem('user_id');
+            localStorage.removeItem('user_role');
+        }
+        
+        // Show error notification
+        if (typeof notificationManager !== 'undefined' && notificationManager) {
+            notificationManager.error('Error al cerrar sesión');
+        }
+        
+        // Force redirect anyway
+        setTimeout(() => {
+            window.location.href = '/';
+        }, 1000);
+    }
+}
+
 window.megaMenuUtils = {
     setActiveLink,
     smoothScroll
 };
+

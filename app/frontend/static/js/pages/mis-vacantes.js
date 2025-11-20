@@ -172,18 +172,6 @@ function resetFilters() {
 }
 
 /**
- * Logout
- */
-function logout() {
-    if (typeof storageManager !== 'undefined') {
-        storageManager.clear();
-    } else {
-        localStorage.removeItem('api_key');
-    }
-    window.location.href = '/login';
-}
-
-/**
  * Obtener API key del storage
  */
 function getApiKey() {

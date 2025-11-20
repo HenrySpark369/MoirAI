@@ -561,18 +561,3 @@ async function handlePasswordChange() {
         notificationManager.error(error.message || 'Error al cambiar contraseña');
     }
 }
-
-/**
- * Logout desde perfil
- */
-async function logout() {
-    try {
-        await authManager.logout();
-        notificationManager.success('Hasta luego');
-        setTimeout(() => {
-            window.location.href = '/';
-        }, 1000);
-    } catch (error) {
-        notificationManager.error('Error al cerrar sesión');
-    }
-}

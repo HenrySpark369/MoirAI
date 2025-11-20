@@ -1016,21 +1016,6 @@ function setupEventHandlers() {
 }
 
 /**
- * Logout
- */
-async function logout() {
-    try {
-        await authManager.logout();
-        notificationManager.success('Hasta luego');
-        setTimeout(() => {
-            window.location.href = '/';
-        }, 1000);
-    } catch (error) {
-        notificationManager.error('Error al cerrar sesión');
-    }
-}
-
-/**
  * Refrescar dashboard
  */
 async function refreshDashboard() {
