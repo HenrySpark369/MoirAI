@@ -1,11 +1,28 @@
 /**
  * API Client - Cliente HTTP para todas las llamadas a la API
  * Maneja tokens, headers, errores y reintentos
+ * CORRECIÓN: Detecta dinámicamente la URL base desde window.location
  */
 
 class ApiClient {
-  constructor(baseUrl = 'http://localhost:8000/api/v1') {
-    this.baseUrl = baseUrl
+  constructor(baseUrl = null) {
+    // ✅ CORRECCIÓN: Usar window.location.origin dinámicamente
+    // Prioridad:
+    // 1. window.API_BASE_URL (si está definido en HTML)
+    // 2. Construir desde window.location.origin
+    if (baseUrl) {
+      this.baseUrl = baseUrl
+    } else if (window.API_BASE_URL) {
+      this.baseUrl = window.API_BASE_URL
+    } else {
+      // Detectar automáticamente desde el origen actual
+      const protocol = window.location.protocol
+      const hostname = window.location.hostname
+      const port = window.location.port
+      const origin = port ? `${protocol}//${hostname}:${port}` : `${protocol}//${hostname}`
+      this.baseUrl = `${origin}/api/v1`
+    }
+    
     this.token = null
     this.loadToken()
   }
@@ -213,10 +230,9 @@ class ApiClient {
   }
 }
 
-// Crear instancia global del cliente
-const apiClient = new ApiClient(
-  window.API_BASE_URL || 'http://localhost:8000/api/v1'
-)
+// ✅ Crear instancia global del cliente
+// Detecta automáticamente la URL base desde window.location si no está definida
+const apiClient = new ApiClient()
 
 // Event listener para re-autenticación
 window.addEventListener('unauthorized', () => {

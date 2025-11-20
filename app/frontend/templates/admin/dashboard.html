@@ -1063,6 +1063,17 @@
         </section>
     </main>
 
+    <!-- Config -->
+    <script>
+        // ✅ CORRECCIÓN: Detectar dinámicamente la URL base desde el navegador
+        const protocol = window.location.protocol
+        const hostname = window.location.hostname
+        const port = window.location.port
+        const origin = port ? `${protocol}//${hostname}:${port}` : `${protocol}//${hostname}`
+        window.API_BASE_URL = `${origin}/api/v1`
+        console.log('🔗 API Base URL:', window.API_BASE_URL)
+    </script>
+
     <!-- Chart.js Library -->
     <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.js"></script>
 

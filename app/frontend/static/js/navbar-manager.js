@@ -368,38 +368,74 @@ function smoothScroll(target) {
  */
 async function logout() {
     try {
+        console.log('🚪 Iniciando logout...');
+        
         // Call core logout from authManager if available
         if (typeof authManager !== 'undefined' && authManager) {
-            await authManager.logout();
+            try {
+                console.log('🔄 Llamando authManager.logout()...');
+                await authManager.logout();
+                console.log('✅ authManager.logout() completado');
+            } catch (authError) {
+                console.warn('⚠️ authManager.logout() falló, continuando con fallback:', authError);
+            }
+        } else {
+            console.warn('⚠️ authManager no disponible, usando fallback');
+        }
+        
+        // Fallback: Clear storage directly if authManager isn't available or failed
+        try {
+            if (typeof storageManager !== 'undefined' && storageManager) {
+                console.log('🧹 Limpiando storageManager...');
+                if (typeof storageManager.clearUserSession === 'function') {
+                    storageManager.clearUserSession();
+                    console.log('✅ storageManager.clearUserSession() completado');
+                } else {
+                    console.warn('⚠️ storageManager.clearUserSession no es una función');
+                }
+            } else {
+                console.log('🧹 storageManager no disponible, limpiando localStorage directamente...');
+                localStorage.removeItem('api_key');
+                localStorage.removeItem('user_id');
+                localStorage.removeItem('user_role');
+                localStorage.removeItem('user_email');
+                localStorage.removeItem('user_name');
+                localStorage.removeItem('moirai_api_key');
+                localStorage.removeItem('moirai_token');
+            }
+        } catch (storageError) {
+            console.error('❌ Error limpiando storage:', storageError);
         }
         
         // Show success notification
-        if (typeof notificationManager !== 'undefined' && notificationManager) {
-            notificationManager.success('Hasta luego 👋');
+        try {
+            if (typeof notificationManager !== 'undefined' && notificationManager) {
+                console.log('📢 Mostrando notificación de logout...');
+                notificationManager.success('Hasta luego 👋');
+            }
+        } catch (notifError) {
+            console.warn('⚠️ Error mostrando notificación:', notifError);
         }
         
         // Redirect after notification is shown
+        console.log('↪️ Redirigiendo a home en 1 segundo...');
         setTimeout(() => {
             window.location.href = '/';
         }, 1000);
+        
     } catch (error) {
-        console.error('Error en logout:', error);
+        console.error('❌ Error general en logout:', error);
         
-        // Fallback logout if authManager fails
-        if (typeof storageManager !== 'undefined' && storageManager) {
-            storageManager.clearUserSession();
-        } else {
-            localStorage.removeItem('api_key');
-            localStorage.removeItem('user_id');
-            localStorage.removeItem('user_role');
-        }
-        
-        // Show error notification
-        if (typeof notificationManager !== 'undefined' && notificationManager) {
-            notificationManager.error('Error al cerrar sesión');
+        // Emergency fallback logout
+        try {
+            localStorage.clear();
+            sessionStorage.clear();
+        } catch (e) {
+            console.error('❌ Error limpiando todo el storage:', e);
         }
         
         // Force redirect anyway
+        console.log('⚠️ Error en logout, forzando redirección...');
         setTimeout(() => {
             window.location.href = '/';
         }, 1000);

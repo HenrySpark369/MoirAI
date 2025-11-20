@@ -161,7 +161,13 @@
 
     <!-- Config -->
     <script>
-        window.API_BASE_URL = 'http://localhost:8000/api/v1'
+        // ✅ CORRECCIÓN: Detectar dinámicamente la URL base desde el navegador
+        const protocol = window.location.protocol
+        const hostname = window.location.hostname
+        const port = window.location.port
+        const origin = port ? `${protocol}//${hostname}:${port}` : `${protocol}//${hostname}`
+        window.API_BASE_URL = `${origin}/api/v1`
+        console.log('🔗 API Base URL:', window.API_BASE_URL)
     </script>
 
     <!-- Scripts -->

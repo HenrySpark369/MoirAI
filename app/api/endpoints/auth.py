@@ -12,7 +12,7 @@ import hashlib
 import logging
 
 from app.core.database import get_session
-from app.models import Student, Company, ApiKey, AuditLog
+from app.models import Student, Company, Admin, ApiKey, AuditLog
 from app.schemas import (
     UserRegister, UserLoginResponse, ApiKeyCreate, ApiKeyCreatedResponse,
     ApiKeyResponse, ApiKeysList, UserContext, BaseResponse, LoginRequest
@@ -180,8 +180,9 @@ async def login_user(
     """
     Login con email y contraseña (ASYNC version).
     
-    Valida las credenciales del usuario y retorna su API key principal.
-    Lógica unificada para estudiantes y empresas (evita duplicación y conflictos).
+    Valida las credenciales del usuario (student, company, o admin) 
+    y retorna su API key principal.
+    Lógica unificada para todos los roles (evita duplicación y conflictos).
     """
     try:
         # ✅ ASYNC: Buscar usuario en tabla de estudiantes
@@ -200,8 +201,16 @@ async def login_user(
             user = result.scalars().first()
             user_type = "company"
         
-        # Si no encontró usuario
-        if not user or not user_type:
+        # Si no es empresa, buscar en admins
+        if not user:
+            result = await session.execute(
+                select(Admin).where(Admin.email_hash == email_hash)
+            )
+            user = result.scalars().first()
+            user_type = "admin"
+        
+        # Si no encontró usuario en ninguna tabla
+        if not user:
             raise HTTPException(
                 status_code=401,
                 detail="Email o contraseña incorrectos"

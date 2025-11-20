@@ -289,6 +289,15 @@ async def login_page():
     return {"message": "Página de login no encontrada", "status": "error"}
 
 
+@app.get("/logout-test", tags=["testing"], include_in_schema=False)
+async def logout_test_page():
+    """Servir la página de testing de logout (E2E Testing)"""
+    template_path = Path(__file__).parent / "frontend" / "templates" / "logout-test.html"
+    if template_path.exists():
+        return FileResponse(str(template_path), media_type="text/html")
+    return {"message": "Página de logout test no encontrada", "status": "error"}
+
+
 # Sub-sites Pages
 @app.get("/oportunidades", tags=["listings"], include_in_schema=False)
 async def oportunidades_page():

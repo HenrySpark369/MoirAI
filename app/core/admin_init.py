@@ -4,14 +4,16 @@ Se ejecuta al iniciar la aplicación si INIT_DEFAULT_ADMIN=true en .env
 """
 
 import logging
+import hashlib
 from typing import Optional
 from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy import select
 
 from app.core.config import settings
-from app.models import Student
-from app.services.auth_service import auth_service
+from app.models import Admin
 from app.services.api_key_service import api_key_service
 from app.schemas import ApiKeyCreate
+from datetime import datetime
 
 logger = logging.getLogger(__name__)
 
@@ -23,6 +25,9 @@ async def init_default_admin(session: AsyncSession) -> Optional[int]:
     Se ejecuta SOLO si:
     1. INIT_DEFAULT_ADMIN=true en .env
     2. No existe un admin con el email configurado
+    
+    El admin es creado en la tabla 'admin' con email y contraseña,
+    y luego se le asigna una API key para usos internos de firma.
     
     Args:
         session: Sesión de base de datos (ASYNC)
@@ -50,59 +55,74 @@ async def init_default_admin(session: AsyncSession) -> Optional[int]:
     
     try:
         # Verificar si el admin ya existe (ASYNC)
-        existing_user, user_type = await auth_service.find_user_by_email(
-            session,
-            settings.ADMIN_DEFAULT_EMAIL
+        email_hash = hashlib.sha256(settings.ADMIN_DEFAULT_EMAIL.lower().strip().encode()).hexdigest()
+        result = await session.execute(
+            select(Admin).where(Admin.email_hash == email_hash)
         )
+        existing_admin = result.scalars().first()
         
-        if existing_user:
-            if user_type == "admin":
-                logger.info(
-                    f"✓ Admin ya existe: {settings.ADMIN_DEFAULT_EMAIL} "
-                    "(cambiar INIT_DEFAULT_ADMIN=false en .env para evitar intentos repetidos)"
-                )
-                return existing_user.id
-            else:
-                logger.warning(
-                    f"⚠️  Email existe pero no es admin: {settings.ADMIN_DEFAULT_EMAIL} "
-                    f"(tipo: {user_type}). Skipping..."
-                )
-                return None
+        if existing_admin:
+            logger.info(
+                f"✓ Admin ya existe: {settings.ADMIN_DEFAULT_EMAIL} "
+                "(cambiar INIT_DEFAULT_ADMIN=false en .env para evitar intentos repetidos)"
+            )
+            return existing_admin.id
         
-        # Crear nuevo admin
+        # Crear nuevo admin en la tabla admin
         logger.info(f"🔧 Creando usuario admin por defecto: {settings.ADMIN_DEFAULT_NAME}")
         
-        user_id, user_type = await auth_service.create_user(
-            session=session,
+        # Hash de la contraseña (SHA256)
+        password_hash = hashlib.sha256(settings.ADMIN_DEFAULT_PASSWORD.encode()).hexdigest()
+        
+        # Crear instancia de Admin
+        new_admin = Admin(
             name=settings.ADMIN_DEFAULT_NAME,
             email=settings.ADMIN_DEFAULT_EMAIL,
-            password=settings.ADMIN_DEFAULT_PASSWORD,
-            role="admin"
+            email_hash=email_hash,
+            hashed_password=password_hash,
+            is_active=True
         )
         
-        # Crear API key para el admin (ASYNC)
-        api_key_data = ApiKeyCreate(
-            name="Clave principal - Admin Sistema",
-            description="API key generada automáticamente al iniciar",
-            expires_days=365
-        )
+        session.add(new_admin)
+        await session.flush()  # Obtener el ID generado
+        await session.commit()
+        await session.refresh(new_admin)
         
-        api_key_response = await api_key_service.create_api_key(
-            session=session,
-            user_id=user_id,
-            user_type=user_type,
-            user_email=settings.ADMIN_DEFAULT_EMAIL,
-            key_data=api_key_data
-        )
+        admin_id = new_admin.id
         
         logger.info(
             f"✅ Admin creado exitosamente:\n"
-            f"   Email: {settings.ADMIN_DEFAULT_EMAIL}\n"
-            f"   API Key prefix: {api_key_response.key_info.key_prefix}\n"
-            f"   ⚠️  CAMBIAR CONTRASEÑA EN PRODUCCIÓN"
+            f"   ID: {admin_id}\n"
+            f"   Name: {settings.ADMIN_DEFAULT_NAME}\n"
+            f"   Email: {settings.ADMIN_DEFAULT_EMAIL}"
         )
         
-        return user_id
+        # Crear API key para el admin (para usos internos de firma)
+        try:
+            api_key_data = ApiKeyCreate(
+                name="Clave principal - Admin Sistema",
+                description="API key generada automáticamente al iniciar para firma de cambios",
+                expires_days=365
+            )
+            
+            api_key_response = await api_key_service.create_api_key(
+                session=session,
+                user_id=admin_id,
+                user_type="admin",
+                user_email=settings.ADMIN_DEFAULT_EMAIL,
+                key_data=api_key_data
+            )
+            
+            logger.info(
+                f"✅ API Key generada para admin:\n"
+                f"   Prefix: {api_key_response.key_info.key_prefix}\n"
+                f"   ⚠️  Usar para firma de cambios y acceso interno"
+            )
+        except Exception as e:
+            logger.warning(f"⚠️  No se pudo generar API key para admin: {str(e)}")
+            logger.warning(f"   Pero el admin fue creado correctamente con email/password")
+        
+        return admin_id
         
     except Exception as e:
         logger.error(

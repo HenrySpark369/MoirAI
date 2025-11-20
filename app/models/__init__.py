@@ -187,6 +187,58 @@ class Company(SQLModel, table=True):
         return ""
 
 
+class Admin(SQLModel, table=True):
+    """Modelo de administrador del sistema"""
+    
+    id: Optional[int] = Field(default=None, primary_key=True)
+    name: str = Field(max_length=100, description="Nombre completo del administrador")
+    email: str = Field(unique=True, max_length=255, description="Email del administrador (encriptado con Fernet)")
+    email_hash: str = Field(default="", max_length=64, description="Hash SHA256 del email para búsquedas")
+    
+    # Seguridad - Contraseña (para login con email/password)
+    hashed_password: str = Field(max_length=255, description="Hash SHA256 de la contraseña")
+    
+    # Estado
+    is_active: bool = Field(default=True, description="Si el admin está activo")
+    
+    # Metadatos
+    created_at: datetime = Field(default_factory=datetime.utcnow)
+    updated_at: Optional[datetime] = None
+    
+    # ============================================================
+    # MÉTODOS DE ENCRIPTACIÓN/DESENCRIPTACIÓN
+    # ============================================================
+    
+    def set_email(self, email: str) -> None:
+        """
+        Establecer email (encriptado automáticamente)
+        
+        Args:
+            email: Email en texto plano
+        """
+        from app.utils.encryption import EncryptionService
+        encryption_service = EncryptionService()
+        
+        email_lower = email.lower().strip()
+        self.email = encryption_service.encrypt(email_lower)
+        # Generar hash para búsquedas
+        self.email_hash = hashlib.sha256(email_lower.encode()).hexdigest()
+    
+    def get_email(self) -> str:
+        """
+        Obtener email desencriptado
+        
+        Returns:
+            Email en texto plano
+        """
+        from app.utils.encryption import EncryptionService
+        
+        if self.email:
+            encryption_service = EncryptionService()
+            return encryption_service.decrypt(self.email)
+        return ""
+
+
 class JobPosition(SQLModel, table=True):
     """
     Modelo unificado de posición laboral
@@ -352,7 +404,8 @@ __all__ = [
     
     # Core models
     "Student",
-    "Company", 
+    "Company",
+    "Admin",
     "JobPosition",
     "JobMatchEvent",
     "AuditLog",
