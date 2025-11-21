@@ -80,8 +80,8 @@ async function loadUserProfile() {
                     const careerField = studentForm.querySelector('[name="career"]');
                     if (careerField) careerField.value = currentUser.career || '';
                     
-                    const yearField = studentForm.querySelector('[name="year"]');
-                    if (yearField) yearField.value = currentUser.year || '';
+                    const semesterField = studentForm.querySelector('[name="semester"]');
+                    if (semesterField) semesterField.value = currentUser.semester || '';
                     
                     const programField = studentForm.querySelector('[name="program"]');
                     if (programField) programField.value = currentUser.program || '';
@@ -161,6 +161,72 @@ async function loadUserProfile() {
         console.error('❌ Error cargando perfil:', error);
         notificationManager.error('Error al cargar perfil');
         throw error;
+    }
+}
+
+/**
+ * ✨ NUEVA FUNCIÓN: Limpiar todos los datos de CV anteriores
+ * Se llama al reuploaded para no mantener datos viejos
+ */
+function clearCVData() {
+    console.log('🧹 Borrando todos los campos Harvard CV...');
+    
+    // Limpiar objetivo
+    const objectiveField = document.getElementById('objective');
+    if (objectiveField) objectiveField.value = '';
+    
+    // Limpiar educación
+    const educationList = document.getElementById('education-list');
+    if (educationList) educationList.innerHTML = '';
+    
+    // Limpiar experiencia
+    const experienceList = document.getElementById('experience-list');
+    if (experienceList) experienceList.innerHTML = '';
+    
+    // Limpiar certificaciones
+    const certificationsList = document.getElementById('certifications-list');
+    if (certificationsList) certificationsList.innerHTML = '';
+    
+    // Limpiar idiomas
+    const languagesList = document.getElementById('languages-list');
+    if (languagesList) languagesList.innerHTML = '';
+    
+    console.log('✅ Todos los campos Harvard CV han sido limpiados');
+}
+
+/**
+ * ✨ NUEVA FUNCIÓN: Guardar cambios de CV en BD inmediatamente
+ * Se llama después de cada eliminación para persistir cambios
+ */
+async function persistCVChanges(cvData) {
+    try {
+        notificationManager.loading('Guardando cambios en CV...');
+        
+        // Fusionar cvData con datos actuales del usuario
+        const updatedUser = {
+            ...currentUser,
+            ...cvData
+        };
+        
+        // Enviar PUT a BD
+        const response = await apiClient.put(`/students/${currentUser.id}`, updatedUser);
+        
+        // Actualizar currentUser localmente
+        currentUser = { ...currentUser, ...response };
+        
+        // Actualizar localStorage
+        StorageManager.set('currentUser', currentUser);
+        
+        notificationManager.hideLoading();
+        notificationManager.success('Cambios guardados en BD');
+        
+        console.log('✅ Cambios de CV persistidos:', cvData);
+        
+        return response;
+    } catch (error) {
+        notificationManager.hideLoading();
+        notificationManager.error('Error al guardar cambios: ' + (error.message || 'Error desconocido'));
+        console.error('❌ Error guardando cambios de CV:', error);
     }
 }
 
@@ -313,6 +379,10 @@ async function handleCVUpload(file) {
 
         // ✅ Procesar respuesta: ResumeAnalysisResponse contiene student y skills extraídas
         if (response.student) {
+            // ✅ IMPORTANTE: Limpiar datos anteriores antes de cargar nuevos
+            console.log('🧹 Limpiando datos de CV anterior...');
+            clearCVData();
+            
             // ✅ CAMBIO: Usar respuesta de BD, NO localStorage solo
             // Actualizar currentUser con datos de la respuesta (de BD)
             currentUser = { ...currentUser, ...response.student };
@@ -345,6 +415,18 @@ async function handleCVUpload(file) {
                 displayInferredSkills(allSkills);
                 notificationManager.success(`¡${allSkills.length} habilidades analizadas!`);
             }
+
+            // ✅ NUEVO: Recargar TODAS las secciones Harvard CV con datos extraídos
+            console.log('🔄 Cargando nuevas secciones Harvard CV...');
+            loadCVHarvardSections(currentUser);
+            
+            // Scroll suave al container Harvard CV para mostrar los nuevos datos
+            setTimeout(() => {
+                const harvardContainer = document.getElementById('harvard-cv-container');
+                if (harvardContainer) {
+                    harvardContainer.scrollIntoView({ behavior: 'smooth', block: 'start' });
+                }
+            }, 500);
         } else {
             throw new Error('Respuesta inesperada del servidor');
         }
@@ -419,6 +501,55 @@ function uploadFileWithProgress(url, file, metadata, onProgress) {
         }
         xhr.send(formData);
     });
+}
+
+/**
+ * ✨ NUEVA FUNCIÓN: Guardar solo el Objetivo Profesional
+ * Función específica para guardar cambios del textarea de objetivo
+ */
+async function saveObjective() {
+    try {
+        const objectiveField = document.getElementById('objective');
+        if (!objectiveField) {
+            notificationManager.error('Campo de objetivo no encontrado');
+            return;
+        }
+        
+        const objective = objectiveField.value.trim();
+        
+        // Validación opcional: al menos 5 caracteres
+        if (objective && objective.length < 5) {
+            notificationManager.warning('El objetivo debe tener al menos 5 caracteres');
+            return;
+        }
+        
+        notificationManager.loading('Guardando objetivo...');
+        
+        // Actualizar solo el campo objective
+        const updatedUser = {
+            ...currentUser,
+            objective: objective
+        };
+        
+        // Enviar PUT a BD
+        const response = await apiClient.put(`/students/${currentUser.id}`, updatedUser);
+        
+        // Actualizar currentUser
+        currentUser = { ...currentUser, ...response };
+        
+        // Guardar en localStorage
+        StorageManager.set('currentUser', currentUser);
+        
+        notificationManager.hideLoading();
+        notificationManager.success('Objetivo profesional guardado ✅');
+        
+        console.log('✅ Objetivo profesional guardado:', objective.substring(0, 50) + '...');
+        
+    } catch (error) {
+        notificationManager.hideLoading();
+        notificationManager.error(error.message || 'Error al guardar objetivo');
+        console.error('❌ Error guardando objetivo:', error);
+    }
 }
 
 /**
@@ -600,129 +731,64 @@ async function handlePasswordChange() {
 
 /**
  * ✨ NUEVA FUNCIÓN: Cargar secciones CV Harvard
- * Genera dinámicamente las secciones colapsables con datos del usuario
+ * Llena los campos existentes en el HTML con datos del usuario
  */
 function loadCVHarvardSections(user) {
-    const container = document.getElementById('cv-harvard-sections');
-    if (!container) return;
-
-    // Definir secciones a mostrar
-    const sections = [
-        {
-            id: 'objective',
-            title: '📌 Objetivo Profesional',
-            type: 'textarea',
-            maxLength: 500,
-            value: user.objective || ''
-        },
-        {
-            id: 'education',
-            title: '🎓 Educación',
-            type: 'list',
-            fields: ['institution', 'degree', 'field_of_study', 'graduation_year'],
-            value: user.education ? (typeof user.education === 'string' ? JSON.parse(user.education) : user.education) : []
-        },
-        {
-            id: 'experience',
-            title: '💼 Experiencia Profesional',
-            type: 'list',
-            fields: ['position', 'company', 'start_date', 'end_date', 'description'],
-            value: user.experience ? (typeof user.experience === 'string' ? JSON.parse(user.experience) : user.experience) : []
-        },
-        {
-            id: 'certifications',
-            title: '🏆 Certificaciones',
-            type: 'simple-list',
-            value: user.certifications ? (typeof user.certifications === 'string' ? JSON.parse(user.certifications) : user.certifications) : []
-        },
-        {
-            id: 'languages',
-            title: '🌍 Idiomas',
-            type: 'simple-list',
-            value: user.languages ? (typeof user.languages === 'string' ? JSON.parse(user.languages) : user.languages) : []
-        }
-    ];
-
-    container.innerHTML = '';
-
-    sections.forEach(section => {
-        const sectionEl = document.createElement('div');
-        sectionEl.className = 'cv-section-collapsible';
-        sectionEl.id = `section-${section.id}`;
-
-        // Header colapsable
-        const header = document.createElement('div');
-        header.className = 'cv-section-header collapsed';
-        header.innerHTML = `
-            <span>${section.title}</span>
-            <i class="fas fa-chevron-down"></i>
-        `;
-        header.addEventListener('click', () => toggleSection(sectionEl));
-
-        // Body con contenido
-        const body = document.createElement('div');
-        body.className = 'cv-section-body';
-
-        if (section.type === 'textarea') {
-            // Textarea simple para objetivo
-            body.innerHTML = `
-                <div class="form-group">
-                    <textarea 
-                        id="${section.id}" 
-                        name="${section.id}" 
-                        maxlength="${section.maxLength}"
-                        placeholder="Describe tu objetivo profesional..."
-                        class="cv-textarea"
-                    >${section.value}</textarea>
-                </div>
-            `;
-        } else if (section.type === 'list') {
-            // Lista de objetos anidados (educación, experiencia)
-            body.innerHTML = `
-                <div id="${section.id}-list" class="form-nested-list">
-                    <!-- Items dinámicos -->
-                </div>
-                <button type="button" class="btn-add-item" onclick="addNestedItem('${section.id}', ${JSON.stringify(section.fields)})">
-                    <i class="fas fa-plus"></i> Agregar ${section.title.split(' ').slice(1).join(' ')}
-                </button>
-            `;
-            renderNestedItems(section.id, section.value, section.fields);
-        } else if (section.type === 'simple-list') {
-            // Lista simple (certificaciones, idiomas)
-            body.innerHTML = `
-                <div id="${section.id}-list" class="items-list">
-                    <!-- Items dinámicos -->
-                </div>
-                <button type="button" class="btn-add-item" onclick="addSimpleItem('${section.id}')">
-                    <i class="fas fa-plus"></i> Agregar ${section.title.split(' ').slice(1).join(' ')}
-                </button>
-            `;
-            renderSimpleItems(section.id, section.value);
-        }
-
-        sectionEl.appendChild(header);
-        sectionEl.appendChild(body);
-        container.appendChild(sectionEl);
-    });
-}
-
-/**
- * ✨ NUEVA FUNCIÓN: Toggle sección colapsable
- */
-function toggleSection(sectionEl) {
-    const header = sectionEl.querySelector('.cv-section-header');
-    const body = sectionEl.querySelector('.cv-section-body');
-
-    if (!header || !body) return;
-
-    const isCollapsed = header.classList.contains('collapsed');
+    console.log('📝 Llenando secciones Harvard CV con datos:', user);
     
-    if (isCollapsed) {
-        header.classList.remove('collapsed');
-        body.classList.add('open');
-    } else {
-        header.classList.add('collapsed');
-        body.classList.remove('open');
+    if (!user) {
+        console.warn('⚠️ No hay datos de usuario para llenar Harvard CV');
+        return;
+    }
+
+    try {
+        // 1️⃣ Objetivo Profesional (textarea)
+        const objectiveField = document.getElementById('objective');
+        if (objectiveField && user.objective) {
+            objectiveField.value = user.objective;
+            console.log('✅ Objetivo cargado:', user.objective.substring(0, 50) + '...');
+        }
+
+        // 2️⃣ Educación (nested list)
+        const educationValue = user.education 
+            ? (typeof user.education === 'string' ? JSON.parse(user.education) : user.education) 
+            : [];
+        if (Array.isArray(educationValue) && educationValue.length > 0) {
+            renderNestedItems('education', educationValue, ['institution', 'degree', 'field_of_study', 'graduation_year']);
+            console.log('✅ Educación cargada:', educationValue.length, 'items');
+        }
+
+        // 3️⃣ Experiencia Profesional (nested list)
+        const experienceValue = user.experience 
+            ? (typeof user.experience === 'string' ? JSON.parse(user.experience) : user.experience) 
+            : [];
+        if (Array.isArray(experienceValue) && experienceValue.length > 0) {
+            renderNestedItems('experience', experienceValue, ['position', 'company', 'start_date', 'end_date', 'description']);
+            console.log('✅ Experiencia cargada:', experienceValue.length, 'items');
+        }
+
+        // 4️⃣ Certificaciones (simple list)
+        const certificationsValue = user.certifications 
+            ? (typeof user.certifications === 'string' ? JSON.parse(user.certifications) : user.certifications) 
+            : [];
+        if (Array.isArray(certificationsValue) && certificationsValue.length > 0) {
+            renderSimpleItems('certifications', certificationsValue);
+            console.log('✅ Certificaciones cargadas:', certificationsValue.length, 'items');
+        }
+
+        // 5️⃣ Idiomas (simple list)
+        const languagesValue = user.languages 
+            ? (typeof user.languages === 'string' ? JSON.parse(user.languages) : user.languages) 
+            : [];
+        if (Array.isArray(languagesValue) && languagesValue.length > 0) {
+            renderSimpleItems('languages', languagesValue);
+            console.log('✅ Idiomas cargados:', languagesValue.length, 'items');
+        }
+
+        console.log('✨ Todas las secciones Harvard CV han sido cargadas exitosamente');
+
+    } catch (error) {
+        console.error('❌ Error cargando secciones Harvard CV:', error);
     }
 }
 
@@ -849,12 +915,26 @@ function addNestedItem(sectionId, fields) {
 
 /**
  * ✨ NUEVA FUNCIÓN: Remover item anidado
+ * Marca como eliminado y persiste en BD
  */
 function removeNestedItem(sectionId, index) {
     if (!confirm('¿Estás seguro de que deseas eliminar este item?')) return;
     
     const itemEl = document.getElementById(`${sectionId}-item-${index}`);
-    if (itemEl) itemEl.remove();
+    if (itemEl) {
+        // Marcar como eliminado (no remover del DOM todavía)
+        itemEl.setAttribute('data-removed', 'true');
+        itemEl.style.opacity = '0.5';
+        itemEl.style.pointerEvents = 'none';
+        itemEl.style.background = 'rgba(255,0,0,0.05)';
+        
+        // Mostrar notificación de pendiente guardado
+        notificationManager.info('Item marcado para eliminar. Guarda los cambios.');
+        
+        // Serializar datos ACTUALES y guardar en BD
+        const cvData = serializeCVHarvardData();
+        persistCVChanges(cvData);
+    }
 }
 
 /**
@@ -884,15 +964,35 @@ function addSimpleItem(sectionId) {
 
 /**
  * ✨ NUEVA FUNCIÓN: Remover item simple
+ * Marca como eliminado y persiste en BD
  */
 function removeSimpleItem(sectionId, index) {
-    const itemEl = document.querySelector(`input[name="${sectionId}[${index}]"]`)?.parentElement;
-    if (itemEl) itemEl.remove();
+    const container = document.getElementById(`${sectionId}-list`);
+    if (!container) return;
+
+    const items = Array.from(container.querySelectorAll('.items-list-item'));
+    if (index < items.length) {
+        const itemEl = items[index];
+        
+        // Marcar como eliminado (no remover del DOM todavía)
+        itemEl.setAttribute('data-removed', 'true');
+        itemEl.style.opacity = '0.5';
+        itemEl.style.pointerEvents = 'none';
+        itemEl.style.background = 'rgba(255,0,0,0.05)';
+        
+        // Mostrar notificación de pendiente guardado
+        notificationManager.info('Item marcado para eliminar. Guarda los cambios.');
+        
+        // Serializar datos ACTUALES y guardar en BD
+        const cvData = serializeCVHarvardData();
+        persistCVChanges(cvData);
+    }
 }
 
 /**
  * ✨ NUEVA FUNCIÓN: Serializar datos Harvard para envío
  * Convierte los formularios anidados a JSON para el API
+ * ⚠️ Excluye items marcados como eliminados (data-removed="true")
  */
 function serializeCVHarvardData() {
     const data = {};
@@ -908,6 +1008,11 @@ function serializeCVHarvardData() {
     if (educationList) {
         data.education = [];
         document.querySelectorAll('#education-list .form-nested').forEach((item) => {
+            // ⚠️ Saltar items marcados como eliminados
+            if (item.getAttribute('data-removed') === 'true') {
+                return;
+            }
+            
             const inputs = item.querySelectorAll('input[type="text"]');
             const fieldNames = ['institution', 'degree', 'field_of_study', 'graduation_year'];
             const obj = {};
@@ -927,6 +1032,11 @@ function serializeCVHarvardData() {
     if (experienceList) {
         data.experience = [];
         document.querySelectorAll('#experience-list .form-nested').forEach((item) => {
+            // ⚠️ Saltar items marcados como eliminados
+            if (item.getAttribute('data-removed') === 'true') {
+                return;
+            }
+            
             const inputs = item.querySelectorAll('input[type="text"]');
             const fieldNames = ['position', 'company', 'start_date', 'end_date', 'description'];
             const obj = {};
@@ -945,7 +1055,7 @@ function serializeCVHarvardData() {
     const certificationsList = document.getElementById('certifications-list');
     if (certificationsList) {
         data.certifications = Array.from(
-            document.querySelectorAll('#certifications-list input[type="text"]')
+            document.querySelectorAll('#certifications-list .items-list-item:not([data-removed="true"]) input[type="text"]')
         ).map(inp => inp.value.trim()).filter(v => v.length > 0);
     }
 
@@ -953,10 +1063,10 @@ function serializeCVHarvardData() {
     const languagesList = document.getElementById('languages-list');
     if (languagesList) {
         data.languages = Array.from(
-            document.querySelectorAll('#languages-list input[type="text"]')
+            document.querySelectorAll('#languages-list .items-list-item:not([data-removed="true"]) input[type="text"]')
         ).map(inp => inp.value.trim()).filter(v => v.length > 0);
     }
 
-    console.log('✨ Datos Harvard serializados:', data);
+    console.log('✨ Datos Harvard serializados (excluyendo eliminados):', data);
     return data;
 }

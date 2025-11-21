@@ -19,6 +19,7 @@ from app.schemas import (
     StudentPublic
 )
 from app.services.text_vectorization_service import text_vectorization_service, TermExtractor
+from app.services.unsupervised_cv_extractor import unsupervised_cv_extractor
 from app.utils.file_processing import extract_text_from_upload, extract_text_from_upload_async, CVFileValidator
 from app.middleware.auth import AuthService
 from app.core.config import settings
@@ -135,6 +136,189 @@ def _extract_resume_analysis(resume_text: str) -> dict:
         }
 
 
+def _extract_harvard_cv_fields(resume_text: str) -> dict:
+    """
+    Extrae campos estructurados del CV en formato Harvard.
+    
+    Retorna:
+        Dict con: {
+            "objective": str,
+            "education": List[Dict],
+            "experience": List[Dict],
+            "certifications": List[str],
+            "languages": List[str]
+        }
+    
+    📌 Estrategia de extracción:
+    - Objetivo: Primeras 2-3 líneas, hasta 500 caracteres
+    - Educación: Busca keywords (grado, degree, university, institución) + años
+    - Experiencia: Busca keywords (position, role, company) + períodos
+    - Certificaciones: Busca keywords (certification, course, certified)
+    - Idiomas: Busca keywords (language, español, english, idioma) + nivel
+    """
+    import re
+    
+    if not resume_text or len(resume_text.strip()) < 50:
+        return {
+            "objective": None,
+            "education": [],
+            "experience": [],
+            "certifications": [],
+            "languages": []
+        }
+    
+    try:
+        lines = resume_text.split('\n')
+        text_lower = resume_text.lower()
+        
+        # 1️⃣ Extraer OBJETIVO: Primeras líneas que no sean headers
+        objective = None
+        objective_lines = []
+        for i, line in enumerate(lines[:10]):  # Primeras 10 líneas
+            clean_line = line.strip()
+            if clean_line and not any(keyword in clean_line.lower() for keyword in 
+                                     ['educación', 'education', 'experiencia', 'experience', 
+                                      'habilidades', 'skills', 'certificado', 'certification']):
+                objective_lines.append(clean_line)
+                if len(' '.join(objective_lines)) > 500:
+                    break
+        
+        if objective_lines:
+            objective = ' '.join(objective_lines)[:500]
+        
+        # 2️⃣ Extraer EDUCACIÓN
+        education = []
+        education_keywords = ['degree', 'bachelor', 'master', 'phd', 'diploma', 'certificate',
+                            'grado', 'licenciatura', 'maestría', 'doctorado', 'formación',
+                            'university', 'instituto', 'instituto', 'colegio']
+        
+        # Buscar secciones de educación
+        education_section_match = re.search(
+            r'(educación|education|formación|training)[\s\n]+(.*?)(?:experiencia|experience|habilidades|skills|certificado|certification|$)',
+            text_lower, re.DOTALL | re.IGNORECASE
+        )
+        
+        if education_section_match:
+            education_text = education_section_match.group(2)
+            # Extraer bloques de educación (delimitados por líneas vacías o bullets)
+            edu_blocks = re.split(r'\n\s*\n', education_text)
+            
+            for block in edu_blocks[:5]:  # Máximo 5 registros
+                if any(kw in block.lower() for kw in education_keywords):
+                    lines_in_block = [l.strip() for l in block.split('\n') if l.strip()]
+                    
+                    edu_record = {
+                        "institution": "",
+                        "degree": "",
+                        "field_of_study": "",
+                        "graduation_year": None
+                    }
+                    
+                    # Buscar año de graduación
+                    year_match = re.search(r'(20\d{2}|19\d{2})', ' '.join(lines_in_block))
+                    if year_match:
+                        edu_record["graduation_year"] = int(year_match.group(1))
+                    
+                    # Asignar líneas a campos (heurística simple)
+                    if len(lines_in_block) >= 1:
+                        edu_record["institution"] = lines_in_block[0]
+                    if len(lines_in_block) >= 2:
+                        edu_record["degree"] = lines_in_block[1]
+                    if len(lines_in_block) >= 3:
+                        edu_record["field_of_study"] = lines_in_block[2]
+                    
+                    if edu_record["institution"]:
+                        education.append(edu_record)
+        
+        # 3️⃣ Extraer EXPERIENCIA
+        experience = []
+        exp_section_match = re.search(
+            r'(experiencia|experience|trabajos|jobs|profesional)[\s\n]+(.*?)(?:educación|education|habilidades|skills|certificado|certification|$)',
+            text_lower, re.DOTALL | re.IGNORECASE
+        )
+        
+        if exp_section_match:
+            exp_text = exp_section_match.group(2)
+            exp_blocks = re.split(r'\n\s*\n', exp_text)
+            
+            for block in exp_blocks[:5]:  # Máximo 5 registros
+                lines_in_block = [l.strip() for l in block.split('\n') if l.strip()]
+                
+                if len(lines_in_block) >= 1:
+                    exp_record = {
+                        "position": "",
+                        "company": "",
+                        "start_date": None,
+                        "end_date": None,
+                        "description": ""
+                    }
+                    
+                    # Buscar fechas (formato: 2020-2022, 2020/2022, 2020 - 2022)
+                    dates_match = re.search(r'(20\d{2})[/-]?(20\d{2})?', ' '.join(lines_in_block))
+                    if dates_match:
+                        exp_record["start_date"] = dates_match.group(1)
+                        if dates_match.group(2):
+                            exp_record["end_date"] = dates_match.group(2)
+                    
+                    # Asignar líneas a campos
+                    exp_record["position"] = lines_in_block[0]  # Primera línea: posición
+                    if len(lines_in_block) >= 2:
+                        exp_record["company"] = lines_in_block[1]  # Segunda: empresa
+                    if len(lines_in_block) >= 3:
+                        exp_record["description"] = ' '.join(lines_in_block[2:])  # Resto: descripción
+                    
+                    if exp_record["position"]:
+                        experience.append(exp_record)
+        
+        # 4️⃣ Extraer CERTIFICACIONES
+        certifications = []
+        cert_keywords = ['certification', 'course', 'certified', 'award', 'certificación',
+                        'curso', 'certificado', 'reconocimiento']
+        
+        cert_section_match = re.search(
+            r'(certificado|certification|cursos|courses|capacitación|training)[\s\n]+(.*?)(?:idiomas|languages|habilidades|skills|$)',
+            text_lower, re.DOTALL | re.IGNORECASE
+        )
+        
+        if cert_section_match:
+            cert_text = cert_section_match.group(2)
+            cert_lines = [l.strip() for l in cert_text.split('\n') if l.strip()]
+            certifications = cert_lines[:10]  # Máximo 10
+        
+        # 5️⃣ Extraer IDIOMAS
+        languages = []
+        lang_keywords = ['language', 'speak', 'fluent', 'idioma', 'habla', 'fluido',
+                        'english', 'spanish', 'français', 'alemán', 'portuguese']
+        
+        lang_section_match = re.search(
+            r'(idioma|language|lengua)[\s\n]+(.*?)(?:$)',
+            text_lower, re.DOTALL | re.IGNORECASE
+        )
+        
+        if lang_section_match:
+            lang_text = lang_section_match.group(2)
+            lang_lines = [l.strip() for l in lang_text.split('\n') if l.strip()]
+            languages = lang_lines[:10]  # Máximo 10
+        
+        return {
+            "objective": objective,
+            "education": education,
+            "experience": experience,
+            "certifications": certifications,
+            "languages": languages
+        }
+    
+    except Exception as e:
+        print(f"⚠️ Error en _extract_harvard_cv_fields: {str(e)}")
+        return {
+            "objective": None,
+            "education": [],
+            "experience": [],
+            "certifications": [],
+            "languages": []
+        }
+
+
 def _convert_to_student_profile(student: Student) -> StudentProfile:
     """Convierte modelo Student a StudentProfile"""
     # Extraer first_name y last_name del nombre combinado si no están presentes
@@ -159,7 +343,7 @@ def _convert_to_student_profile(student: Student) -> StudentProfile:
         bio=student.bio,
         program=student.program,
         career=student.career,
-        year=student.year,
+        semester=student.semester,
         skills=json.loads(student.skills or "[]"),
         soft_skills=json.loads(student.soft_skills or "[]"),
         projects=json.loads(student.projects or "[]"),
@@ -336,6 +520,39 @@ async def upload_resume(
     # Análisis NLP
     try:
         analysis = _extract_resume_analysis(resume_text)
+        harvard_fields = _extract_harvard_cv_fields(resume_text)
+        
+        # ✅ FALLBACK UNSUPERVISED: Si regex no encontró campos clave → usa unsupervised extractor
+        if (not harvard_fields.get("education") and 
+            not harvard_fields.get("experience") and
+            len(resume_text.split()) > 50):  # Solo si hay suficiente contenido
+            
+            import logging
+            logger = logging.getLogger(__name__)
+            logger.info("🔄 Regex no encontró campos, intentando extracción unsupervised...")
+            
+            try:
+                unsupervised_result = unsupervised_cv_extractor.extract(resume_text)
+                
+                # Usar resultados del unsupervised si tiene confianza suficiente
+                if unsupervised_result.overall_confidence > 0.3:
+                    harvard_fields = {
+                        "objective": unsupervised_result.objective,
+                        "education": unsupervised_result.education,
+                        "experience": unsupervised_result.experience,
+                        "certifications": unsupervised_result.certifications,
+                        "languages": unsupervised_result.languages,
+                        "extraction_method": unsupervised_result.extraction_method,
+                        "confidence": unsupervised_result.overall_confidence
+                    }
+                    logger.info(f"✅ Extracción unsupervised exitosa. Confianza: {unsupervised_result.overall_confidence:.2f}")
+                else:
+                    logger.warning(f"⚠️ Confianza unsupervised baja ({unsupervised_result.overall_confidence:.2f}), mantener resultado vacío")
+            
+            except Exception as e:
+                logger.error(f"❌ Error en extracción unsupervised: {str(e)}")
+                # Fallback: mantener resultado de regex (podría estar vacío)
+    
     except Exception as e:
         await _log_audit_action(
             session, "UPLOAD_RESUME", f"email:{student_data.email}",
@@ -368,6 +585,13 @@ async def upload_resume(
         student.soft_skills = json.dumps(analysis["soft_skills"])
         student.projects = json.dumps(analysis["projects"])
         
+        # ✅ Guardar campos Harvard CV (NEW)
+        student.objective = harvard_fields["objective"]
+        student.education = json.dumps(harvard_fields["education"])
+        student.experience = json.dumps(harvard_fields["experience"])
+        student.certifications = json.dumps(harvard_fields["certifications"])
+        student.languages = json.dumps(harvard_fields["languages"])
+        
         # ✅ Actualizar banderas de CV (FIX: persistencia en BD)
         student.cv_uploaded = True
         student.cv_filename = file.filename
@@ -396,6 +620,12 @@ async def upload_resume(
             skills=json.dumps(analysis["skills"]),
             soft_skills=json.dumps(analysis["soft_skills"]),
             projects=json.dumps(analysis["projects"]),
+            # ✅ Guardar campos Harvard CV (NEW)
+            objective=harvard_fields["objective"],
+            education=json.dumps(harvard_fields["education"]),
+            experience=json.dumps(harvard_fields["experience"]),
+            certifications=json.dumps(harvard_fields["certifications"]),
+            languages=json.dumps(harvard_fields["languages"]),
             # ✅ Establecer banderas de CV (FIX: persistencia en BD)
             cv_uploaded=True,
             cv_filename=file.filename,
@@ -981,7 +1211,7 @@ async def update_student(
         "bio": student.bio,
         "program": student.program,
         "career": student.career,
-        "year": student.year
+        "semester": student.semester
     }
     
     # Actualizar campos proporcionados
@@ -1007,9 +1237,9 @@ async def update_student(
     if student_update.career is not None:
         student.career = student_update.career
         updated_fields.append("career")
-    if student_update.year is not None:
-        student.year = student_update.year
-        updated_fields.append("year")
+    if student_update.semester is not None:
+        student.semester = student_update.semester
+        updated_fields.append("semester")
     
     # ✅ Actualizar campos Harvard CV (NEW)
     if student_update.objective is not None:
@@ -1033,7 +1263,7 @@ async def update_student(
     try:
         session.add(student)
         await session.commit()
-        session.refresh(student)
+        await session.refresh(student)
         
         await _log_audit_action(
             session, "UPDATE_STUDENT", f"student_id:{student_id}",
@@ -1101,7 +1331,7 @@ async def update_student_skills(
         
         session.add(student)
         await session.commit()
-        session.refresh(student)
+        await session.refresh(student)
         
         await _log_audit_action(
             session, "UPDATE_SKILLS", f"student_id:{student_id}",
@@ -1285,7 +1515,7 @@ async def reanalyze_student_profile(
     
     session.add(student)
     await session.commit()
-    session.refresh(student)
+    await session.refresh(student)
     
     await _log_audit_action(
         session, "REANALYZE_STUDENT", f"student_id:{student_id}",
@@ -1545,7 +1775,7 @@ async def delete_student_resume(
         
         session.add(student)
         await session.commit()
-        session.refresh(student)
+        await session.refresh(student)
         
         # Registrar en auditoría
         await _log_audit_action(

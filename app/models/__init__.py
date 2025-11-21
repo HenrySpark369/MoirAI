@@ -38,7 +38,7 @@ class Student(SQLModel, table=True):
     # Perfil adicional
     bio: Optional[str] = Field(default=None, description="Biografía del estudiante")
     career: Optional[str] = Field(default=None, max_length=100, description="Carrera profesional")
-    year: Optional[str] = Field(default=None, max_length=20, description="Año de estudio")
+    semester: Optional[str] = Field(default=None, max_length=20, description="Semestre de estudio")
     
     # Seguridad - Contraseña (aunque en MVP se usa API key después del login)
     hashed_password: str = Field(max_length=255, description="Hash SHA256 de la contraseña")

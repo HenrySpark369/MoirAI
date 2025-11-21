@@ -39,7 +39,7 @@ class StudentUpdate(BaseModel):
     bio: Optional[str] = Field(None)
     program: Optional[str] = Field(None, max_length=100)
     career: Optional[str] = Field(None, max_length=100)
-    year: Optional[str] = Field(None, max_length=20)
+    semester: Optional[str] = Field(None, max_length=20)
     
     # ✨ Secciones CV Harvard (OPCIONALES)
     objective: Optional[str] = Field(None, max_length=500, description="Objetivo profesional")
@@ -68,7 +68,7 @@ class StudentProfile(BaseModel):
     bio: Optional[str] = None
     program: Optional[str] = None
     career: Optional[str] = None
-    year: Optional[str] = None
+    semester: Optional[str] = None
     skills: List[str] = []
     soft_skills: List[str] = []
     projects: List[str] = []
