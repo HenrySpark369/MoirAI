@@ -44,7 +44,7 @@ Valida la función `_clean_text()` que normaliza inputs para comparación.
 | 2 | "C++" | "cpp" | Mapeo de lenguaje C++ |
 | 3 | "C#" | "csharp" | Mapeo de lenguaje C# |
 | 4 | "Node.js" | "nodejs" | Mapeo de Node.js |
-| 5 | "Café con Açúcar" | "cafe con acucar" | Acentos y diacríticos |
+| 5 | "Café con Azúcar" | "cafe con acucar" | Acentos y diacríticos |
 | 6 | "Machine Learning & AI/ML" | "machine learning ai ml" | Caracteres especiales |
 | 7 | "  Python   Developer  " | "python developer" | Espacios múltiples |
 | 8 | "Python_Developer-2024!" | "python developer 2024" | Símbolos y números |

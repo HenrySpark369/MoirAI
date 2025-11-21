@@ -1,5 +1,5 @@
 """
-Endpoints de la API para el servicio de scraping de OCC.com.mx
+Endpoints de la API para el servicio de scraping de OCC.com.mx (ASYNC)
 
 🎯 Arquitectura Elegante (sin compresión falsa):
 - Búsqueda: Retorna datos básicos al usuario INMEDIATAMENTE
@@ -15,6 +15,8 @@ from typing import Dict, List, Optional
 from fastapi import APIRouter, HTTPException, Query, Depends
 from pydantic import BaseModel, Field
 from datetime import datetime
+from sqlmodel import select
+from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.services.occ_scraper_service import (
     SearchFilters,
@@ -35,7 +37,6 @@ from app.services.job_application_service import (
     get_enrichment_queue
 )
 from app.middleware.auth import get_current_user
-from sqlmodel import Session
 
 logger = logging.getLogger(__name__)
 
@@ -142,7 +143,7 @@ async def search_jobs(
         True, 
         description="Enriquecer datos en background (sin bloquear búsqueda) - default: true"
     ),
-    session: Session = Depends(get_session)
+    session: AsyncSession = Depends(get_session)
 ):
     """
     🔍 BÚSQUEDA DE EMPLEOS SIN COMPRESIÓN FALSA
@@ -270,7 +271,7 @@ async def _fetch_full_details_async(job_id: str) -> Dict:
 @router.get("/job/{job_id}", response_model=DetailedJobResponse)
 async def get_job_details(
     job_id: str,
-    session: Session = Depends(get_session)
+    session: AsyncSession = Depends(get_session)
 ):
     """
     📋 OBTENER DETALLES DE UN EMPLEO CON FULL_DESCRIPTION
@@ -399,7 +400,7 @@ async def get_job_details(
 async def create_job_application(
     application_request: JobApplicationRequest,
     current_user = Depends(get_current_user),
-    db_session = Depends(get_session)
+    db_session: AsyncSession = Depends(get_session)
 ):
     """
     ✅ Crear una nueva aplicación de empleo
@@ -449,7 +450,7 @@ async def create_job_application(
 async def get_user_applications(
     status: Optional[str] = Query(None, description="Filtrar por estado"),
     current_user = Depends(get_current_user),
-    db_session = Depends(get_session)
+    db_session: AsyncSession = Depends(get_session)
 ):
     """
     📋 Obtener las aplicaciones del usuario actual
@@ -480,7 +481,7 @@ async def update_application_status(
     status: str,
     notes: Optional[str] = None,
     current_user = Depends(get_current_user),
-    db_session = Depends(get_session)
+    db_session: AsyncSession = Depends(get_session)
 ):
     """
     🔄 Actualizar el estatus de una aplicación
@@ -513,7 +514,7 @@ async def update_application_status(
 @router.get("/applications/stats", response_model=StatsResponse, tags=["Applications"])
 async def get_application_statistics(
     current_user = Depends(get_current_user),
-    db_session = Depends(get_session)
+    db_session: AsyncSession = Depends(get_session)
 ):
     """
     📊 Obtener estadísticas de aplicaciones del usuario
@@ -542,7 +543,7 @@ async def get_application_statistics(
 async def create_job_alert(
     alert_request: JobAlertRequest,
     current_user = Depends(get_current_user),
-    db_session = Depends(get_session)
+    db_session: AsyncSession = Depends(get_session)
 ):
     """
     🔔 Crear una alerta de empleo
@@ -580,7 +581,7 @@ async def create_job_alert(
 @router.get("/alerts", tags=["Alerts"])
 async def get_user_alerts(
     current_user = Depends(get_current_user),
-    db_session = Depends(get_session)
+    db_session: AsyncSession = Depends(get_session)
 ):
     """
     📋 Obtener alertas de empleo del usuario
@@ -589,9 +590,12 @@ async def get_user_alerts(
     """
     try:
         alert_manager = JobAlertManager(db_session)
-        alerts = db_session.query(UserJobAlertDB).filter(
-            UserJobAlertDB.user_id == current_user.id
-        ).all()
+        result = await db_session.execute(
+            select(UserJobAlertDB).where(
+                UserJobAlertDB.user_id == current_user.id
+            )
+        )
+        alerts = result.scalars().all()
         
         return {
             "alerts": alerts,
@@ -611,7 +615,7 @@ async def get_user_alerts(
 async def delete_job_alert(
     alert_id: int,
     current_user = Depends(get_current_user),
-    db_session = Depends(get_session)
+    db_session: AsyncSession = Depends(get_session)
 ):
     """
     🗑️ Eliminar una alerta de empleo
@@ -619,17 +623,20 @@ async def delete_job_alert(
     Desactiva o elimina una alerta específica del usuario.
     """
     try:
-        alert = db_session.query(UserJobAlertDB).filter(
-            UserJobAlertDB.id == alert_id,
-            UserJobAlertDB.user_id == current_user.id
-        ).first()
+        result = await db_session.execute(
+            select(UserJobAlertDB).where(
+                (UserJobAlertDB.id == alert_id) &
+                (UserJobAlertDB.user_id == current_user.id)
+            )
+        )
+        alert = result.scalars().first()
         
         if not alert:
             raise HTTPException(status_code=404, detail="Alerta no encontrada")
         
         alert.is_active = False
         db_session.add(alert)
-        db_session.commit()
+        await db_session.commit()
         
         return {
             "alert_id": alert_id,
@@ -651,7 +658,7 @@ async def delete_job_alert(
 async def get_search_history(
     limit: int = Query(10, ge=1, le=50, description="Número de búsquedas a mostrar"),
     current_user = Depends(get_current_user),
-    db_session = Depends(get_session)
+    db_session: AsyncSession = Depends(get_session)
 ):
     """
     ⏱️ Obtener historial de búsquedas del usuario

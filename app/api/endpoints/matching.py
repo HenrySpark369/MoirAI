@@ -1,11 +1,12 @@
 """
-Endpoints para Matchmaking entre estudiantes y oportunidades laborales
+Endpoints para Matchmaking entre estudiantes y oportunidades laborales (ASYNC)
 Sistema de recomendaciones inteligentes basado en compatibilidad de perfiles
 """
 from typing import List, Optional
 import logging
 from fastapi import APIRouter, Depends, HTTPException, Query, Path
-from sqlmodel import Session, select
+from sqlmodel import select
+from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.database import get_session
 from app.models import Student
@@ -51,7 +52,7 @@ async def get_recommendations(
         description="Número máximo de recomendaciones a retornar"
     ),
     current_user: UserContext = Depends(AuthService.get_current_user),
-    session: Session = Depends(get_session)
+    session: AsyncSession = Depends(get_session)
 ):
     """
     Obtener recomendaciones personalizadas de empleos para un estudiante.
@@ -95,7 +96,7 @@ async def get_recommendations(
             )
 
         # Verificar que el estudiante existe
-        student = session.get(Student, student_id)
+        student = await session.get(Student, student_id)
         if not student:
             raise HTTPException(
                 status_code=404,
@@ -176,7 +177,7 @@ async def get_recommendations(
 async def filter_students_by_criteria(
     criteria: MatchingCriteria,
     current_user: UserContext = Depends(AuthService.get_current_user),
-    session: Session = Depends(get_session)
+    session: AsyncSession = Depends(get_session)
 ):
     """
     Filtrar estudiantes que cumplen criterios específicos.
@@ -275,7 +276,7 @@ async def get_featured_students(
         description="Número máximo de estudiantes a retornar"
     ),
     current_user: UserContext = Depends(AuthService.get_current_user),
-    session: Session = Depends(get_session)
+    session: AsyncSession = Depends(get_session)
 ):
     """
     Obtener los estudiantes más destacados de la plataforma.
@@ -350,7 +351,7 @@ async def calculate_matching_score(
         description="Descripción del puesto de trabajo"
     ),
     current_user: UserContext = Depends(AuthService.get_current_user),
-    session: Session = Depends(get_session)
+    session: AsyncSession = Depends(get_session)
 ):
     """
     Calcular el score de matching entre un estudiante y un trabajo específico.
@@ -392,7 +393,7 @@ async def calculate_matching_score(
             )
 
         # Obtener estudiante
-        student = session.get(Student, student_id)
+        student = await session.get(Student, student_id)
         if not student:
             raise HTTPException(
                 status_code=404,

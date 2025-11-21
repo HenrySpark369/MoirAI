@@ -27,11 +27,21 @@ class Student(SQLModel, table=True):
     
     id: Optional[int] = Field(default=None, primary_key=True)
     name: str = Field(max_length=100, description="Nombre completo del estudiante")
-    email: str = Field(unique=True, max_length=100, description="Email institucional (encriptado)")
+    first_name: Optional[str] = Field(default=None, max_length=50, description="Nombre")
+    last_name: Optional[str] = Field(default=None, max_length=50, description="Apellido")
+    email: str = Field(unique=True, max_length=255, description="Email institucional (encriptado con Fernet)")
     email_hash: str = Field(default="", max_length=64, description="Hash SHA256 del email para búsquedas")
     phone: Optional[str] = Field(default=None, max_length=255, description="Teléfono (encriptado)")
     phone_hash: Optional[str] = Field(default=None, max_length=64, description="Hash SHA256 del teléfono para búsquedas")
     program: Optional[str] = Field(max_length=100, description="Programa académico")
+    
+    # Perfil adicional
+    bio: Optional[str] = Field(default=None, description="Biografía del estudiante")
+    career: Optional[str] = Field(default=None, max_length=100, description="Carrera profesional")
+    semester: Optional[str] = Field(default=None, max_length=20, description="Semestre de estudio")
+    
+    # Seguridad - Contraseña (aunque en MVP se usa API key después del login)
+    hashed_password: str = Field(max_length=255, description="Hash SHA256 de la contraseña")
     
     # Datos de privacidad y consentimiento (LFPDPPP)
     consent_data_processing: bool = Field(default=True, description="Consentimiento para procesamiento de datos")
@@ -42,6 +52,18 @@ class Student(SQLModel, table=True):
     skills: Optional[str] = Field(description="Lista de habilidades técnicas (JSON)")
     soft_skills: Optional[str] = Field(description="Lista de habilidades blandas (JSON)")
     projects: Optional[str] = Field(description="Lista de proyectos (JSON)")
+    
+    # ✨ Secciones CV Harvard (OPCIONALES - permite estructura manual)
+    objective: Optional[str] = Field(default=None, max_length=500, description="Objetivo profesional")
+    education: Optional[str] = Field(default=None, description="Educación (JSON list)")
+    experience: Optional[str] = Field(default=None, description="Experiencia profesional (JSON list)")
+    certifications: Optional[str] = Field(default=None, description="Certificaciones (JSON list)")
+    languages: Optional[str] = Field(default=None, description="Idiomas (JSON list)")
+    
+    # CV uploaded (documento)
+    cv_uploaded: bool = Field(default=False, description="Si el currículum ha sido subido")
+    cv_filename: Optional[str] = Field(default=None, max_length=255, description="Nombre del archivo del CV")
+    cv_upload_date: Optional[datetime] = Field(default=None, description="Fecha de subida del CV")
     
     # Metadatos
     created_at: datetime = Field(default_factory=datetime.utcnow)
@@ -121,15 +143,70 @@ class Company(SQLModel, table=True):
     
     id: Optional[int] = Field(default=None, primary_key=True)
     name: str = Field(max_length=100, description="Nombre de la empresa")
-    email: str = Field(unique=True, max_length=100, description="Email de contacto (encriptado)")
+    email: str = Field(unique=True, max_length=255, description="Email de contacto (encriptado con Fernet)")
     email_hash: str = Field(default="", max_length=64, description="Hash SHA256 del email para búsquedas")
     industry: Optional[str] = Field(max_length=50, description="Sector industrial")
     size: Optional[str] = Field(max_length=20, description="Tamaño de empresa (startup, pequeña, mediana, grande)")
     location: Optional[str] = Field(max_length=100, description="Ubicación principal")
     
+    # Seguridad - Contraseña (aunque en MVP se usa API key después del login)
+    hashed_password: str = Field(max_length=255, description="Hash SHA256 de la contraseña")
+    
     # Estado y verificación
     is_verified: bool = Field(default=False, description="Empresa verificada por UNRC")
     is_active: bool = Field(default=True)
+    
+    # Metadatos
+    created_at: datetime = Field(default_factory=datetime.utcnow)
+    updated_at: Optional[datetime] = None
+    
+    # ============================================================
+    # MÉTODOS DE ENCRIPTACIÓN/DESENCRIPTACIÓN
+    # ============================================================
+    
+    def set_email(self, email: str) -> None:
+        """
+        Establecer email (encriptado automáticamente)
+        
+        Args:
+            email: Email en texto plano
+        """
+        from app.utils.encryption import EncryptionService
+        encryption_service = EncryptionService()
+        
+        email_lower = email.lower().strip()
+        self.email = encryption_service.encrypt(email_lower)
+        # Generar hash para búsquedas
+        self.email_hash = hashlib.sha256(email_lower.encode()).hexdigest()
+    
+    def get_email(self) -> str:
+        """
+        Obtener email desencriptado
+        
+        Returns:
+            Email en texto plano
+        """
+        from app.utils.encryption import EncryptionService
+        
+        if self.email:
+            encryption_service = EncryptionService()
+            return encryption_service.decrypt(self.email)
+        return ""
+
+
+class Admin(SQLModel, table=True):
+    """Modelo de administrador del sistema"""
+    
+    id: Optional[int] = Field(default=None, primary_key=True)
+    name: str = Field(max_length=100, description="Nombre completo del administrador")
+    email: str = Field(unique=True, max_length=255, description="Email del administrador (encriptado con Fernet)")
+    email_hash: str = Field(default="", max_length=64, description="Hash SHA256 del email para búsquedas")
+    
+    # Seguridad - Contraseña (para login con email/password)
+    hashed_password: str = Field(max_length=255, description="Hash SHA256 de la contraseña")
+    
+    # Estado
+    is_active: bool = Field(default=True, description="Si el admin está activo")
     
     # Metadatos
     created_at: datetime = Field(default_factory=datetime.utcnow)
@@ -210,7 +287,7 @@ class JobPosition(SQLModel, table=True):
     company_logo: Optional[str] = Field(default=None, description="URL del logo de la empresa")
     
     # Metadatos y estado
-    publication_date: Optional[datetime] = Field(default=None, description="Fecha de publicación original")
+    publication_date: Optional[str] = Field(default=None, max_length=255, description="Fecha de publicación (ISO 8601, relativa como 'Hace 5 días', o formateada)")
     scraped_at: Optional[datetime] = Field(default=None, description="Fecha de scraping (si aplica)")
     is_active: bool = Field(default=True, description="Si el empleo está activo")
     is_featured: bool = Field(default=False, description="Si es empleo destacado")
@@ -290,12 +367,12 @@ class ApiKey(SQLModel, table=True):
     id: Optional[int] = Field(default=None, primary_key=True)
     key_id: str = Field(unique=True, max_length=32, description="Identificador público de la clave")
     key_hash: str = Field(max_length=256, description="Hash de la clave secreta")
-    key_prefix: str = Field(max_length=10, description="Prefijo visible de la clave")
+    key_prefix: str = Field(max_length=50, description="Prefijo visible de la clave (ej: stu_abc123)")
     
     # Usuario propietario
     user_id: int = Field(description="ID del usuario propietario")
     user_type: str = Field(max_length=20, description="Tipo de usuario (student, company, admin)")
-    user_email: str = Field(max_length=100, description="Email del usuario")
+    user_email: str = Field(max_length=255, description="Email del usuario (encriptado con Fernet)")
     
     # Metadatos de la clave
     name: str = Field(max_length=100, description="Nombre descriptivo de la clave")
@@ -334,7 +411,8 @@ __all__ = [
     
     # Core models
     "Student",
-    "Company", 
+    "Company",
+    "Admin",
     "JobPosition",
     "JobMatchEvent",
     "AuditLog",

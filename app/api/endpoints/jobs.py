@@ -1,5 +1,5 @@
 """
-Job Posting & Search API Routes
+Job Posting & Search API Routes (ASYNC)
 
 Endpoints for job searching, retrieval y autocomplete suggestions.
 
@@ -25,7 +25,8 @@ from typing import List, Optional
 from datetime import datetime
 
 from fastapi import APIRouter, Depends, Query, HTTPException, status
-from sqlmodel import Session, select, or_
+from sqlmodel import select, or_
+from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.database import get_session
 from app.models.job_posting import JobPosting
@@ -70,7 +71,7 @@ async def search_jobs(
         ge=0,
         description="Results to skip (for pagination)"
     ),
-    db: Session = Depends(get_session),
+    db: AsyncSession = Depends(get_session),
 ) -> JobSearchResponse:
     """
     Search job postings by keyword and location.
@@ -140,10 +141,12 @@ async def search_jobs(
             query = query.where(JobPosting.location.ilike(f"%{location}%"))
         
         # Apply pagination
-        total = db.exec(select(JobPosting)).count() if skip == 0 else None
+        result = await db.execute(select(JobPosting))
+        total = result.scalars().all().__len__() if skip == 0 else None
         query = query.offset(skip).limit(limit)
         
-        jobs = db.exec(query).all()
+        result = await db.execute(query)
+        jobs = result.scalars().all()
         
         # Convert to response using to_dict_public() (excludes PII)
         items = [
@@ -176,7 +179,7 @@ async def search_jobs(
 )
 async def get_job_detail(
     job_id: int,
-    db: Session = Depends(get_session),
+    db: AsyncSession = Depends(get_session),
 ) -> JobDetailResponse:
     """
     Retrieve detailed job posting information.
@@ -215,9 +218,10 @@ async def get_job_detail(
     ```
     """
     try:
-        job = db.exec(
+        result = await db.execute(
             select(JobPosting).where(JobPosting.id == job_id)
-        ).first()
+        )
+        job = result.scalars().first()
         
         if not job:
             logger.warning(f"Job {job_id} not found")
