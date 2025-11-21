@@ -71,6 +71,28 @@ class Settings(BaseSettings):
     MAX_SOFT_SKILLS_EXTRACTED: int = 20
     MAX_PROJECTS_EXTRACTED: int = 20
     
+    # Text Vectorization Configuration
+    NLP_MAX_TEXT_LENGTH: int = Field(
+        default=50000,
+        description="Máximo de caracteres a procesar en un documento"
+    )
+    NLP_MAX_TOKEN_LENGTH: int = Field(
+        default=100,
+        description="Máximo de caracteres por token"
+    )
+    NLP_MAX_VOCAB_SIZE: int = Field(
+        default=5000,
+        description="Máximo de tokens únicos en vocabulario"
+    )
+    NLP_MAX_NGRAM_SIZE: int = Field(
+        default=3,
+        description="Máximo tamaño de n-gramas (1=unigramas, 2=bigramas, etc.)"
+    )
+    NLP_MIN_TOKEN_LENGTH: int = Field(
+        default=2,
+        description="Longitud mínima de tokens válidos"
+    )
+    
     # Privacy and Security (LFPDPPP compliance)
     DATA_RETENTION_DAYS: int = 365
     REQUIRE_CONSENT: bool = True
