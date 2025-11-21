@@ -24,19 +24,25 @@ async def _log_audit_action(
     session: AsyncSession,
     action: str,
     resource: str,
-    resource_id: Optional[int] = None,
+    current_user: Optional["UserContext"] = None,
     details: Optional[str] = None,
-    user_id: Optional[int] = None,
+    success: bool = True,
+    error_message: Optional[str] = None,
 ):
     """Registra una acción de auditoría de forma asincrónica"""
     try:
+        # Extraer información del usuario si está disponible
+        actor_role = current_user.role if current_user else "unknown"
+        actor_id = str(current_user.user_id) if current_user and current_user.user_id else None
+        
         audit_log = AuditLog(
+            actor_role=actor_role,
+            actor_id=actor_id,
             action=action,
             resource=resource,
-            resource_id=resource_id,
             details=details,
-            user_id=user_id,
-            timestamp=datetime.utcnow(),
+            success=success,
+            error_message=error_message,
         )
         session.add(audit_log)
         await session.commit()

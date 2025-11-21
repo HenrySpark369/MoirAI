@@ -35,16 +35,28 @@
 }
 
 .profile-content {
-    display: grid;
-    grid-template-columns: 1fr 1fr;
+    display: grid !important;
+    grid-template-columns: 1.6fr 1fr !important;
     gap: 2rem;
+    width: 100% !important;
 }
 
 /* Sidebar */
 .profile-sidebar {
-    display: flex;
+    display: flex !important;
     flex-direction: column;
     gap: 2rem;
+    min-width: 0;
+    max-width: 100%;
+}
+
+/* Main Content */
+.profile-main-content {
+    display: flex !important;
+    flex-direction: column;
+    gap: 2rem;
+    min-width: 0;
+    max-width: 100%;
 }
 
 /* Card Base Style */
@@ -106,6 +118,8 @@
     font-family: 'Inter', sans-serif;
     font-size: 0.95rem;
     transition: all 0.3s ease;
+    width: 100% !important;
+    box-sizing: border-box !important;
 }
 
 .form-group input:focus,
@@ -140,6 +154,10 @@
     display: grid;
     grid-template-columns: 1fr 1fr;
     gap: 1.5rem;
+}
+
+.profile-form .form-row {
+    grid-template-columns: 1fr !important;
 }
 
 .form-group textarea {
@@ -389,15 +407,10 @@
 }
 
 #student-fields .form-row {
-    grid-template-columns: 1fr 1fr;
+    grid-template-columns: 1fr !important;
 }
 
-/* Main Content */
-.profile-main-content {
-    display: flex;
-    flex-direction: column;
-    gap: 2rem;
-}
+/* Main Content - Definido arriba */
 
 /* Danger Zone */
 .danger-zone {

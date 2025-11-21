@@ -19,7 +19,7 @@ from app.schemas import (
     StudentPublic
 )
 from app.services.text_vectorization_service import text_vectorization_service, TermExtractor
-from app.services.unsupervised_cv_extractor import unsupervised_cv_extractor
+from app.services.cv_extractor_v2_spacy import CVExtractorV2
 from app.utils.file_processing import extract_text_from_upload, extract_text_from_upload_async, CVFileValidator
 from app.middleware.auth import AuthService
 from app.core.config import settings
@@ -529,28 +529,44 @@ async def upload_resume(
             
             import logging
             logger = logging.getLogger(__name__)
-            logger.info("🔄 Regex no encontró campos, intentando extracción unsupervised...")
+            logger.info("🔄 Regex no encontró campos, intentando extracción con spaCy NLP...")
             
             try:
-                unsupervised_result = unsupervised_cv_extractor.extract(resume_text)
+                # Usar CVExtractorV2 con soporte bilingual automático (es + en)
+                extractor = CVExtractorV2()
+                spacy_result = extractor.extract(resume_text)
                 
-                # Usar resultados del unsupervised si tiene confianza suficiente
-                if unsupervised_result.overall_confidence > 0.3:
-                    harvard_fields = {
-                        "objective": unsupervised_result.objective,
-                        "education": unsupervised_result.education,
-                        "experience": unsupervised_result.experience,
-                        "certifications": unsupervised_result.certifications,
-                        "languages": unsupervised_result.languages,
-                        "extraction_method": unsupervised_result.extraction_method,
-                        "confidence": unsupervised_result.overall_confidence
-                    }
-                    logger.info(f"✅ Extracción unsupervised exitosa. Confianza: {unsupervised_result.overall_confidence:.2f}")
-                else:
-                    logger.warning(f"⚠️ Confianza unsupervised baja ({unsupervised_result.overall_confidence:.2f}), mantener resultado vacío")
+                # Convertir resultado de CVExtractorV2 (dataclass) a dict compatible con el código existente
+                harvard_fields = {
+                    "objective": spacy_result.objective,
+                    "education": [
+                        {
+                            "institution": edu.institution,
+                            "degree": edu.degree,
+                            "field_of_study": edu.field,
+                            "graduation_year": edu.end_year  # end_year es el año de graduación
+                        }
+                        for edu in spacy_result.education
+                    ],
+                    "experience": [
+                        {
+                            "position": exp.position,
+                            "company": exp.company,
+                            "start_date": str(exp.start_year) if exp.start_year else None,
+                            "end_date": str(exp.end_year) if exp.end_year else None,
+                            "description": exp.description
+                        }
+                        for exp in spacy_result.experience
+                    ],
+                    "certifications": spacy_result.certifications,
+                    "languages": spacy_result.languages if isinstance(spacy_result.languages, list) else list(spacy_result.languages.keys()),
+                    "extraction_method": "spacy_nlp_v2",
+                    "confidence": 0.75  # CVExtractorV2 proporciona confianza a nivel de campos individuales
+                }
+                logger.info(f"✅ Extracción spaCy NLP exitosa. Educación: {len(spacy_result.education)}, Experiencia: {len(spacy_result.experience)}")
             
             except Exception as e:
-                logger.error(f"❌ Error en extracción unsupervised: {str(e)}")
+                logger.error(f"❌ Error en extracción spaCy NLP: {str(e)}")
                 # Fallback: mantener resultado de regex (podría estar vacío)
     
     except Exception as e:

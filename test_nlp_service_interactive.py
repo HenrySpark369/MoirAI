@@ -32,7 +32,7 @@ class NLPServiceTester:
             ("C++", "Lenguaje C++"),
             ("C#", "Lenguaje C#"),
             ("Node.js", "Node.js"),
-            ("Café con Açúcar", "Acentos y diacríticos"),
+            ("Café con Azúcar", "Acentos y diacríticos"),
             ("Machine Learning & AI/ML", "Caracteres especiales"),
             ("  Python   Developer  ", "Espacios múltiples"),
             ("Python_Developer-2024!", "Símbolos y números"),
