@@ -454,6 +454,12 @@ async def get_current_user_profile(
                 "cv_uploaded": student.cv_uploaded or False,
                 "cv_filename": student.cv_filename,
                 "cv_upload_date": student.cv_upload_date,
+                # ✅ Harvard CV Fields (NEW)
+                "objective": getattr(student, 'objective', None),
+                "education": safe_parse_list(getattr(student, 'education', None)),
+                "experience": safe_parse_list(getattr(student, 'experience', None)),
+                "certifications": safe_parse_list(getattr(student, 'certifications', None)),
+                "languages": safe_parse_list(getattr(student, 'languages', None)),
                 "created_at": student.created_at.isoformat() if student.created_at else None,
                 "last_active": student.last_active.isoformat() if student.last_active else None,
                 "is_active": student.is_active or True,

@@ -18,7 +18,7 @@ from app.schemas import (
     ResumeAnalysisResponse, UserContext, BaseResponse, PaginatedResponse,
     StudentPublic
 )
-from app.services.nlp_service import nlp_service
+from app.services.text_vectorization_service import text_vectorization_service, TermExtractor
 from app.utils.file_processing import extract_text_from_upload, extract_text_from_upload_async, CVFileValidator
 from app.middleware.auth import AuthService
 from app.core.config import settings
@@ -41,6 +41,98 @@ async def _log_audit_action(session: AsyncSession, action: str, resource: str,
     )
     session.add(audit_log)
     await session.commit()
+
+
+def _extract_resume_analysis(resume_text: str) -> dict:
+    """
+    Procesar análisis de CV para extraer skills, soft_skills y proyectos estructurados.
+    
+    Usa analyze_document() de text_vectorization_service para obtener features,
+    luego los procesa según la lógica de negocio del endpoint.
+    
+    Retorna:
+        Dict con: {
+            "skills": [...],
+            "soft_skills": [...],
+            "projects": [...],
+            "confidence": float
+        }
+    """
+    if not resume_text or len(resume_text.strip()) < 50:
+        return {
+            "skills": [],
+            "soft_skills": [],
+            "projects": [],
+            "confidence": 0.0
+        }
+    
+    try:
+        # Usar analyze_document (genérico) para obtener features
+        doc_analysis = text_vectorization_service.analyze_document(resume_text)
+        
+        # Extraer skills de los términos técnicos
+        # technical_terms es List[Tuple[term, relevance]]
+        technical_terms = doc_analysis.get("technical_terms", [])
+        skills = [term[0] if isinstance(term, tuple) else term 
+                 for term in technical_terms]
+        skills = skills[:settings.MAX_SKILLS_EXTRACTED]
+        
+        # Extraer soft_skills de las habilidades blandas detectadas
+        # soft_skills es List[Tuple[skill, relevance]]
+        soft_skills_detected = doc_analysis.get("soft_skills", [])
+        soft_skills = [skill[0] if isinstance(skill, tuple) else skill 
+                      for skill in soft_skills_detected]
+        soft_skills = soft_skills[:settings.MAX_SOFT_SKILLS_EXTRACTED]
+        
+        # Extraer proyectos de las keyphrases
+        # keyphrases es List[Tuple[phrase, score]]
+        keyphrases = doc_analysis.get("keyphrases", [])
+        projects = []
+        project_keywords = {
+            "proyecto", "project", "desarrollo", "developed", "created", "implementé",
+            "sistema", "system", "aplicación", "application", "plataforma", "platform"
+        }
+        
+        for phrase, score in keyphrases:
+            phrase_lower = str(phrase).lower()
+            if any(kw in phrase_lower for kw in project_keywords):
+                projects.append(str(phrase))
+                if len(projects) >= settings.MAX_PROJECTS_EXTRACTED:
+                    break
+        
+        # Calcular confianza basada en elementos encontrados
+        total_found = len(skills) + len(soft_skills) + len(projects)
+        confidence = min(1.0, total_found / 10.0)
+        
+        return {
+            "skills": skills,
+            "soft_skills": soft_skills,
+            "projects": projects,
+            "confidence": round(confidence, 2)
+        }
+    
+    except Exception as e:
+        # Fallback: análisis básico con hardcoded skills
+        print(f"⚠️ Error en _extract_resume_analysis: {str(e)}, usando fallback básico")
+        
+        resume_clean = resume_text.lower()
+        technical_skills = {
+            "python", "java", "javascript", "typescript", "csharp", "cpp", "rust", "go",
+            "react", "vue", "angular", "fastapi", "django", "flask", "spring",
+            "postgresql", "mongodb", "redis", "docker", "kubernetes", "aws",
+            "machine learning", "tensorflow", "pytorch", "pandas", "numpy",
+            "sql", "rest", "api", "microservices", "linux", "git"
+        }
+        
+        skills = [skill for skill in technical_skills if skill in resume_clean]
+        skills = skills[:settings.MAX_SKILLS_EXTRACTED]
+        
+        return {
+            "skills": skills,
+            "soft_skills": [],
+            "projects": [],
+            "confidence": min(1.0, len(skills) / 10.0)
+        }
 
 
 def _convert_to_student_profile(student: Student) -> StudentProfile:
@@ -71,6 +163,12 @@ def _convert_to_student_profile(student: Student) -> StudentProfile:
         skills=json.loads(student.skills or "[]"),
         soft_skills=json.loads(student.soft_skills or "[]"),
         projects=json.loads(student.projects or "[]"),
+        # ✅ Harvard CV Fields (NEW)
+        objective=student.objective,
+        education=json.loads(student.education or "[]") if student.education else None,
+        experience=json.loads(student.experience or "[]") if student.experience else None,
+        certifications=json.loads(student.certifications or "[]") if student.certifications else None,
+        languages=json.loads(student.languages or "[]") if student.languages else None,
         cv_uploaded=student.cv_uploaded or False,
         cv_filename=student.cv_filename,
         cv_upload_date=student.cv_upload_date,
@@ -237,7 +335,7 @@ async def upload_resume(
     
     # Análisis NLP
     try:
-        analysis = nlp_service.analyze_resume(resume_text)
+        analysis = _extract_resume_analysis(resume_text)
     except Exception as e:
         await _log_audit_action(
             session, "UPLOAD_RESUME", f"email:{student_data.email}",
@@ -913,6 +1011,23 @@ async def update_student(
         student.year = student_update.year
         updated_fields.append("year")
     
+    # ✅ Actualizar campos Harvard CV (NEW)
+    if student_update.objective is not None:
+        student.objective = student_update.objective
+        updated_fields.append("objective")
+    if student_update.education is not None:
+        student.education = json.dumps(student_update.education)
+        updated_fields.append("education")
+    if student_update.experience is not None:
+        student.experience = json.dumps(student_update.experience)
+        updated_fields.append("experience")
+    if student_update.certifications is not None:
+        student.certifications = json.dumps(student_update.certifications)
+        updated_fields.append("certifications")
+    if student_update.languages is not None:
+        student.languages = json.dumps(student_update.languages)
+        updated_fields.append("languages")
+    
     student.updated_at = datetime.utcnow()
     
     try:
@@ -1151,7 +1266,7 @@ async def reanalyze_student_profile(
     
     # Re-análisis NLP
     try:
-        analysis = nlp_service.analyze_resume(student.profile_text)
+        analysis = _extract_resume_analysis(student.profile_text)
     except Exception as e:
         await _log_audit_action(
             session, "REANALYZE_STUDENT", f"student_id:{student_id}",
@@ -1224,7 +1339,7 @@ async def bulk_reanalyze_students(
                 errors.append(f"Estudiante {student_id}: sin texto de currículum")
                 continue
             
-            analysis = nlp_service.analyze_resume(student.profile_text)
+            analysis = _extract_resume_analysis(student.profile_text)
             
             student.skills = json.dumps(analysis["skills"])
             student.soft_skills = json.dumps(analysis["soft_skills"])

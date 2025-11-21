@@ -97,6 +97,18 @@ async function loadUserProfile() {
 
         // ✅ Mostrar CV solo para estudiantes
         if (isStudent) {
+            // Mostrar container Harvard CV
+            const harvardContainer = document.getElementById('harvard-cv-container');
+            if (harvardContainer) {
+                harvardContainer.style.display = 'block';
+            }
+            
+            // Ocultar fallback
+            const fallbackCard = document.getElementById('skills-card-fallback');
+            if (fallbackCard) {
+                fallbackCard.style.display = 'none';
+            }
+
             if (currentUser.cv_uploaded && currentUser.cv_filename) {
                 console.log('📄 CV encontrado:', currentUser.cv_filename);
                 showCVStatus(true, currentUser.cv_filename, currentUser.cv_upload_date);
@@ -121,13 +133,26 @@ async function loadUserProfile() {
             if (allSkills.length > 0) {
                 displayInferredSkills(allSkills);
             }
+
+            // ✨ Cargar secciones Harvard CV
+            loadCVHarvardSections(currentUser);
+
         } else if (isCompany) {
-            // Ocultar secciones de CV y habilidades para empresas
+            // Ocultar container Harvard CV
+            const harvardContainer = document.getElementById('harvard-cv-container');
+            if (harvardContainer) {
+                harvardContainer.style.display = 'none';
+            }
+            
+            // Mostrar fallback de skills
+            const fallbackCard = document.getElementById('skills-card-fallback');
+            if (fallbackCard) {
+                fallbackCard.style.display = 'block';
+            }
+            
+            // Ocultar secciones de CV para empresas
             const cvCard = document.querySelector('.profile-card:has(#cv-upload-area)');
             if (cvCard) cvCard.style.display = 'none';
-            
-            const skillsCard = document.querySelector('.profile-card:has(#inferred-skills)');
-            if (skillsCard) skillsCard.style.display = 'none';
         }
 
         return currentUser;
@@ -162,6 +187,10 @@ function setupFormHandlers() {
 
         // Obtener datos
         const formData = FormValidator.getFormData(form);
+
+        // ✨ Serializar datos Harvard CV
+        const harvardData = serializeCVHarvardData();
+        Object.assign(formData, harvardData);
 
         // Mostrar loading
         const submitBtn = form.querySelector('button[type="submit"]');
@@ -466,28 +495,32 @@ async function deleteCVFile() {
  * Mostrar habilidades inferidas
  */
 function displayInferredSkills(skills) {
-    const container = document.getElementById('inferred-skills');
+    // Intentar llenar ambos contenedores (para compatibilidad)
+    const mainContainer = document.getElementById('inferred-skills');
+    const fallbackContainer = document.getElementById('inferred-skills-fallback');
 
-    if (!container || !skills || skills.length === 0) {
-        if (container) {
-            container.innerHTML = `
-                <div class="empty-state">
-                    <i class="fas fa-brain"></i>
-                    <p>Sube tu CV para que analicemos tus habilidades</p>
-                </div>
-            `;
-        }
+    if (!skills || skills.length === 0) {
+        // Empty state
+        const emptyHtml = `
+            <div class="empty-state">
+                <i class="fas fa-brain"></i>
+                <p>Sube tu CV para que analicemos tus habilidades</p>
+            </div>
+        `;
+        
+        if (mainContainer) mainContainer.innerHTML = emptyHtml;
+        if (fallbackContainer) fallbackContainer.innerHTML = emptyHtml;
         return;
     }
 
-    let html = '<div class="skills-grid">';
+    let html = '<div class="cv-skills-grid">';
 
     skills.forEach((skill, index) => {
         // Mostrar solo el texto tal como viene
         const skillName = typeof skill === 'string' ? skill : (skill.name || 'Desconocida');
 
         html += `
-            <div class="skill-item skill-badge">
+            <div class="skill-item skill-badge-tech">
                 <span class="skill-name">${skillName}</span>
                 <button class="skill-remove" onclick="removeSkill('${index}')" title="Remover">
                     <i class="fas fa-times"></i>
@@ -497,7 +530,10 @@ function displayInferredSkills(skills) {
     });
 
     html += '</div>';
-    container.innerHTML = html;
+    
+    // Llenar ambos contenedores
+    if (mainContainer) mainContainer.innerHTML = html;
+    if (fallbackContainer) fallbackContainer.innerHTML = html;
 }
 
 /**
@@ -560,4 +596,367 @@ async function handlePasswordChange() {
         notificationManager.hideLoading();
         notificationManager.error(error.message || 'Error al cambiar contraseña');
     }
+}
+
+/**
+ * ✨ NUEVA FUNCIÓN: Cargar secciones CV Harvard
+ * Genera dinámicamente las secciones colapsables con datos del usuario
+ */
+function loadCVHarvardSections(user) {
+    const container = document.getElementById('cv-harvard-sections');
+    if (!container) return;
+
+    // Definir secciones a mostrar
+    const sections = [
+        {
+            id: 'objective',
+            title: '📌 Objetivo Profesional',
+            type: 'textarea',
+            maxLength: 500,
+            value: user.objective || ''
+        },
+        {
+            id: 'education',
+            title: '🎓 Educación',
+            type: 'list',
+            fields: ['institution', 'degree', 'field_of_study', 'graduation_year'],
+            value: user.education ? (typeof user.education === 'string' ? JSON.parse(user.education) : user.education) : []
+        },
+        {
+            id: 'experience',
+            title: '💼 Experiencia Profesional',
+            type: 'list',
+            fields: ['position', 'company', 'start_date', 'end_date', 'description'],
+            value: user.experience ? (typeof user.experience === 'string' ? JSON.parse(user.experience) : user.experience) : []
+        },
+        {
+            id: 'certifications',
+            title: '🏆 Certificaciones',
+            type: 'simple-list',
+            value: user.certifications ? (typeof user.certifications === 'string' ? JSON.parse(user.certifications) : user.certifications) : []
+        },
+        {
+            id: 'languages',
+            title: '🌍 Idiomas',
+            type: 'simple-list',
+            value: user.languages ? (typeof user.languages === 'string' ? JSON.parse(user.languages) : user.languages) : []
+        }
+    ];
+
+    container.innerHTML = '';
+
+    sections.forEach(section => {
+        const sectionEl = document.createElement('div');
+        sectionEl.className = 'cv-section-collapsible';
+        sectionEl.id = `section-${section.id}`;
+
+        // Header colapsable
+        const header = document.createElement('div');
+        header.className = 'cv-section-header collapsed';
+        header.innerHTML = `
+            <span>${section.title}</span>
+            <i class="fas fa-chevron-down"></i>
+        `;
+        header.addEventListener('click', () => toggleSection(sectionEl));
+
+        // Body con contenido
+        const body = document.createElement('div');
+        body.className = 'cv-section-body';
+
+        if (section.type === 'textarea') {
+            // Textarea simple para objetivo
+            body.innerHTML = `
+                <div class="form-group">
+                    <textarea 
+                        id="${section.id}" 
+                        name="${section.id}" 
+                        maxlength="${section.maxLength}"
+                        placeholder="Describe tu objetivo profesional..."
+                        class="cv-textarea"
+                    >${section.value}</textarea>
+                </div>
+            `;
+        } else if (section.type === 'list') {
+            // Lista de objetos anidados (educación, experiencia)
+            body.innerHTML = `
+                <div id="${section.id}-list" class="form-nested-list">
+                    <!-- Items dinámicos -->
+                </div>
+                <button type="button" class="btn-add-item" onclick="addNestedItem('${section.id}', ${JSON.stringify(section.fields)})">
+                    <i class="fas fa-plus"></i> Agregar ${section.title.split(' ').slice(1).join(' ')}
+                </button>
+            `;
+            renderNestedItems(section.id, section.value, section.fields);
+        } else if (section.type === 'simple-list') {
+            // Lista simple (certificaciones, idiomas)
+            body.innerHTML = `
+                <div id="${section.id}-list" class="items-list">
+                    <!-- Items dinámicos -->
+                </div>
+                <button type="button" class="btn-add-item" onclick="addSimpleItem('${section.id}')">
+                    <i class="fas fa-plus"></i> Agregar ${section.title.split(' ').slice(1).join(' ')}
+                </button>
+            `;
+            renderSimpleItems(section.id, section.value);
+        }
+
+        sectionEl.appendChild(header);
+        sectionEl.appendChild(body);
+        container.appendChild(sectionEl);
+    });
+}
+
+/**
+ * ✨ NUEVA FUNCIÓN: Toggle sección colapsable
+ */
+function toggleSection(sectionEl) {
+    const header = sectionEl.querySelector('.cv-section-header');
+    const body = sectionEl.querySelector('.cv-section-body');
+
+    if (!header || !body) return;
+
+    const isCollapsed = header.classList.contains('collapsed');
+    
+    if (isCollapsed) {
+        header.classList.remove('collapsed');
+        body.classList.add('open');
+    } else {
+        header.classList.add('collapsed');
+        body.classList.remove('open');
+    }
+}
+
+/**
+ * ✨ NUEVA FUNCIÓN: Renderizar items anidados (educación, experiencia)
+ */
+function renderNestedItems(sectionId, items, fields) {
+    const container = document.getElementById(`${sectionId}-list`);
+    if (!container) return;
+
+    container.innerHTML = '';
+
+    if (!Array.isArray(items) || items.length === 0) return;
+
+    items.forEach((item, index) => {
+        const itemEl = document.createElement('div');
+        itemEl.className = 'form-nested';
+        itemEl.id = `${sectionId}-item-${index}`;
+
+        let formFields = '';
+        fields.forEach(field => {
+            const value = item[field] || '';
+            const label = field.replace(/_/g, ' ').split(' ').map(w => w.charAt(0).toUpperCase() + w.slice(1)).join(' ');
+
+            formFields += `
+                <div class="form-group" style="margin-bottom: 0.75rem;">
+                    <label>${label}</label>
+                    <input 
+                        type="text" 
+                        name="${sectionId}[${index}][${field}]"
+                        value="${value}"
+                        placeholder="${label}"
+                    />
+                </div>
+            `;
+        });
+
+        itemEl.innerHTML = `
+            <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 1rem;">
+                <h4 style="margin: 0; color: var(--primary-color); font-size: 0.9rem;">#${index + 1}</h4>
+                <button type="button" class="form-nested-remove-btn" onclick="removeNestedItem('${sectionId}', ${index})">
+                    <i class="fas fa-trash"></i> Eliminar
+                </button>
+            </div>
+            ${formFields}
+        `;
+
+        container.appendChild(itemEl);
+    });
+}
+
+/**
+ * ✨ NUEVA FUNCIÓN: Renderizar items simples (certificaciones, idiomas)
+ */
+function renderSimpleItems(sectionId, items) {
+    const container = document.getElementById(`${sectionId}-list`);
+    if (!container) return;
+
+    container.innerHTML = '';
+
+    if (!Array.isArray(items) || items.length === 0) return;
+
+    items.forEach((item, index) => {
+        const itemEl = document.createElement('div');
+        itemEl.className = 'items-list-item';
+        
+        itemEl.innerHTML = `
+            <input 
+                type="text" 
+                name="${sectionId}[${index}]"
+                value="${item}"
+                placeholder="Ingresa ${sectionId === 'certifications' ? 'certificación' : 'idioma'}..."
+            />
+            <button type="button" class="items-list-item-remove" onclick="removeSimpleItem('${sectionId}', ${index})" title="Eliminar">
+                <i class="fas fa-times"></i>
+            </button>
+        `;
+
+        container.appendChild(itemEl);
+    });
+}
+
+/**
+ * ✨ NUEVA FUNCIÓN: Agregar item anidado (educación, experiencia)
+ */
+function addNestedItem(sectionId, fields) {
+    const container = document.getElementById(`${sectionId}-list`);
+    if (!container) return;
+
+    const index = container.querySelectorAll('.form-nested').length;
+
+    const itemEl = document.createElement('div');
+    itemEl.className = 'form-nested';
+    itemEl.id = `${sectionId}-item-${index}`;
+
+    let formFields = '';
+    fields.forEach(field => {
+        const label = field.replace(/_/g, ' ').split(' ').map(w => w.charAt(0).toUpperCase() + w.slice(1)).join(' ');
+
+        formFields += `
+            <div class="form-group" style="margin-bottom: 0.75rem;">
+                <label>${label}</label>
+                <input 
+                    type="text" 
+                    name="${sectionId}[${index}][${field}]"
+                    placeholder="${label}"
+                />
+            </div>
+        `;
+    });
+
+    itemEl.innerHTML = `
+        <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 1rem;">
+            <h4 style="margin: 0; color: var(--primary-color); font-size: 0.9rem;">#${index + 1}</h4>
+            <button type="button" class="form-nested-remove-btn" onclick="removeNestedItem('${sectionId}', ${index})">
+                <i class="fas fa-trash"></i> Eliminar
+            </button>
+        </div>
+        ${formFields}
+    `;
+
+    container.appendChild(itemEl);
+}
+
+/**
+ * ✨ NUEVA FUNCIÓN: Remover item anidado
+ */
+function removeNestedItem(sectionId, index) {
+    if (!confirm('¿Estás seguro de que deseas eliminar este item?')) return;
+    
+    const itemEl = document.getElementById(`${sectionId}-item-${index}`);
+    if (itemEl) itemEl.remove();
+}
+
+/**
+ * ✨ NUEVA FUNCIÓN: Agregar item simple (certificación, idioma)
+ */
+function addSimpleItem(sectionId) {
+    const container = document.getElementById(`${sectionId}-list`);
+    if (!container) return;
+
+    const index = container.querySelectorAll('.items-list-item').length;
+    const itemEl = document.createElement('div');
+    itemEl.className = 'items-list-item';
+
+    itemEl.innerHTML = `
+        <input 
+            type="text" 
+            name="${sectionId}[${index}]"
+            placeholder="Ingresa ${sectionId === 'certifications' ? 'certificación' : 'idioma'}..."
+        />
+        <button type="button" class="items-list-item-remove" onclick="removeSimpleItem('${sectionId}', ${index})" title="Eliminar">
+            <i class="fas fa-times"></i>
+        </button>
+    `;
+
+    container.appendChild(itemEl);
+}
+
+/**
+ * ✨ NUEVA FUNCIÓN: Remover item simple
+ */
+function removeSimpleItem(sectionId, index) {
+    const itemEl = document.querySelector(`input[name="${sectionId}[${index}]"]`)?.parentElement;
+    if (itemEl) itemEl.remove();
+}
+
+/**
+ * ✨ NUEVA FUNCIÓN: Serializar datos Harvard para envío
+ * Convierte los formularios anidados a JSON para el API
+ */
+function serializeCVHarvardData() {
+    const data = {};
+    
+    // Objetivo (simple textarea)
+    const objectiveField = document.getElementById('objective');
+    if (objectiveField) {
+        data.objective = objectiveField.value.trim();
+    }
+
+    // Educación (array de objetos)
+    const educationList = document.getElementById('education-list');
+    if (educationList) {
+        data.education = [];
+        document.querySelectorAll('#education-list .form-nested').forEach((item) => {
+            const inputs = item.querySelectorAll('input[type="text"]');
+            const fieldNames = ['institution', 'degree', 'field_of_study', 'graduation_year'];
+            const obj = {};
+            inputs.forEach((inp, i) => {
+                if (i < fieldNames.length) {
+                    obj[fieldNames[i]] = inp.value;
+                }
+            });
+            if (Object.keys(obj).length > 0) {
+                data.education.push(obj);
+            }
+        });
+    }
+
+    // Experiencia (array de objetos)
+    const experienceList = document.getElementById('experience-list');
+    if (experienceList) {
+        data.experience = [];
+        document.querySelectorAll('#experience-list .form-nested').forEach((item) => {
+            const inputs = item.querySelectorAll('input[type="text"]');
+            const fieldNames = ['position', 'company', 'start_date', 'end_date', 'description'];
+            const obj = {};
+            inputs.forEach((inp, i) => {
+                if (i < fieldNames.length) {
+                    obj[fieldNames[i]] = inp.value;
+                }
+            });
+            if (Object.keys(obj).length > 0) {
+                data.experience.push(obj);
+            }
+        });
+    }
+
+    // Certificaciones (array de strings)
+    const certificationsList = document.getElementById('certifications-list');
+    if (certificationsList) {
+        data.certifications = Array.from(
+            document.querySelectorAll('#certifications-list input[type="text"]')
+        ).map(inp => inp.value.trim()).filter(v => v.length > 0);
+    }
+
+    // Idiomas (array de strings)
+    const languagesList = document.getElementById('languages-list');
+    if (languagesList) {
+        data.languages = Array.from(
+            document.querySelectorAll('#languages-list input[type="text"]')
+        ).map(inp => inp.value.trim()).filter(v => v.length > 0);
+    }
+
+    console.log('✨ Datos Harvard serializados:', data);
+    return data;
 }

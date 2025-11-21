@@ -27,6 +27,7 @@ from typing import List, Dict, Tuple, Optional, Set
 import re
 import unicodedata
 import math
+import json
 from dataclasses import dataclass, field
 from collections import Counter
 from enum import Enum
@@ -99,6 +100,55 @@ TECHNICAL_VOCAB = {
     # Otros
     "sql", "nosql", "rest", "graphql", "grpc", "websocket", "api",
     "microservices", "linux", "unix", "windows", "macos",
+}
+
+# Vocabulario de habilidades blandas (Soft Skills) - Español e Inglés
+SOFT_SKILLS_VOCAB = {
+    # Comunicación
+    "comunicación", "communication", "presentation", "presentación",
+    "escritura", "writing", "habla", "speaking", "escucha", "listening",
+    
+    # Liderazgo y trabajo en equipo
+    "liderazgo", "leadership", "trabajo en equipo", "teamwork", "colaboración",
+    "collaboration", "coordinación", "coordination", "mentoring", "coaching",
+    
+    # Pensamiento crítico y resolución
+    "problem solving", "resolución de problemas", "análisis", "analysis",
+    "pensamiento crítico", "critical thinking", "toma de decisiones",
+    "decision making", "juicio crítico", "reasoning",
+    
+    # Creatividad e innovación
+    "creatividad", "creativity", "innovación", "innovation", "pensamiento lateral",
+    "lateral thinking", "diseño creativo", "creative design",
+    
+    # Adaptabilidad y flexibilidad
+    "adaptabilidad", "adaptability", "flexibilidad", "flexibility",
+    "aprendizaje continuo", "continuous learning", "versatilidad", "versatility",
+    
+    # Responsabilidad y ética
+    "responsabilidad", "responsibility", "ética", "ethics", "integridad", "integrity",
+    "confiabilidad", "reliability", "profesionalismo", "professionalism",
+    
+    # Iniciativa y autonomía
+    "iniciativa", "initiative", "autonomía", "autonomy", "proactividad", "proactivity",
+    "independencia", "independence", "autodidacta", "self-taught",
+    
+    # Inteligencia emocional
+    "inteligencia emocional", "emotional intelligence", "empatía", "empathy",
+    "autoconciencia", "self-awareness", "gestión emocional", "emotional management",
+    
+    # Gestión y organización
+    "gestión del tiempo", "time management", "organización", "organization",
+    "planificación", "planning", "priorización", "prioritization",
+    
+    # Negociación y resolución de conflictos
+    "negociación", "negotiation", "resolución de conflictos", "conflict resolution",
+    "diplomacia", "diplomacy", "mediación", "mediation",
+    
+    # Otros
+    "paciencia", "patience", "atención al detalle", "attention to detail",
+    "meticulosidad", "meticulousness", "precisión", "precision",
+    "orientación al cliente", "customer focus", "satisfacción del cliente",
 }
 
 
@@ -516,6 +566,39 @@ class TermExtractor:
         
         return sorted(unique_terms.items(), key=lambda x: x[1], reverse=True)
     
+    def extract_soft_skills(self, text: str) -> List[Tuple[str, float]]:
+        """
+        Extraer habilidades blandas (soft skills) de un texto.
+        
+        Usa el mismo algoritmo que extract_technical_terms pero con SOFT_SKILLS_VOCAB.
+        
+        Returns:
+            Lista de (habilidad, relevancia) ordenada por relevancia descendente
+        
+        Ejemplo:
+            Input: "Tengo excelentes habilidades de comunicación y liderazgo..."
+            Output: [("comunicación", 1.1), ("liderazgo", 1.0), ...]
+        """
+        normalized = normalize_text(text, NormalizationType.TECHNICAL)
+        tokens = normalized.split()
+        
+        soft_skills = []
+        for token in tokens:
+            if token in SOFT_SKILLS_VOCAB or any(skill in token for skill in SOFT_SKILLS_VOCAB):
+                relevance = 1.0  # Base
+                
+                # Aumentar relevancia si aparece múltiples veces
+                relevance += tokens.count(token) * 0.1
+                
+                soft_skills.append((token, relevance))
+        
+        # Deduplicar y ordenar
+        unique_skills = {}
+        for skill, relevance in soft_skills:
+            unique_skills[skill] = max(unique_skills.get(skill, 0), relevance)
+        
+        return sorted(unique_skills.items(), key=lambda x: x[1], reverse=True)
+    
     def extract_keyphrases(self, text: str, max_phrase_length: int = 3) -> List[Tuple[str, float]]:
         """
         Extraer frases clave (n-gramas significativos).
@@ -626,20 +709,25 @@ class TextVectorizationService:
     
     def analyze_document(self, text: str) -> Dict:
         """
-        Análisis completo de un documento.
+        Análisis completo de un documento (Genérico: CV, oferta de trabajo, etc).
         
         Returns:
             Dict con:
             - normalized_text: Texto normalizado
-            - tokens: Tokens extraídos
-            - technical_terms: Términos técnicos encontrados
-            - keyphrases: Frases clave
-            - stats: Estadísticas del documento
+            - token_count: Número de tokens
+            - unique_tokens: Tokens únicos
+            - tokens: Lista de tokens (primeros 50)
+            - technical_terms: Términos técnicos encontrados (Tuple[term, relevance])
+            - soft_skills: Habilidades blandas encontradas (Tuple[skill, relevance])
+            - keyphrases: Frases clave (Tuple[phrase, score])
+            - text_length: Largo original del texto
+            - normalized_length: Largo del texto normalizado
         """
         normalized = normalize_text(text, NormalizationType.TECHNICAL)
         tokens = normalized.split() if normalized else []
         
         technical_terms = self.term_extractor.extract_technical_terms(text)
+        soft_skills = self.term_extractor.extract_soft_skills(text)
         keyphrases = self.term_extractor.extract_keyphrases(text)
         
         return {
@@ -648,10 +736,23 @@ class TextVectorizationService:
             "unique_tokens": len(set(tokens)),
             "tokens": tokens[:50],  # Primeros 50 para preview
             "technical_terms": technical_terms[:10],
+            "soft_skills": soft_skills[:10],
             "keyphrases": keyphrases[:10],
             "text_length": len(text),
             "normalized_length": len(normalized),
         }
+    
+    # ❌ ELIMINADO: calculate_match_score()
+    # 
+    # RAZÓN: Contiene lógica de NEGOCIO (pesos, heurísticas)
+    # que no pertenece a TextVectorizationService (que debe ser puro).
+    # 
+    # NUEVA UBICACIÓN: matching_service.py
+    # Allí se usa get_similarity() (función matemática pura) con lógica de negocio.
+    #
+    # Esto mantiene la separación de responsabilidades:
+    # - text_vectorization_service = análisis y similitud (math puro)
+    # - matching_service = lógica de matching (reglas de negocio)
 
 
 # Instancia compartida del servicio

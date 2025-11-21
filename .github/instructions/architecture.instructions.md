@@ -14,6 +14,8 @@ Estás construyendo **MoirAI**, una plataforma de vinculación laboral universit
     - Prioriza la *semántica* sobre la *sintaxis* (ej: "Desarrollo Web" ≈ "Programación Frontend").
 2.  **Perfilado del Estudiante:**
     - Un estudiante es más que su CV. Sus "Proyectos Prototípicos" tienen tanto peso como su experiencia laboral.
+    - **Regla de Estructura:** El perfil final del estudiante, almacenado en la base de datos, DEBE estar estructurado en secciones canónicas que simulen el formato Harvard (ej: "Objetivo", "Educación", "Proyectos Clave", "Habilidades Técnicas", "Habilidades Blandas Inferidas").
+    - La API debe mapear los datos ingestados del CV a esta estructura estándar.
 3.  **Privacidad y Seguridad (Role-Based):**
     - **Estudiantes:** Solo ven sus propios datos y vacantes sugeridas.
     - **Empresas:** Solo ven candidatos anónimos hasta que hay un "Match" o aplicación explícita.

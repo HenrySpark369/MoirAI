@@ -40,6 +40,13 @@ class StudentUpdate(BaseModel):
     program: Optional[str] = Field(None, max_length=100)
     career: Optional[str] = Field(None, max_length=100)
     year: Optional[str] = Field(None, max_length=20)
+    
+    # ✨ Secciones CV Harvard (OPCIONALES)
+    objective: Optional[str] = Field(None, max_length=500, description="Objetivo profesional")
+    education: Optional[List[dict]] = Field(None, description="Lista de educaciones (JSON)")
+    experience: Optional[List[dict]] = Field(None, description="Lista de experiencias (JSON)")
+    certifications: Optional[List[str]] = Field(None, description="Lista de certificaciones")
+    languages: Optional[List[str]] = Field(None, description="Lista de idiomas")
 
 
 class StudentSkillsUpdate(BaseModel):
@@ -65,6 +72,14 @@ class StudentProfile(BaseModel):
     skills: List[str] = []
     soft_skills: List[str] = []
     projects: List[str] = []
+    
+    # ✨ Secciones CV Harvard (OPCIONALES)
+    objective: Optional[str] = None
+    education: Optional[List[dict]] = None
+    experience: Optional[List[dict]] = None
+    certifications: Optional[List[str]] = None
+    languages: Optional[List[str]] = None
+    
     cv_uploaded: bool = False
     cv_filename: Optional[str] = None
     cv_upload_date: Optional[datetime] = None

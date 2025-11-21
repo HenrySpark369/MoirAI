@@ -53,6 +53,13 @@ class Student(SQLModel, table=True):
     soft_skills: Optional[str] = Field(description="Lista de habilidades blandas (JSON)")
     projects: Optional[str] = Field(description="Lista de proyectos (JSON)")
     
+    # ✨ Secciones CV Harvard (OPCIONALES - permite estructura manual)
+    objective: Optional[str] = Field(default=None, max_length=500, description="Objetivo profesional")
+    education: Optional[str] = Field(default=None, description="Educación (JSON list)")
+    experience: Optional[str] = Field(default=None, description="Experiencia profesional (JSON list)")
+    certifications: Optional[str] = Field(default=None, description="Certificaciones (JSON list)")
+    languages: Optional[str] = Field(default=None, description="Idiomas (JSON list)")
+    
     # CV uploaded (documento)
     cv_uploaded: bool = Field(default=False, description="Si el currículum ha sido subido")
     cv_filename: Optional[str] = Field(default=None, max_length=255, description="Nombre del archivo del CV")
