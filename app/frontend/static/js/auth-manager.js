@@ -18,9 +18,17 @@ class AuthManager {
 
   /**
    * Notificar cambios a todos los listeners
+   * ✅ CORRECCIÓN: Wrap con try-catch para evitar que un listener roto rompa otros
    */
   notifyListeners() {
-    this.listeners.forEach(callback => callback(this.currentUser))
+    this.listeners.forEach((callback, index) => {
+      try {
+        callback(this.currentUser);
+      } catch (error) {
+        console.warn(`⚠️ Error en listener ${index} de authManager:`, error);
+        // Continuar con siguientes listeners incluso si uno falla
+      }
+    });
   }
 
   /**

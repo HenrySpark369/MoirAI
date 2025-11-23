@@ -329,7 +329,7 @@ class SeleniumVisualE2ETester:
             self.inject_console_capture_script()
             
             self.log_info("✅ Navigated to login page")
-            time.sleep(1)
+            time.sleep(2)  # 2s para visualizar la página de login
             return True
         except Exception as e:
             self.log_error(f"❌ Failed to navigate to login page: {e}")
@@ -355,7 +355,7 @@ class SeleniumVisualE2ETester:
             submit_button.click()
             self.log_info("🔐 Clicked login button")
 
-            time.sleep(2)  # Wait for redirect
+            time.sleep(3)  # Wait for redirect and dashboard to load
             return True
         except Exception as e:
             self.log_error(f"❌ Error filling login form: {e}")
@@ -433,6 +433,7 @@ class SeleniumVisualE2ETester:
             title = self.driver.title
             self.log_info(f"📄 Page title: {title}")
             
+            time.sleep(2)  # Pause to visualize dashboard
             return True
         except Exception as e:
             self.log_warning(f"⚠️ Dashboard check: {e}")
@@ -470,7 +471,7 @@ class SeleniumVisualE2ETester:
             if logout_button:
                 logout_button.click()
                 self.log_info("🚪 Clicked logout button")
-                time.sleep(1)
+                time.sleep(2)
                 return True
             else:
                 self.log_warning("⚠️ Logout button not found")
@@ -482,7 +483,7 @@ class SeleniumVisualE2ETester:
     def verify_logged_out(self) -> bool:
         """Verify user is logged out (redirected to login)"""
         try:
-            time.sleep(1)
+            time.sleep(2)
             current_url = self.driver.current_url
             
             # Check if redirected to login page
@@ -555,7 +556,7 @@ class SeleniumVisualE2ETester:
         else:
             role_results["steps"]["dashboard_loaded"] = "partial"
 
-        time.sleep(1)
+        time.sleep(2)  # Extra pause to visualize dashboard fully
 
         # Step 6: Take screenshot before logout
         try:
@@ -619,7 +620,7 @@ class SeleniumVisualE2ETester:
                 self.results["results"][role] = role_results
 
                 # Small delay between role tests
-                time.sleep(1)
+                time.sleep(2)
 
             return True
         except Exception as e:

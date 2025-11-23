@@ -1010,6 +1010,17 @@ function setupEventHandlers() {
 
     // Event listeners para notificaciones en tiempo real (WebSocket en futuro)
     authManager.onChange((user) => {
+        // ✅ CORRECCIÓN: Handle logout case cuando user es null
+        if (!user) {
+            console.log('📋 Dashboard: Usuario limpiado (logout)');
+            currentUser = null;
+            const userNameElement = document.getElementById('user-name');
+            if (userNameElement) {
+                userNameElement.textContent = 'Usuario';
+            }
+            return;
+        }
+        
         currentUser = user;
         document.getElementById('user-name').textContent = user.first_name || 'Usuario';
     });

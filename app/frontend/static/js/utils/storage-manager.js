@@ -23,9 +23,16 @@ const StorageManager = {
 
     /**
      * Guardar datos en localStorage
+     * ✅ CORRECCIÓN: Prevent storing undefined values
      */
     set(key, value, expiration = null) {
         try {
+            // ✅ CORRECCIÓN: No guardar valores undefined
+            if (value === undefined) {
+                console.warn(`[StorageManager] Intentando guardar undefined para "${key}", usando null en su lugar`);
+                value = null;
+            }
+
             const finalKey = this.getKey(key);
             const data = {
                 value: value,
@@ -49,7 +56,8 @@ const StorageManager = {
             const finalKey = this.getKey(key);
             const item = localStorage.getItem(finalKey);
 
-            if (!item) {
+            // ✅ CORRECCIÓN: Handle undefined string
+            if (!item || item === 'undefined') {
                 return defaultValue;
             }
 
