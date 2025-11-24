@@ -22,7 +22,7 @@ class ApiClient {
       const origin = port ? `${protocol}//${hostname}:${port}` : `${protocol}//${hostname}`
       this.baseUrl = `${origin}/api/v1`
     }
-    
+
     this.token = null
     this.loadToken()
   }
@@ -76,7 +76,7 @@ class ApiClient {
    */
   async request(method, endpoint, data = null, options = {}) {
     const url = `${this.baseUrl}${endpoint}`
-    
+
     const fetchOptions = {
       method,
       headers: this.getHeaders(options.headers),
@@ -97,6 +97,20 @@ class ApiClient {
         throw new Error('No autorizado')
       }
 
+      // Handle 429 Too Many Requests (Rate Limit)
+      if (response.status === 429) {
+        const data = await response.json().catch(() => ({}));
+        window.dispatchEvent(new CustomEvent('rate-limit-exceeded', { detail: data }));
+        throw new Error(data.message || 'Límite de peticiones excedido')
+      }
+
+      // Handle 429 Too Many Requests (Rate Limit)
+      if (response.status === 429) {
+        const data = await response.json().catch(() => ({}));
+        window.dispatchEvent(new CustomEvent('rate-limit-exceeded', { detail: data }));
+        throw new Error(data.message || 'Límite de peticiones excedido')
+      }
+
       // Parsear respuesta
       const contentType = response.headers.get('content-type')
       let responseData = null
@@ -110,8 +124,8 @@ class ApiClient {
       // Check if response is ok
       if (!response.ok) {
         const error = new Error(
-          responseData?.detail || 
-          responseData?.message || 
+          responseData?.detail ||
+          responseData?.message ||
           `HTTP Error: ${response.status}`
         )
         error.status = response.status
@@ -169,7 +183,7 @@ class ApiClient {
   async uploadFile(endpoint, file, additionalData = {}) {
     const formData = new FormData()
     formData.append('file', file)
-    
+
     Object.keys(additionalData).forEach(key => {
       formData.append(key, additionalData[key])
     })
@@ -193,6 +207,13 @@ class ApiClient {
         this.setToken(null)
         window.dispatchEvent(new CustomEvent('unauthorized'))
         throw new Error('No autorizado')
+      }
+
+      // Handle 429 Too Many Requests (Rate Limit)
+      if (response.status === 429) {
+        const data = await response.json().catch(() => ({}));
+        window.dispatchEvent(new CustomEvent('rate-limit-exceeded', { detail: data }));
+        throw new Error(data.message || 'Límite de peticiones excedido')
       }
 
       if (!response.ok) {

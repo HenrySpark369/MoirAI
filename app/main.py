@@ -30,7 +30,9 @@ from app.core.config import settings
 from app.core.database import create_db_and_tables, get_session
 from app.core.admin_init import init_default_admin, verify_admin_access_configured
 from app.api.endpoints import students, auth
+from app.api.endpoints import students, auth
 from app.schemas import ErrorResponse
+from app.middleware.rate_limit import RateLimitMiddleware
 
 
 # Crear aplicación FastAPI
@@ -79,7 +81,10 @@ app = FastAPI(
     }
 )
 
-# Configurar CORS
+# Configurar Rate Limiting (Inner middleware)
+app.add_middleware(RateLimitMiddleware)
+
+# Configurar CORS (Outer middleware - se ejecuta primero)
 app.add_middleware(
     CORSMiddleware,
     allow_origins=settings.BACKEND_CORS_ORIGINS,

@@ -119,6 +119,11 @@ class StudentPublic(BaseModel):
     # ✅ NUEVO: Metadatos no-sensibles
     created_at: datetime
     last_active: Optional[datetime] = None
+    
+    # ✅ BLIND MATCHING: 
+    # Si is_blind=True, el campo 'name' contendrá un alias (ej. "Estudiante de Sistemas")
+    # y los datos de contacto estarán ocultos en el backend.
+    is_blind: bool = False
 
 
 # Company schemas
@@ -153,6 +158,27 @@ class CompanyProfile(BaseModel):
     is_verified: bool = False
     is_active: bool = True
     created_at: datetime = None
+
+
+class CompanyPublic(BaseModel):
+    """
+    ✅ Esquema PÚBLICO de empresa (para estudiantes sin match confirmado)
+    
+    Implementa BLIND MATCHING:
+    - Muestra: Nombre, Industria, Tamaño, Ubicación
+    - Oculta: Email, Teléfono, Contacto directo
+    """
+    id: int
+    name: str
+    industry: Optional[str] = None
+    size: Optional[str] = None
+    location: Optional[str] = None
+    is_verified: bool = False
+    created_at: Optional[datetime] = None
+    
+    # ✅ BLIND MATCHING:
+    # Si is_blind=True, se pueden ocultar detalles adicionales si fuera necesario
+    is_blind: bool = False
 
 
 # Job Position schemas

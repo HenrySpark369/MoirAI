@@ -129,6 +129,13 @@ class Settings(BaseSettings):
     LOG_LEVEL: str = "INFO"
     LOG_FORMAT: str = "json"
 
+    # Rate Limiting (Requests per hour)
+    RATE_LIMIT_ADMIN: int = Field(default=10000, description="Límite de requests/hora para admin")
+    RATE_LIMIT_COMPANY: int = Field(default=500, description="Límite de requests/hora para empresas")
+    RATE_LIMIT_STUDENT: int = Field(default=300, description="Límite de requests/hora para estudiantes")
+    RATE_LIMIT_ANONYMOUS: int = Field(default=50, description="Límite de requests/hora para anónimos")
+    RATE_LIMIT_WINDOW_SECONDS: int = Field(default=3600, description="Ventana de tiempo en segundos")
+
     class Config:
         env_file = ".env"
         case_sensitive = True

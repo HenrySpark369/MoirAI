@@ -8,19 +8,25 @@ from typing import Dict, Optional, Tuple
 import logging
 from collections import defaultdict
 from threading import Lock
+from starlette.middleware.base import BaseHTTPMiddleware
+from starlette.responses import JSONResponse
+from jose import jwt, JWTError
+from app.core.config import settings
 
 logger = logging.getLogger(__name__)
+from app.core.config import settings
 
 
 class RateLimitConfig:
     """Configuración de límites de tasa por rol de usuario"""
 
     # Límites por rol (requests / hora)
+    # Límites por rol (requests / hora)
     LIMITS_PER_ROLE = {
-        "admin": 10000,      # Acceso sin restricciones prácticas
-        "company": 500,      # Acceso limitado a búsqueda y filtrado
-        "student": 300,      # Acceso moderado
-        "anonymous": 50,     # Acceso restringido
+        "admin": settings.RATE_LIMIT_ADMIN,
+        "company": settings.RATE_LIMIT_COMPANY,
+        "student": settings.RATE_LIMIT_STUDENT,
+        "anonymous": settings.RATE_LIMIT_ANONYMOUS,
     }
 
     # Límites específicos por endpoint (requests / minuto)
@@ -54,7 +60,7 @@ class RateLimitConfig:
     }
 
     # Ventanas de tiempo
-    HOURLY_WINDOW = 3600  # segundos
+    HOURLY_WINDOW = settings.RATE_LIMIT_WINDOW_SECONDS  # segundos
     MINUTE_WINDOW = 60    # segundos
 
 
@@ -363,3 +369,51 @@ def get_rate_limiter() -> RateLimiter:
     ```
     """
     return rate_limiter
+
+
+class RateLimitMiddleware(BaseHTTPMiddleware):
+    """
+    Middleware global para rate limiting.
+    Intercepta todos los requests y verifica límites según rol e IP.
+    """
+    
+    async def dispatch(self, request: Request, call_next):
+        # 1. Determinar rol del usuario
+        user_role = "anonymous"
+        auth_header = request.headers.get("Authorization")
+        
+        if auth_header and auth_header.startswith("Bearer "):
+            token = auth_header.split(" ")[1]
+            try:
+                payload = jwt.decode(
+                    token, 
+                    settings.SECRET_KEY, 
+                    algorithms=[settings.ALGORITHM]
+                )
+                user_role = payload.get("role", "anonymous")
+            except JWTError:
+                # Token inválido -> tratar como anónimo
+                pass
+        
+        # 2. Verificar límite
+        limiter = get_rate_limiter()
+        is_allowed, error_msg, info = limiter.check_rate_limit(request, user_role)
+        
+        if not is_allowed:
+            # Retornar 429 Too Many Requests
+            return JSONResponse(
+                status_code=429,
+                content={
+                    "success": False,
+                    "error_code": "RATE_LIMIT_EXCEEDED",
+                    "message": error_msg,
+                    "details": {
+                        "retry_after": 60,  # Sugerencia simple
+                        "limit_info": info
+                    }
+                }
+            )
+            
+        # 3. Continuar si es permitido
+        response = await call_next(request)
+        return response
