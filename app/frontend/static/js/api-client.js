@@ -104,12 +104,7 @@ class ApiClient {
         throw new Error(data.message || 'Límite de peticiones excedido')
       }
 
-      // Handle 429 Too Many Requests (Rate Limit)
-      if (response.status === 429) {
-        const data = await response.json().catch(() => ({}));
-        window.dispatchEvent(new CustomEvent('rate-limit-exceeded', { detail: data }));
-        throw new Error(data.message || 'Límite de peticiones excedido')
-      }
+
 
       // Parsear respuesta
       const contentType = response.headers.get('content-type')

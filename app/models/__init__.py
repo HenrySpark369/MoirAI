@@ -30,10 +30,12 @@ class Student(SQLModel, table=True):
     first_name: Optional[str] = Field(default=None, max_length=50, description="Nombre")
     last_name: Optional[str] = Field(default=None, max_length=50, description="Apellido")
     email: str = Field(unique=True, max_length=255, description="Email institucional (encriptado con Fernet)")
-    email_hash: str = Field(default="", max_length=64, description="Hash SHA256 del email para búsquedas")
+    # ✅ ÍNDICE: email_hash es usado frecuentemente en autenticación
+    email_hash: str = Field(default="", max_length=64, index=True, description="Hash SHA256 del email para búsquedas")
     phone: Optional[str] = Field(default=None, max_length=255, description="Teléfono (encriptado)")
     phone_hash: Optional[str] = Field(default=None, max_length=64, description="Hash SHA256 del teléfono para búsquedas")
-    program: Optional[str] = Field(max_length=100, description="Programa académico")
+    # ✅ ÍNDICE: program es usado en filtros de búsqueda
+    program: Optional[str] = Field(max_length=100, index=True, description="Programa académico")
     
     # Perfil adicional
     bio: Optional[str] = Field(default=None, description="Biografía del estudiante")
@@ -66,10 +68,13 @@ class Student(SQLModel, table=True):
     cv_upload_date: Optional[datetime] = Field(default=None, description="Fecha de subida del CV")
     
     # Metadatos
-    created_at: datetime = Field(default_factory=datetime.utcnow)
+    # ✅ ÍNDICE: created_at es usado en queries de analytics (estudiantes recientes)
+    created_at: datetime = Field(default_factory=datetime.utcnow, index=True)
     updated_at: Optional[datetime] = None
-    last_active: Optional[datetime] = None
-    is_active: bool = Field(default=True)
+    # ✅ ÍNDICE: last_active es usado para reportes de actividad
+    last_active: Optional[datetime] = Field(default=None, index=True)
+    # ✅ ÍNDICE: is_active es el filtro MÁS frecuente en queries
+    is_active: bool = Field(default=True, index=True)
     
     # ============================================================
     # MÉTODOS DE ENCRIPTACIÓN/DESENCRIPTACIÓN
@@ -144,7 +149,8 @@ class Company(SQLModel, table=True):
     id: Optional[int] = Field(default=None, primary_key=True)
     name: str = Field(max_length=100, description="Nombre de la empresa")
     email: str = Field(unique=True, max_length=255, description="Email de contacto (encriptado con Fernet)")
-    email_hash: str = Field(default="", max_length=64, description="Hash SHA256 del email para búsquedas")
+    # ✅ ÍNDICE: email_hash es usado en autenticación
+    email_hash: str = Field(default="", max_length=64, index=True, description="Hash SHA256 del email para búsquedas")
     industry: Optional[str] = Field(max_length=50, description="Sector industrial")
     size: Optional[str] = Field(max_length=20, description="Tamaño de empresa (startup, pequeña, mediana, grande)")
     location: Optional[str] = Field(max_length=100, description="Ubicación principal")
@@ -154,7 +160,8 @@ class Company(SQLModel, table=True):
     
     # Estado y verificación
     is_verified: bool = Field(default=False, description="Empresa verificada por UNRC")
-    is_active: bool = Field(default=True)
+    # ✅ ÍNDICE: is_active es filtrado frecuentemente
+    is_active: bool = Field(default=True, index=True)
     
     # Metadatos
     created_at: datetime = Field(default_factory=datetime.utcnow)
@@ -267,7 +274,8 @@ class JobPosition(SQLModel, table=True):
     # Campos específicos para empleos scrapeados
     external_job_id: Optional[str] = Field(default=None, index=True, description="ID externo del empleo (ej: OCC ID)")
     external_url: Optional[str] = Field(default=None, description="URL original del empleo")
-    source: str = Field(default="internal", description="Fuente del empleo (internal, occ, linkedin, etc.)")
+    # ✅ ÍNDICE: source es usado para filtrar por proveedor (internal, occ, etc.)
+    source: str = Field(default="internal", index=True, description="Fuente del empleo (internal, occ, linkedin, etc.)")
     
     # Información detallada
     requirements: Optional[str] = Field(default=None, description="Requisitos técnicos y experiencia")
@@ -275,7 +283,8 @@ class JobPosition(SQLModel, table=True):
     benefits: Optional[str] = Field(default=None, description="Beneficios ofrecidos (JSON)")
     
     # Categorización y filtros
-    job_type: str = Field(default="full-time", description="Tipo de trabajo (full-time, part-time, contract, etc.)")
+    # ✅ ÍNDICE: job_type es filtrado frecuentemente en búsquedas
+    job_type: str = Field(default="full-time", index=True, description="Tipo de trabajo (full-time, part-time, contract, etc.)")
     work_mode: Optional[str] = Field(default=None, description="Modalidad (presencial, remoto, híbrido)")
     category: Optional[str] = Field(default=None, max_length=100, description="Categoría laboral")
     experience_level: Optional[str] = Field(default=None, max_length=50, description="Nivel de experiencia requerido")
@@ -289,12 +298,14 @@ class JobPosition(SQLModel, table=True):
     # Metadatos y estado
     publication_date: Optional[str] = Field(default=None, max_length=255, description="Fecha de publicación (ISO 8601, relativa como 'Hace 5 días', o formateada)")
     scraped_at: Optional[datetime] = Field(default=None, description="Fecha de scraping (si aplica)")
-    is_active: bool = Field(default=True, description="Si el empleo está activo")
+    # ✅ ÍNDICE: is_active es el filtro MÁS usado en búsquedas de empleos
+    is_active: bool = Field(default=True, index=True, description="Si el empleo está activo")
     is_featured: bool = Field(default=False, description="Si es empleo destacado")
     expires_at: Optional[datetime] = Field(default=None, description="Fecha de expiración")
     
     # Metadatos del sistema (updated_at es suficiente)
-    created_at: datetime = Field(default_factory=datetime.utcnow)
+    # ✅ ÍNDICE: created_at es usado para ordenar por "más recientes"
+    created_at: datetime = Field(default_factory=datetime.utcnow, index=True)
     updated_at: datetime = Field(default_factory=datetime.utcnow, description="Última actualización")
 
 

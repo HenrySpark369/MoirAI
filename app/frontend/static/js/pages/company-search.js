@@ -75,7 +75,7 @@ function setupEventListeners() {
 
     // Filtros
     const filterElements = document.querySelectorAll(
-        '.skill-filter, .availability-filter, .experience-filter, ' +
+        '.skill-filter, .soft-skill-filter, .availability-filter, .experience-filter, ' +
         '#universityFilter, #majorFilter, #sortFilter'
     );
 
@@ -205,6 +205,10 @@ async function applyFilters() {
             document.querySelectorAll('.skill-filter:checked')
         ).map(el => el.value);
 
+        const softSkills = Array.from(
+            document.querySelectorAll('.soft-skill-filter:checked')
+        ).map(el => el.value);
+
         const availabilities = Array.from(
             document.querySelectorAll('.availability-filter:checked')
         ).map(el => el.value);
@@ -221,6 +225,16 @@ async function applyFilters() {
                 const studentSkills = (student.skills || []).map(s => s.toLowerCase());
                 return skills.some(skill =>
                     studentSkills.some(ss => ss.includes(skill.toLowerCase()))
+                );
+            });
+        }
+
+        // Filtro por habilidades blandas
+        if (softSkills.length > 0) {
+            filtered = filtered.filter(student => {
+                const studentSoftSkills = (student.soft_skills || []).map(s => s.toLowerCase());
+                return softSkills.some(skill =>
+                    studentSoftSkills.some(ss => ss.includes(skill.toLowerCase()))
                 );
             });
         }
@@ -542,7 +556,7 @@ function clearAllFilters() {
     document.getElementById('sortFilter').value = 'match';
 
     document.querySelectorAll(
-        '.skill-filter, .availability-filter, .experience-filter'
+        '.skill-filter, .soft-skill-filter, .availability-filter, .experience-filter'
     ).forEach(checkbox => {
         checkbox.checked = false;
     });

@@ -9,7 +9,9 @@
     <link rel="stylesheet" href="/static/css/dashboard.css">
     <link rel="stylesheet" href="/static/css/notifications.css">
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
-    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=Poppins:wght@600;700;800&display=swap" rel="stylesheet">
+    <link
+        href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=Poppins:wght@600;700;800&display=swap"
+        rel="stylesheet">
     <style>
         .listing-container {
             display: flex;
@@ -531,6 +533,29 @@
             </div>
 
             <div class="filter-section">
+                <h3>Habilidades Blandas</h3>
+                <div class="filter-group">
+                    <div class="filter-item">
+                        <input type="checkbox" id="soft-comunicacion" class="soft-skill-filter" value="Comunicación">
+                        <label for="soft-comunicacion">Comunicación</label>
+                    </div>
+                    <div class="filter-item">
+                        <input type="checkbox" id="soft-liderazgo" class="soft-skill-filter" value="Liderazgo">
+                        <label for="soft-liderazgo">Liderazgo</label>
+                    </div>
+                    <div class="filter-item">
+                        <input type="checkbox" id="soft-equipo" class="soft-skill-filter" value="Trabajo en equipo">
+                        <label for="soft-equipo">Trabajo en equipo</label>
+                    </div>
+                    <div class="filter-item">
+                        <input type="checkbox" id="soft-resolucion" class="soft-skill-filter"
+                            value="Resolución de problemas">
+                        <label for="soft-resolucion">Resolución de problemas</label>
+                    </div>
+                </div>
+            </div>
+
+            <div class="filter-section">
                 <h3>Disponibilidad</h3>
                 <div class="filter-group">
                     <div class="filter-item">
@@ -552,7 +577,8 @@
                 <h3>Experiencia</h3>
                 <div class="filter-group">
                     <div class="filter-item">
-                        <input type="radio" id="exp-sin" name="experience" class="experience-filter" value="sin-experiencia">
+                        <input type="radio" id="exp-sin" name="experience" class="experience-filter"
+                            value="sin-experiencia">
                         <label for="exp-sin">Sin experiencia</label>
                     </div>
                     <div class="filter-item">
@@ -568,7 +594,8 @@
 
             <div class="filter-section">
                 <h3>Universidad</h3>
-                <select id="universityFilter" style="width: 100%; padding: 0.5rem; border: 1px solid var(--border-color); border-radius: 0.25rem;">
+                <select id="universityFilter"
+                    style="width: 100%; padding: 0.5rem; border: 1px solid var(--border-color); border-radius: 0.25rem;">
                     <option value="">Todas</option>
                     <option value="UNRC">UNRC</option>
                     <option value="UNAM">UNAM</option>
@@ -591,7 +618,8 @@
             </div>
 
             <!-- Controls -->
-            <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 1rem; flex-wrap: wrap; gap: 1rem;">
+            <div
+                style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 1rem; flex-wrap: wrap; gap: 1rem;">
                 <div>
                     <strong>Resultados: <span id="resultsCount">0</span></strong>
                 </div>

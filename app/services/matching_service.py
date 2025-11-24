@@ -25,9 +25,69 @@ class MatchingService:
         self,
         student_skills: List[str],
         student_projects: List[str],
+        student_soft_skills: List[str],
         job_description: str,
         weights: Dict[str, float] = None
     ) -> Tuple[float, Dict]:
+        """
+        Calcular score de compatibilidad entre ESTUDIANTE y OFERTA DE TRABAJO.
+        
+        Args:
+            student_skills: Lista de habilidades técnicas
+            student_projects: Lista de proyectos
+            student_soft_skills: Lista de habilidades blandas
+            job_description: Descripción de la oferta
+            weights: Dict opcional para pesos personalizados
+            
+        Returns:
+            Tupla (score: float [0-1], details: dict)
+        """
+        # POLÍTICA #1: Pesos por defecto (30% skills, 50% projects, 20% soft skills)
+        w = weights or {"skills": 0.30, "projects": 0.50, "soft_skills": 0.20}
+        
+        # POLÍTICA #2: Aumentar peso de projects si hay muchos
+        num_projects = len([p for p in (student_projects or []) if p])
+        if num_projects >= 3:
+            w = w.copy()
+            w["projects"] += 0.10
+            w["skills"] = max(0, w.get("skills", 0) - 0.05)
+            w["soft_skills"] = max(0, w.get("soft_skills", 0) - 0.05)
+        
+        # Normalizar pesos
+        total_weight = sum(w.values())
+        w_normalized = {k: v / total_weight for k, v in w.items()}
+        
+        # Preparar textos
+        skills_text = " ".join([str(s).strip() for s in (student_skills or []) if s])
+        projects_text = " ".join([str(p).strip() for p in (student_projects or []) if p])
+        soft_skills_text = " ".join([str(s).strip() for s in (student_soft_skills or []) if s])
+        job_clean = str(job_description or "")[:50000]
+        
+        # Calcular similitudes (Pure Math)
+        skill_sim = text_vectorization_service.get_similarity(skills_text, job_clean) if skills_text else 0.0
+        project_sim = text_vectorization_service.get_similarity(projects_text, job_clean) if projects_text else 0.0
+        soft_sim = text_vectorization_service.get_similarity(soft_skills_text, job_clean) if soft_skills_text else 0.0
+        
+        # Aplicar pesos (Business Logic)
+        base_score = (
+            (skill_sim * w_normalized["skills"]) + 
+            (project_sim * w_normalized["projects"]) +
+            (soft_sim * w_normalized["soft_skills"])
+        )
+        base_score = max(0.0, min(base_score, 1.0))
+        
+        # Detalles para auditoría
+        details = {
+            "skill_similarity": round(float(skill_sim), 6),
+            "project_similarity": round(float(project_sim), 6),
+            "soft_skill_similarity": round(float(soft_sim), 6),
+            "weights_used": w_normalized,
+            "matching_skills": list(set([s for s in (student_skills or []) if s])),
+            "matching_projects": list(set([p for p in (student_projects or []) if p])),
+            "matching_soft_skills": list(set([s for s in (student_soft_skills or []) if s]))
+        }
+        
+        return base_score, details
         """
         Calcular score de compatibilidad entre ESTUDIANTE y OFERTA DE TRABAJO.
         
@@ -189,6 +249,39 @@ class MatchingService:
         }
     
     def _calculate_job_match_score(self, student: Student, job: JobItem) -> Tuple[float, Dict]:
+        """
+        Calcular score de compatibilidad entre estudiante y trabajo.
+        Incluye Skills Técnicos, Proyectos y Soft Skills.
+        """
+        student_skills = json.loads(student.skills or "[]")
+        student_projects = json.loads(student.projects or "[]")
+        student_soft_skills = json.loads(student.soft_skills or "[]")
+        
+        # Pesos base
+        weights = {"skills": 0.30, "projects": 0.50, "soft_skills": 0.20}
+        
+        # Ajuste dinámico por experiencia (proyectos)
+        num_projects = len([p for p in student_projects if p])
+        if num_projects >= 3:
+            weights["projects"] += 0.10
+            weights["skills"] -= 0.05
+            weights["soft_skills"] -= 0.05
+            
+        # Normalizar
+        total_w = sum(weights.values())
+        weights = {k: v / total_w for k, v in weights.items()}
+        
+        # Calcular score
+        job_description = f"{job.title} {job.description or ''}"
+        base_score, match_details = self.calculate_match_score(
+            student_skills, 
+            student_projects, 
+            student_soft_skills,
+            job_description, 
+            weights=weights
+        )
+        
+        return base_score, match_details
         """
         Calcular score de compatibilidad entre estudiante y trabajo.
         
