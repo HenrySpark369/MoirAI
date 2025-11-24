@@ -2,11 +2,18 @@
 Configuración global de fixtures para tests
 Incluye mocks para autenticación, base de datos, y cliente HTTP
 """
+import sys
+import os
 import pytest
 from typing import Generator
 from sqlmodel import Session, create_engine, SQLModel
 from sqlmodel.pool import StaticPool
 from fastapi.testclient import TestClient
+
+# Add the project root to Python path for imports
+project_root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+if project_root not in sys.path:
+    sys.path.insert(0, project_root)
 
 from app.main import app
 from app.core.database import get_session
@@ -131,7 +138,7 @@ def mock_get_current_user_anonymous_fixture(anonymous_user: UserContext):
 # ============================================================================
 
 @pytest.fixture(name="client_with_admin")
-def client_with_admin_fixture(session: Session, mock_get_current_user_admin, cleanup_overrides) -> TestClient:
+def client_with_admin_fixture(session: Session, mock_get_current_user_admin, cleanup_overrides) -> Generator[TestClient, None, None]:
     """Cliente con autenticación de admin
     
     IMPORTANTE: Cada llamada a este fixture asegura que los overrides
@@ -146,7 +153,7 @@ def client_with_admin_fixture(session: Session, mock_get_current_user_admin, cle
 
 
 @pytest.fixture(name="client_with_company")
-def client_with_company_fixture(session: Session, mock_get_current_user_company, cleanup_overrides) -> TestClient:
+def client_with_company_fixture(session: Session, mock_get_current_user_company, cleanup_overrides) -> Generator[TestClient, None, None]:
     """Cliente con autenticación de company"""
     app.dependency_overrides.clear()  # Clean slate
     app.dependency_overrides[get_session] = lambda: session
@@ -157,7 +164,7 @@ def client_with_company_fixture(session: Session, mock_get_current_user_company,
 
 
 @pytest.fixture(name="client_with_student")
-def client_with_student_fixture(session: Session, mock_get_current_user_student, cleanup_overrides) -> TestClient:
+def client_with_student_fixture(session: Session, mock_get_current_user_student, cleanup_overrides) -> Generator[TestClient, None, None]:
     """Cliente con autenticación de student"""
     app.dependency_overrides.clear()  # Clean slate
     app.dependency_overrides[get_session] = lambda: session
@@ -168,7 +175,7 @@ def client_with_student_fixture(session: Session, mock_get_current_user_student,
 
 
 @pytest.fixture(name="client_with_anonymous")
-def client_with_anonymous_fixture(session: Session, mock_get_current_user_anonymous, cleanup_overrides) -> TestClient:
+def client_with_anonymous_fixture(session: Session, mock_get_current_user_anonymous, cleanup_overrides) -> Generator[TestClient, None, None]:
     """Cliente con autenticación de anonymous"""
     app.dependency_overrides.clear()  # Clean slate
     app.dependency_overrides[get_session] = lambda: session

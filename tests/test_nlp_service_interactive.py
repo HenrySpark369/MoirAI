@@ -4,6 +4,14 @@ Script interactivo para probar todos los métodos del NLPService
 Permite validar comportamiento de normalización, tokenización, matching y scoring
 """
 
+import sys
+import os
+
+# Add the project root to Python path for imports
+project_root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+if project_root not in sys.path:
+    sys.path.insert(0, project_root)
+
 import json
 from app.services.nlp_service import NLPService, _clean_text
 from typing import List, Dict
