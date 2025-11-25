@@ -221,8 +221,25 @@ async def admin_dashboard():
 
 # Dashboard routes para roles autenticados
 @app.get("/dashboard", tags=["frontend"], include_in_schema=False)
-async def dashboard_page():
-    """Servir el dashboard del usuario (estudiante/empresa)"""
+async def dashboard_page(request: Request):
+    """Servir el dashboard del usuario (estudiante/empresa) o admin dashboard en modo demo"""
+    # Check if demo mode is enabled via query parameter
+    demo_mode = request.query_params.get('demo', '').lower() == 'true'
+    demo_role = request.query_params.get('role', 'admin').lower()  # admin, student, company
+    
+    if demo_mode:
+        # Serve appropriate dashboard based on demo role
+        if demo_role == 'student':
+            template_path = Path(__file__).parent / "frontend" / "templates" / "dashboard.html"
+        elif demo_role == 'company':
+            template_path = Path(__file__).parent / "frontend" / "templates" / "dashboard.html"
+        else:  # admin or default
+            template_path = Path(__file__).parent / "frontend" / "templates" / "admin" / "dashboard.html"
+        
+        if template_path.exists():
+            return FileResponse(str(template_path), media_type="text/html")
+    
+    # Default behavior: serve regular dashboard
     template_path = Path(__file__).parent / "frontend" / "templates" / "dashboard.html"
     if template_path.exists():
         return FileResponse(str(template_path), media_type="text/html")

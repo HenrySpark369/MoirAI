@@ -41,22 +41,283 @@ class RateLimiter {
 
 const applicationLimiter = new RateLimiter(3, 5000);
 
+// Helper function to check authentication
+function _isUserAuthenticated() {
+    // Check multiple authentication indicators
+    if (typeof storageManager !== 'undefined' && storageManager) {
+        return storageManager.isAuthenticated && storageManager.isAuthenticated();
+    }
+    
+    // Fallback: check for API key in localStorage
+    const apiKey = localStorage.getItem('api_key') || 
+                  localStorage.getItem('moirai_api_key') || 
+                  localStorage.getItem('moirai_token');
+    
+    return !!apiKey;
+}
+
 document.addEventListener('DOMContentLoaded', () => {
-    // Usar protectedPageManager para mejor sincronización
-    protectedPageManager.initProtectedPage({
-        redirectOnUnauth: '/login?redirect=/dashboard',
-        loadingMessage: 'Cargando dashboard...',
-        onInit: async () => {
-            // Dar tiempo al role adapter de inicializarse
-            await new Promise(resolve => setTimeout(resolve, 150));
-            
-            // Luego inicializar el dashboard
-            initDashboard();
-        }
-    }).catch(error => {
-        console.error('Error en initProtectedPage:', error);
-    });
+    // Check for demo mode
+    const urlParams = new URLSearchParams(window.location.search);
+    const demoMode = urlParams.get('demo') === 'true';
+    const demoRole = urlParams.get('role', 'student'); // Default to student for demo
+    
+    // If no demo parameter and user is not authenticated, redirect to demo mode
+    if (!demoMode && !_isUserAuthenticated()) {
+        console.log('🎭 Usuario anónimo detectado - redirigiendo a modo demo');
+        const currentUrl = new URL(window.location);
+        currentUrl.searchParams.set('demo', 'true');
+        currentUrl.searchParams.set('role', 'student'); // Default to student
+        window.location.href = currentUrl.toString();
+        return;
+    }
+    
+    if (demoMode) {
+        console.log(`🎭 Demo mode detected - role: ${demoRole}`);
+        // For demo mode, initialize with the specified role
+        initDemoDashboard(demoRole);
+    } else {
+        // Usar protectedPageManager para mejor sincronización
+        protectedPageManager.initProtectedPage({
+            redirectOnUnauth: '/login?redirect=/dashboard',
+            loadingMessage: 'Cargando dashboard...',
+            onInit: async () => {
+                // Dar tiempo al role adapter de inicializarse
+                await new Promise(resolve => setTimeout(resolve, 150));
+                
+                // Luego inicializar el dashboard
+                initDashboard();
+            }
+        }).catch(error => {
+            console.error('Error en initProtectedPage:', error);
+        });
+    }
 });
+
+/**
+ * Inicializar dashboard en modo demo (sin autenticación)
+ */
+async function initDemoDashboard(demoRole = 'student') {
+    // Prevenir inicializaciones duplicadas
+    if (isInitializing) return;
+    isInitializing = true;
+
+    console.log(`🎭 Demo Dashboard: Iniciando modo demo con rol ${demoRole}...`);
+
+    try {
+        // Configurar usuario demo según el rol
+        switch (demoRole) {
+            case 'student':
+                currentUser = {
+                    role: 'student',
+                    name: 'Demo Estudiante',
+                    email: 'estudiante.demo@moirai.com'
+                };
+                break;
+            case 'company':
+                currentUser = {
+                    role: 'company',
+                    name: 'Demo Empresa',
+                    email: 'empresa.demo@moirai.com'
+                };
+                break;
+            case 'admin':
+            default:
+                currentUser = {
+                    role: 'admin',
+                    name: 'Demo Admin',
+                    email: 'admin.demo@moirai.com'
+                };
+                break;
+        }
+
+        // Cargar datos del dashboard en modo demo según el rol
+        await loadDemoData(demoRole);
+        
+        // Inicializar componentes del dashboard
+        initializeDashboardComponents();
+        
+        console.log(`✅ Demo Dashboard (${demoRole}) inicializado correctamente`);
+        
+    } catch (error) {
+        console.error('❌ Error inicializando demo dashboard:', error);
+        notificationManager?.error('Error al cargar el dashboard de demostración');
+    }
+}
+
+/**
+ * Cargar datos del dashboard en modo demo
+ */
+async function loadDemoData(demoRole = 'student') {
+    try {
+        console.log(`🎭 Loading demo data for role: ${demoRole}`);
+        
+        switch (demoRole) {
+            case 'student':
+                // Datos demo para estudiante
+                dashboardData.applications = [
+                    {
+                        id: 1,
+                        job: { id: 1, title: 'Desarrollador Frontend', company: 'TechCorp' },
+                        status: 'pending',
+                        applied_at: new Date().toISOString()
+                    },
+                    {
+                        id: 2,
+                        job: { id: 2, title: 'Analista de Datos', company: 'DataInc' },
+                        status: 'interview',
+                        applied_at: new Date(Date.now() - 86400000).toISOString()
+                    }
+                ];
+                
+                dashboardData.recommendations = [
+                    {
+                        id: 3,
+                        title: 'Ingeniero de Software',
+                        company: 'InnovateLab',
+                        location: 'Córdoba',
+                        work_mode: 'Híbrido',
+                        matching_score: 0.85
+                    },
+                    {
+                        id: 4,
+                        title: 'Desarrollador Full Stack',
+                        company: 'WebSolutions',
+                        location: 'Remoto',
+                        work_mode: 'Remoto',
+                        matching_score: 0.78
+                    }
+                ];
+                
+                dashboardData.stats = {
+                    applications_count: 2,
+                    applications_pending: 1,
+                    applications_accepted: 0,
+                    recommendations_count: 2,
+                    avg_match_score: 81.5
+                };
+                break;
+                
+            case 'company':
+                // Datos demo para empresa
+                dashboardData.posted_jobs = [
+                    {
+                        id: 1,
+                        title: 'Desarrollador Frontend',
+                        location: 'Córdoba',
+                        description: 'Buscamos desarrollador con experiencia en React y Vue.js',
+                        views_count: 45,
+                        applications_count: 12
+                    },
+                    {
+                        id: 2,
+                        title: 'Analista de Datos',
+                        location: 'Remoto',
+                        description: 'Posición para analista con conocimientos en Python y SQL',
+                        views_count: 32,
+                        applications_count: 8
+                    }
+                ];
+                
+                dashboardData.top_candidates = [
+                    {
+                        id: 1,
+                        name: 'María González',
+                        program: 'Ingeniería en Sistemas',
+                        skills: ['React', 'JavaScript', 'Node.js'],
+                        matching_score: 0.92
+                    },
+                    {
+                        id: 2,
+                        name: 'Juan Pérez',
+                        program: 'Ciencias de la Computación',
+                        skills: ['Python', 'SQL', 'Machine Learning'],
+                        matching_score: 0.88
+                    }
+                ];
+                
+                dashboardData.stats = {
+                    posted_jobs_count: 2,
+                    top_candidates_count: 2,
+                    hires_count: 0,
+                    profile_views: 77
+                };
+                break;
+                
+            case 'admin':
+            default:
+                // Datos demo para admin (mantener los existentes)
+                dashboardData.kpis = {
+                    total_students: 127,
+                    total_companies: 45,
+                    total_jobs: 1234,
+                    total_applications: 567,
+                    successful_placements: 89,
+                    matching_rate: 15.7,
+                    active_students: 98,
+                    verified_companies: 32
+                };
+
+                dashboardData.monitoring = {
+                    system_status: 'online',
+                    uptime: '99.9%',
+                    avg_latency: 45,
+                    alerts: 0
+                };
+
+                dashboardData.activityLog = [
+                    {
+                        timestamp: new Date().toISOString(),
+                        user_name: 'Sistema',
+                        action: 'LOGIN',
+                        details: 'Usuario demo inició sesión'
+                    }
+                ];
+                
+                dashboardData.stats = {
+                    total_users: 172,
+                    placement_rate: 15.7,
+                    matches_made: 89,
+                    system_alerts: 0
+                };
+                break;
+        }
+
+        // Renderizar datos según el rol
+        if (demoRole === 'student') {
+            renderApplicationsTable();
+            renderRecommendations();
+            renderStats();
+        } else if (demoRole === 'company') {
+            renderPostedJobs();
+            renderTopCandidates();
+            renderStats();
+        } else { // admin
+            renderKPIs();
+            renderMonitoring();
+            renderActivityLog();
+            renderStats();
+        }
+
+        console.log(`✅ Demo data loaded for role: ${demoRole}`);
+
+    } catch (error) {
+        console.error('❌ Error loading demo data:', error);
+    }
+}
+
+/**
+ * Inicializar componentes del dashboard
+ */
+function initializeDashboardComponents() {
+    // Configurar manejadores de eventos
+    setupEventHandlers();
+    
+    // Inicializar gráficos si existen
+    if (typeof initializeCharts === 'function') {
+        initializeCharts();
+    }
+}
 
 /**
  * Inicializar dashboard
@@ -606,20 +867,65 @@ function renderRecommendations() {
  */
 function renderStats() {
     const stats = dashboardData.stats;
+    const role = currentUser?.role || 'student';
 
-    const statsElements = {
-        'applications-count': stats.applications_count || 0,
-        'match-score': stats.avg_match_score ? Math.round(stats.avg_match_score) + '%' : '0%',
-        'recommendations-count': stats.recommendations_count || 0,
-        'cv-status': (currentUser && currentUser.cv_uploaded) ? 'Sí ✓' : 'No'
-    };
+    // Actualizar elementos de usuario
+    const userNameEl = document.getElementById('user-name');
+    const userEmailEl = document.getElementById('user-email');
+    const userSubtitleEl = document.getElementById('user-subtitle');
 
-    Object.keys(statsElements).forEach(id => {
-        const element = document.getElementById(id);
-        if (element) {
-            element.textContent = statsElements[id];
+    if (userNameEl) userNameEl.textContent = currentUser?.name || 'Demo Usuario';
+    if (userEmailEl) userEmailEl.textContent = currentUser?.email || 'demo@moirai.com';
+
+    if (userSubtitleEl) {
+        if (role === 'student') {
+            userSubtitleEl.textContent = 'Estudiante de UNRC - Busca tu próxima oportunidad';
+        } else if (role === 'company') {
+            userSubtitleEl.textContent = 'Empresa Colaboradora - Encuentra el talento que necesitas';
+        } else if (role === 'admin') {
+            userSubtitleEl.textContent = 'Administrador - Panel de control y monitoreo';
         }
-    });
+    }
+
+    // Renderizar estadísticas según el rol
+    if (role === 'student') {
+        const statsElements = {
+            'applications-count': stats.applications_count || 0,
+            'match-score': stats.avg_match_score ? Math.round(stats.avg_match_score) + '%' : '0%',
+            'recommendations-count': stats.recommendations_count || 0,
+            'cv-status': 'Sí ✓' // En demo siempre tiene CV
+        };
+
+        Object.keys(statsElements).forEach(id => {
+            const element = document.getElementById(id);
+            if (element) {
+                element.textContent = statsElements[id];
+            }
+        });
+    } else if (role === 'company') {
+        // Para empresa, actualizar elementos específicos si existen
+        const postedJobsEl = document.getElementById('posted-jobs-count');
+        const candidatesEl = document.getElementById('top-candidates-count');
+        const hiresEl = document.getElementById('hires-count');
+
+        if (postedJobsEl) postedJobsEl.textContent = stats.posted_jobs_count || 0;
+        if (candidatesEl) candidatesEl.textContent = stats.top_candidates_count || 0;
+        if (hiresEl) hiresEl.textContent = stats.hires_count || 0;
+    } else { // admin
+        const statsElements = {
+            'total-users': stats.total_users || 0,
+            'placement-rate': stats.placement_rate ? Math.round(stats.placement_rate * 100) + '%' : '0%',
+            'matches-made': stats.matches_made || 0,
+            'system-alerts': stats.system_alerts || 0
+        };
+
+        Object.keys(statsElements).forEach(id => {
+            const element = document.getElementById(id);
+            if (element) {
+                element.textContent = statsElements[id];
+            }
+        });
+    }
 }
 
 /**

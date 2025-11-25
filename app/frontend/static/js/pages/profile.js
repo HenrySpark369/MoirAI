@@ -14,16 +14,191 @@ document.addEventListener('DOMContentLoaded', () => {
  * Inicializar página de perfil
  */
 async function initProfilePage() {
-    // Proteger ruta - todos los roles autenticados pueden acceder
-    await protectedPageManager.initProtectedPage({
-        redirectOnUnauth: '/login?redirect=/profile',
-        loadingMessage: 'Cargando perfil...',
-        onInit: async () => {
-            await loadUserProfile();
-            setupFormHandlers();
-            setupCVUpload();
+    // Check for demo mode
+    const urlParams = new URLSearchParams(window.location.search);
+    const demoMode = urlParams.get('demo') === 'true';
+    const demoRole = urlParams.get('role', 'student'); // Default to student for demo
+    
+    if (demoMode) {
+        console.log(`🎭 Demo mode detected - role: ${demoRole}`);
+        // For demo mode, initialize with demo profile
+        initDemoProfile(demoRole);
+    } else {
+        // Proteger ruta - todos los roles autenticados pueden acceder
+        await protectedPageManager.initProtectedPage({
+            redirectOnUnauth: '/login?redirect=/profile',
+            loadingMessage: 'Cargando perfil...',
+            onInit: async () => {
+                await loadUserProfile();
+                setupFormHandlers();
+                setupCVUpload();
+            }
+        });
+    }
+}
+
+/**
+ * Inicializar perfil en modo demo
+ */
+async function initDemoProfile(demoRole = 'student') {
+    console.log(`🎭 Demo Profile: Iniciando modo demo con rol ${demoRole}...`);
+    
+    try {
+        // Configurar usuario demo según el rol
+        switch (demoRole) {
+            case 'student':
+                currentUser = {
+                    role: 'student',
+                    name: 'Demo Estudiante',
+                    email: 'estudiante.demo@moirai.com',
+                    first_name: 'Demo',
+                    last_name: 'Estudiante',
+                    university: 'Universidad Nacional de Córdoba',
+                    program: 'Ingeniería en Sistemas',
+                    graduation_year: 2025,
+                    skills: ['Python', 'JavaScript', 'React', 'Node.js', 'SQL'],
+                    soft_skills: ['Trabajo en equipo', 'Comunicación', 'Adaptabilidad'],
+                    experience: [
+                        {
+                            company: 'TechCorp',
+                            position: 'Desarrollador Junior',
+                            duration: '2023 - Presente',
+                            description: 'Desarrollo de aplicaciones web con React y Node.js'
+                        }
+                    ],
+                    education: [
+                        {
+                            institution: 'Universidad Nacional de Córdoba',
+                            degree: 'Ingeniería en Sistemas',
+                            year: 2025
+                        }
+                    ]
+                };
+                break;
+            case 'company':
+                currentUser = {
+                    role: 'company',
+                    name: 'Demo Empresa',
+                    email: 'empresa.demo@moirai.com',
+                    company_name: 'TechSolutions S.A.',
+                    industry: 'Tecnología',
+                    size: '50-200 empleados',
+                    location: 'Córdoba, Argentina',
+                    description: 'Empresa líder en desarrollo de software y soluciones tecnológicas',
+                    website: 'https://techsolutions.com',
+                    contact_person: 'María González',
+                    contact_email: 'maria.gonzalez@techsolutions.com'
+                };
+                break;
+            case 'admin':
+            default:
+                currentUser = {
+                    role: 'admin',
+                    name: 'Demo Admin',
+                    email: 'admin.demo@moirai.com',
+                    permissions: ['read', 'write', 'delete', 'admin'],
+                    last_login: new Date().toISOString()
+                };
+                break;
         }
+
+        // Cargar datos del perfil demo
+        await loadDemoProfile(demoRole);
+        
+        // Configurar interfaz según el rol
+        setupDemoInterface(demoRole);
+        
+        console.log(`✅ Demo Profile (${demoRole}) inicializado correctamente`);
+        
+    } catch (error) {
+        console.error('❌ Error inicializando demo profile:', error);
+        notificationManager?.error('Error al cargar el perfil de demostración');
+    }
+}
+
+/**
+ * Cargar datos del perfil demo
+ */
+async function loadDemoProfile(demoRole = 'student') {
+    try {
+        console.log(`🎭 Loading demo profile data for role: ${demoRole}`);
+        
+        // Actualizar elementos de la interfaz con datos demo
+        updateProfileUI(currentUser, demoRole);
+        
+        console.log(`✅ Demo profile data loaded for role: ${demoRole}`);
+        
+    } catch (error) {
+        console.error('❌ Error loading demo profile data:', error);
+    }
+}
+
+/**
+ * Configurar interfaz según el rol demo
+ */
+function setupDemoInterface(demoRole = 'student') {
+    // Configurar manejadores de eventos para demo
+    setupFormHandlers();
+    
+    // Mostrar mensaje de demo
+    if (typeof notificationManager !== 'undefined') {
+        notificationManager.info('🎭 Modo demostración - Los cambios no se guardan');
+    }
+    
+    // Deshabilitar funcionalidades de edición en demo
+    disableEditingForDemo();
+}
+
+/**
+ * Deshabilitar edición en modo demo
+ */
+function disableEditingForDemo() {
+    // Deshabilitar todos los inputs y botones de guardar
+    const inputs = document.querySelectorAll('input, textarea, select');
+    const saveButtons = document.querySelectorAll('button[type="submit"], .btn-primary');
+    
+    inputs.forEach(input => {
+        input.disabled = true;
+        input.placeholder = input.placeholder + ' (Solo lectura - Modo Demo)';
     });
+    
+    saveButtons.forEach(button => {
+        button.disabled = true;
+        button.textContent = button.textContent + ' (Deshabilitado)';
+    });
+    
+    // Mostrar overlay de demo
+    const overlay = document.createElement('div');
+    overlay.style.cssText = `
+        position: fixed;
+        top: 0;
+        left: 0;
+        right: 0;
+        bottom: 0;
+        background: rgba(255, 255, 255, 0.8);
+        z-index: 9999;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        pointer-events: none;
+    `;
+    
+    overlay.innerHTML = `
+        <div style="
+            background: var(--primary-color);
+            color: white;
+            padding: 20px;
+            border-radius: 10px;
+            text-align: center;
+            font-size: 18px;
+            font-weight: bold;
+        ">
+            🎭 MODO DEMOSTRACIÓN<br>
+            <small style="font-size: 14px; font-weight: normal;">Esta es una vista previa. Los cambios no se guardan.</small>
+        </div>
+    `;
+    
+    document.body.appendChild(overlay);
 }
 
 /**
@@ -1069,4 +1244,223 @@ function serializeCVHarvardData() {
 
     console.log('✨ Datos Harvard serializados (excluyendo eliminados):', data);
     return data;
+}
+
+/**
+ * Actualizar interfaz de usuario con datos del perfil demo
+ */
+function updateProfileUI(userData, demoRole = 'student') {
+    try {
+        console.log(`🎭 Updating profile UI for demo role: ${demoRole}`, userData);
+        
+        // Actualizar sidebar
+        const sidebarName = document.getElementById('sidebar-name');
+        const sidebarRole = document.getElementById('sidebar-role');
+        
+        if (sidebarName) sidebarName.textContent = userData.name || 'Demo Usuario';
+        if (sidebarRole) {
+            switch (demoRole) {
+                case 'student':
+                    sidebarRole.textContent = 'Estudiante UNRC';
+                    break;
+                case 'company':
+                    sidebarRole.textContent = 'Empresa Colaboradora';
+                    break;
+                case 'admin':
+                    sidebarRole.textContent = 'Administrador';
+                    break;
+            }
+        }
+        
+        // Actualizar campos del formulario según el rol
+        if (demoRole === 'student') {
+            // Campos de estudiante
+            const firstNameField = document.getElementById('first_name');
+            const lastNameField = document.getElementById('last_name');
+            const emailField = document.getElementById('email');
+            const careerField = document.getElementById('career');
+            const semesterField = document.getElementById('semester');
+            
+            if (firstNameField) firstNameField.value = userData.first_name || 'Demo';
+            if (lastNameField) lastNameField.value = userData.last_name || 'Estudiante';
+            if (emailField) emailField.value = userData.email || 'estudiante.demo@moirai.com';
+            if (careerField) careerField.value = userData.program || 'Ingeniería en Sistemas';
+            if (semesterField) semesterField.value = '8'; // Último semestre
+            
+            // Mostrar campos de estudiante
+            const studentFields = document.getElementById('student-fields');
+            if (studentFields) studentFields.style.display = 'block';
+            
+            // Actualizar CV Harvard con datos demo
+            updateHarvardCV(userData);
+            
+        } else if (demoRole === 'company') {
+            // Para empresa, mostrar campos básicos
+            const firstNameField = document.getElementById('first_name');
+            const emailField = document.getElementById('email');
+            
+            if (firstNameField) firstNameField.value = userData.company_name || 'Demo Empresa';
+            if (emailField) emailField.value = userData.email || 'empresa.demo@moirai.com';
+            
+            // Ocultar campos de estudiante
+            const studentFields = document.getElementById('student-fields');
+            if (studentFields) studentFields.style.display = 'none';
+            
+        } else { // admin
+            // Para admin, mostrar campos básicos
+            const firstNameField = document.getElementById('first_name');
+            const emailField = document.getElementById('email');
+            
+            if (firstNameField) firstNameField.value = userData.name || 'Demo Admin';
+            if (emailField) emailField.value = userData.email || 'admin.demo@moirai.com';
+            
+            // Ocultar campos de estudiante
+            const studentFields = document.getElementById('student-fields');
+            if (studentFields) studentFields.style.display = 'none';
+        }
+        
+        // Actualizar fecha de miembro
+        const memberSince = document.getElementById('member-since');
+        if (memberSince) {
+            memberSince.textContent = 'Noviembre 2025 (Demo)';
+        }
+        
+        // Actualizar estado del CV
+        const cvStatus = document.getElementById('cv-status');
+        if (cvStatus) {
+            cvStatus.innerHTML = `
+                <div class="cv-status-item">
+                    <i class="fas fa-check-circle" style="color: var(--success);"></i>
+                    <span>CV Harvard generado automáticamente (Demo)</span>
+                </div>
+            `;
+        }
+        
+        console.log('✅ Profile UI updated for demo mode');
+        
+    } catch (error) {
+        console.error('❌ Error updating profile UI:', error);
+    }
+}
+
+/**
+ * Actualizar CV Harvard con datos demo
+ */
+function updateHarvardCV(userData) {
+    try {
+        // Mostrar contenedor Harvard CV
+        const harvardContainer = document.getElementById('harvard-cv-container');
+        if (harvardContainer) {
+            harvardContainer.style.display = 'flex';
+        }
+        
+        // Actualizar objetivo profesional
+        const objectiveField = document.getElementById('objective');
+        if (objectiveField) {
+            objectiveField.value = 'Desarrollador full-stack apasionado por crear soluciones tecnológicas innovadoras que impacten positivamente en la sociedad. Busco oportunidades para aplicar mis conocimientos en desarrollo de software y contribuir al crecimiento de equipos multidisciplinarios.';
+        }
+        
+        // Actualizar educación
+        const educationList = document.getElementById('education-list');
+        if (educationList && userData.education) {
+            educationList.innerHTML = '';
+            userData.education.forEach((edu, index) => {
+                const itemEl = document.createElement('div');
+                itemEl.className = 'form-nested';
+                itemEl.id = `education-item-${index}`;
+                
+                itemEl.innerHTML = `
+                    <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 1rem;">
+                        <h4 style="margin: 0; color: var(--primary-color); font-size: 0.9rem;">#${index + 1}</h4>
+                    </div>
+                    <div class="form-group" style="margin-bottom: 0.75rem;">
+                        <label>Institución</label>
+                        <input type="text" name="education[${index}][institution]" value="${edu.institution || ''}" disabled />
+                    </div>
+                    <div class="form-group" style="margin-bottom: 0.75rem;">
+                        <label>Título</label>
+                        <input type="text" name="education[${index}][degree]" value="${edu.degree || ''}" disabled />
+                    </div>
+                    <div class="form-group" style="margin-bottom: 0.75rem;">
+                        <label>Campo de Estudio</label>
+                        <input type="text" name="education[${index}][field_of_study]" value="Ingeniería en Sistemas" disabled />
+                    </div>
+                    <div class="form-group" style="margin-bottom: 0.75rem;">
+                        <label>Año de Graduación</label>
+                        <input type="text" name="education[${index}][graduation_year]" value="${edu.year || ''}" disabled />
+                    </div>
+                `;
+                
+                educationList.appendChild(itemEl);
+            });
+        }
+        
+        // Actualizar experiencia
+        const experienceList = document.getElementById('experience-list');
+        if (experienceList && userData.experience) {
+            experienceList.innerHTML = '';
+            userData.experience.forEach((exp, index) => {
+                const itemEl = document.createElement('div');
+                itemEl.className = 'form-nested';
+                itemEl.id = `experience-item-${index}`;
+                
+                itemEl.innerHTML = `
+                    <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 1rem;">
+                        <h4 style="margin: 0; color: var(--primary-color); font-size: 0.9rem;">#${index + 1}</h4>
+                    </div>
+                    <div class="form-group" style="margin-bottom: 0.75rem;">
+                        <label>Posición</label>
+                        <input type="text" name="experience[${index}][position]" value="${exp.position || ''}" disabled />
+                    </div>
+                    <div class="form-group" style="margin-bottom: 0.75rem;">
+                        <label>Empresa</label>
+                        <input type="text" name="experience[${index}][company]" value="${exp.company || ''}" disabled />
+                    </div>
+                    <div class="form-group" style="margin-bottom: 0.75rem;">
+                        <label>Fecha Inicio</label>
+                        <input type="text" name="experience[${index}][start_date]" value="2023" disabled />
+                    </div>
+                    <div class="form-group" style="margin-bottom: 0.75rem;">
+                        <label>Fecha Fin</label>
+                        <input type="text" name="experience[${index}][end_date]" value="Presente" disabled />
+                    </div>
+                    <div class="form-group" style="margin-bottom: 0.75rem;">
+                        <label>Descripción</label>
+                        <input type="text" name="experience[${index}][description]" value="${exp.description || ''}" disabled />
+                    </div>
+                `;
+                
+                experienceList.appendChild(itemEl);
+            });
+        }
+        
+        // Actualizar habilidades inferidas
+        const inferredSkills = document.getElementById('inferred-skills');
+        if (inferredSkills && userData.skills) {
+            inferredSkills.innerHTML = '';
+            userData.skills.forEach(skill => {
+                const skillEl = document.createElement('div');
+                skillEl.className = 'cv-skill-tag';
+                skillEl.innerHTML = `<i class="fas fa-star"></i> ${skill}`;
+                inferredSkills.appendChild(skillEl);
+            });
+        }
+        
+        // Actualizar habilidades blandas
+        const softSkills = document.getElementById('inferred-skills-fallback');
+        if (softSkills && userData.soft_skills) {
+            softSkills.innerHTML = '<h4>Habilidades Blandas Inferidas</h4>';
+            userData.soft_skills.forEach(skill => {
+                const skillEl = document.createElement('div');
+                skillEl.className = 'cv-skill-tag';
+                skillEl.innerHTML = `<i class="fas fa-heart"></i> ${skill}`;
+                softSkills.appendChild(skillEl);
+            });
+        }
+        
+        console.log('✅ Harvard CV updated with demo data');
+        
+    } catch (error) {
+        console.error('❌ Error updating Harvard CV:', error);
+    }
 }

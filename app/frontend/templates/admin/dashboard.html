@@ -55,6 +55,10 @@
                 <span>Aplicaciones</span>
                 <span class="badge">892</span>
             </a>
+            <a href="#" class="nav-item" data-section="cv-monitor">
+                <i class="fas fa-robot"></i>
+                <span>CV Monitor</span>
+            </a>
             <a href="#" class="nav-item" data-section="analytics">
                 <i class="fas fa-chart-line"></i>
                 <span>Analytics</span>
@@ -75,33 +79,10 @@
 
     <!-- Main Content -->
     <main class="main-content">
-        <!-- Top Navigation Bar -->
-        <header class="top-nav">
-            <div class="search-bar">
-                <i class="fas fa-search"></i>
-                <input type="text" placeholder="Buscar estudiantes, empresas, empleos...">
-            </div>
-            <div class="top-nav-right">
-                <button class="icon-btn notifications" title="Notificaciones">
-                    <i class="fas fa-bell"></i>
-                    <span class="notification-badge">3</span>
-                </button>
-                <button class="icon-btn messages" title="Mensajes">
-                    <i class="fas fa-envelope"></i>
-                    <span class="notification-badge">5</span>
-                </button>
-                <div class="user-profile">
-                    <img src="https://via.placeholder.com/40" alt="Admin">
-                    <div class="user-info">
-                        <div class="user-name">Admin User</div>
-                        <div class="user-role">Administrador</div>
-                    </div>
-                    <i class="fas fa-chevron-down"></i>
-                </div>
-            </div>
-        </header>
-
-        <!-- Dashboard Section -->
+    <!-- Dynamic Navbar Container -->
+    <nav class="navbar" id="navbar-container">
+        <!-- Navbar will be populated by navbar-manager.js -->
+    </nav>        <!-- Dashboard Section -->
         <section id="dashboard" class="content-section active">
             <div class="section-header">
                 <h1>Dashboard</h1>
@@ -851,6 +832,86 @@
             </div>
         </section>
 
+        <!-- CV Monitor Section -->
+        <section id="cv-monitor" class="content-section">
+            <div class="section-header">
+                <h1>CV Monitor</h1>
+                <div class="header-actions">
+                    <button class="btn btn-primary" id="refresh-btn">
+                        <i class="fas fa-sync-alt"></i> Actualizar
+                    </button>
+                    <button class="btn btn-secondary" id="generate-btn">
+                        <i class="fas fa-plus"></i> Generar CVs
+                    </button>
+                </div>
+            </div>
+
+            <!-- Progress Overview -->
+            <div class="progress-overview">
+                <div class="progress-card">
+                    <div class="progress-header">
+                        <h3>Progreso de Generación</h3>
+                        <div class="progress-stats">
+                            <span id="total-cvs">0</span> / <span id="target-cvs">1000</span> CVs
+                        </div>
+                    </div>
+                    <div class="progress-bar">
+                        <div class="progress-fill" id="progress-bar" style="width: 0%"></div>
+                    </div>
+                    <div class="progress-text">
+                        <span id="progress-text">0%</span> completado
+                    </div>
+                </div>
+
+                <div class="status-card">
+                    <div class="status-indicator">
+                        <i class="fas fa-cog fa-spin"></i>
+                    </div>
+                    <div class="status-info">
+                        <h4 id="simulator-status">Estado del Simulador</h4>
+                        <p>Generando CVs sintéticos...</p>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Industry Distribution -->
+            <div class="chart-card">
+                <h3>Distribución por Industria</h3>
+                <div class="industry-stats" id="industry-list">
+                    <!-- Industry stats will be populated by JavaScript -->
+                </div>
+            </div>
+
+            <!-- Seniority Distribution -->
+            <div class="chart-card">
+                <h3>Distribución por Seniority</h3>
+                <div class="seniority-stats" id="seniority-list">
+                    <!-- Seniority stats will be populated by JavaScript -->
+                </div>
+            </div>
+
+            <!-- Recent CV Activity -->
+            <div class="chart-card">
+                <h3>Actividad Reciente</h3>
+                <div class="table-container">
+                    <table class="data-table">
+                        <thead>
+                            <tr>
+                                <th>ID</th>
+                                <th>Industria</th>
+                                <th>Seniority</th>
+                                <th>Fecha de Creación</th>
+                                <th>Estado</th>
+                            </tr>
+                        </thead>
+                        <tbody id="recent-cvs-table">
+                            <!-- Recent CVs will be populated by JavaScript -->
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        </section>
+
         <!-- Analytics Section (Integrated) -->
         <section id="analytics" class="content-section">
             <div class="section-header">
@@ -1085,6 +1146,9 @@
 
     <!-- Admin Analytics Module (Integrated Mode) -->
     <script src="/static/js/pages/admin-analytics.js"></script>
+
+    <!-- Admin CV Monitor Script -->
+    <script src="/static/js/pages/admin-cv-monitor.js"></script>
 
     <!-- Admin Dashboard Script -->
     <script src="/static/js/admin-dashboard.js"></script>

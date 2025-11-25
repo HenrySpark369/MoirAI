@@ -1,0 +1,283 @@
+<!DOCTYPE html>
+<html lang="es">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="description" content="MoirAI Admin - CV Simulator Monitor">
+    <title>MoirAI - CV Simulator Monitor</title>
+    <link rel="stylesheet" href="/static/css/styles.css">
+    <link rel="stylesheet" href="/static/css/admin-styles.css">
+    <link rel="stylesheet" href="/static/css/notifications.css">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <link
+        href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=Poppins:wght@600;700;800&display=swap"
+        rel="stylesheet">
+    <style>
+        .monitor-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+            gap: 1.5rem;
+            margin-bottom: 2rem;
+        }
+
+        .monitor-card {
+            background: white;
+            border-radius: 1rem;
+            padding: 1.5rem;
+            box-shadow: 0 4px 6px rgba(0, 0, 0, 0.05);
+            border: 1px solid var(--border-color);
+        }
+
+        .monitor-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 1rem;
+        }
+
+        .monitor-header h3 {
+            margin: 0;
+            color: var(--text-primary);
+            font-size: 1.1rem;
+        }
+
+        .monitor-value {
+            font-size: 2.5rem;
+            font-weight: 700;
+            color: var(--primary-color);
+            margin-bottom: 0.5rem;
+        }
+
+        .progress-container {
+            width: 100%;
+            height: 10px;
+            background: var(--bg-lighter);
+            border-radius: 5px;
+            overflow: hidden;
+            margin-top: 1rem;
+        }
+
+        .progress-bar {
+            height: 100%;
+            background: linear-gradient(90deg, var(--primary-color), var(--secondary-color));
+            width: 0%;
+            transition: width 0.5s ease;
+        }
+
+        .stat-list {
+            list-style: none;
+            padding: 0;
+            margin: 0;
+        }
+
+        .stat-item {
+            display: flex;
+            justify-content: space-between;
+            padding: 0.75rem 0;
+            border-bottom: 1px solid var(--border-color);
+        }
+
+        .stat-item:last-child {
+            border-bottom: none;
+        }
+
+        .status-badge {
+            padding: 0.25rem 0.75rem;
+            border-radius: 20px;
+            font-size: 0.85rem;
+            font-weight: 500;
+        }
+
+        .status-running {
+            background: #dcfce7;
+            color: #166534;
+        }
+
+        .status-stopped {
+            background: #fee2e2;
+            color: #991b1b;
+        }
+
+        .status-completed {
+            background: #dbeafe;
+            color: #1e40af;
+        }
+
+        .console-output {
+            background: #1e1e1e;
+            color: #d4d4d4;
+            padding: 1rem;
+            border-radius: 0.5rem;
+            font-family: 'Consolas', monospace;
+            height: 300px;
+            overflow-y: auto;
+            margin-top: 1rem;
+        }
+
+        .console-line {
+            margin: 0.25rem 0;
+            border-bottom: 1px solid #333;
+            padding-bottom: 0.25rem;
+        }
+
+        .console-line .time {
+            color: #569cd6;
+            margin-right: 0.5rem;
+        }
+
+        .console-line .level-info {
+            color: #4ec9b0;
+        }
+
+        .console-line .level-warn {
+            color: #ce9178;
+        }
+
+        .console-line .level-error {
+            color: #f44747;
+        }
+    </style>
+</head>
+
+<body>
+    <!-- Sidebar Navigation -->
+    <aside class="sidebar">
+        <div class="sidebar-header">
+            <div class="logo">
+                <i class="fas fa-brain"></i>
+                <span>MoirAI Admin</span>
+            </div>
+            <button class="toggle-sidebar" id="toggleSidebar">
+                <i class="fas fa-chevron-left"></i>
+            </button>
+        </div>
+
+        <nav class="sidebar-nav">
+            <a href="/admin" class="nav-item">
+                <i class="fas fa-chart-pie"></i>
+                <span>Dashboard</span>
+            </a>
+            <a href="#" class="nav-item active">
+                <i class="fas fa-robot"></i>
+                <span>CV Simulator</span>
+            </a>
+            <a href="/admin#students" class="nav-item">
+                <i class="fas fa-graduation-cap"></i>
+                <span>Estudiantes</span>
+            </a>
+        </nav>
+
+        <div class="sidebar-footer">
+            <a href="/" class="nav-item logout">
+                <i class="fas fa-sign-out-alt"></i>
+                <span>Volver al sitio</span>
+            </a>
+        </div>
+    </aside>
+
+    <!-- Main Content -->
+    <main class="main-content">
+        <header class="top-nav">
+            <div class="search-bar">
+                <h1>Monitor de Generación de Datos Sintéticos</h1>
+            </div>
+            <div class="top-nav-right">
+                <div class="user-profile">
+                    <img src="https://via.placeholder.com/40" alt="Admin">
+                    <div class="user-info">
+                        <div class="user-name">Admin User</div>
+                        <div class="user-role">Administrador</div>
+                    </div>
+                </div>
+            </div>
+        </header>
+
+        <section class="content-section active">
+            <!-- Status Overview -->
+            <div class="monitor-grid">
+                <!-- Progress Card -->
+                <div class="monitor-card">
+                    <div class="monitor-header">
+                        <h3>Progreso Total</h3>
+                        <span id="simulator-status" class="status-badge status-stopped">Detenido</span>
+                    </div>
+                    <div class="monitor-value" id="total-cvs">0</div>
+                    <p class="text-secondary">de <span id="target-cvs">1000</span> CVs objetivo</p>
+                    <div class="progress-container">
+                        <div class="progress-bar" id="progress-bar"></div>
+                    </div>
+                    <p style="margin-top: 0.5rem; text-align: right; font-weight: 600;" id="progress-text">0%</p>
+                </div>
+
+                <!-- Industry Stats -->
+                <div class="monitor-card">
+                    <div class="monitor-header">
+                        <h3>Distribución por Industria</h3>
+                        <i class="fas fa-industry text-secondary"></i>
+                    </div>
+                    <ul class="stat-list" id="industry-list">
+                        <!-- Dynamic Content -->
+                        <li class="stat-item text-secondary">Cargando datos...</li>
+                    </ul>
+                </div>
+
+                <!-- Seniority Stats -->
+                <div class="monitor-card">
+                    <div class="monitor-header">
+                        <h3>Distribución por Seniority</h3>
+                        <i class="fas fa-layer-group text-secondary"></i>
+                    </div>
+                    <ul class="stat-list" id="seniority-list">
+                        <!-- Dynamic Content -->
+                        <li class="stat-item text-secondary">Cargando datos...</li>
+                    </ul>
+                </div>
+            </div>
+
+            <!-- Recent Activity -->
+            <div class="monitor-card full-width">
+                <div class="monitor-header">
+                    <h3>Actividad Reciente</h3>
+                    <button class="btn btn-small btn-outline" id="refresh-btn">
+                        <i class="fas fa-sync-alt"></i> Actualizar
+                    </button>
+                </div>
+                <div class="table-container">
+                    <table class="data-table">
+                        <thead>
+                            <tr>
+                                <th>ID</th>
+                                <th>Industria</th>
+                                <th>Seniority</th>
+                                <th>Fecha Generación</th>
+                                <th>Estado</th>
+                            </tr>
+                        </thead>
+                        <tbody id="recent-cvs-table">
+                            <!-- Dynamic Content -->
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        </section>
+    </main>
+
+    <!-- Config -->
+    <script>
+        const protocol = window.location.protocol
+        const hostname = window.location.hostname
+        const port = window.location.port
+        const origin = port ? `${protocol}//${hostname}:${port}` : `${protocol}//${hostname}`
+        window.API_BASE_URL = `${origin}/api/v1`
+    </script>
+
+    <!-- Scripts -->
+    <script src="/static/js/api-client.js"></script>
+    <script src="/static/js/utils/storage-manager.js"></script>
+    <script src="/static/js/auth-manager.js"></script>
+    <script src="/static/js/notification-manager.js"></script>
+    <script src="/static/js/pages/admin-cv-monitor.js"></script>
+</body>
+
+</html>

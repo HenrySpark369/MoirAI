@@ -436,6 +436,27 @@ const authManager = new AuthManager(apiClient)
 // Auto-cargar usuario actual al iniciar
 document.addEventListener('DOMContentLoaded', async () => {
   console.log('⏳ Auth-manager: Verificando autenticación...');
+  
+  // Check for demo mode - skip backend calls if enabled
+  const urlParams = new URLSearchParams(window.location.search);
+  const demoMode = urlParams.get('demo') === 'true';
+  
+  if (demoMode) {
+    console.log('🎭 Demo mode detected - skipping backend user load');
+    // In demo mode, use localStorage data set by navbar-manager
+    const demoUser = {
+      id: 'demo-user-id',
+      email: localStorage.getItem('user_email') || 'demo@moirai.com',
+      first_name: localStorage.getItem('user_name') || 'Demo User',
+      role: localStorage.getItem('user_role') || 'student',
+      user_type: localStorage.getItem('user_role') || 'student'
+    };
+    authManager.currentUser = demoUser;
+    authManager.notifyListeners();
+    console.log('✅ Demo user loaded from localStorage:', demoUser);
+    return;
+  }
+  
   if (apiClient.isAuthenticated()) {
     console.log('✅ Auth-manager: Token encontrado, cargando usuario...');
     try {

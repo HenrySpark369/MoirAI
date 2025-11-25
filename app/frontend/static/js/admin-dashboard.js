@@ -37,8 +37,12 @@ function switchSection(sectionId) {
     const navItem = document.querySelector(`[data-section="${sectionId}"]`);
     if (navItem) navItem.classList.add('active');
 
-    // Load analytics if switching to that section
-    if (sectionId === 'analytics') initializeAnalytics();
+    // Load specific section content
+    if (sectionId === 'analytics') {
+        initializeAnalytics();
+    } else if (sectionId === 'cv-monitor') {
+        initializeCVMonitor();
+    }
 }
 
 /**
@@ -56,6 +60,15 @@ function initializeAnalytics() {
             console.error('📊 Analytics reload error:', err);
         });
     }
+}
+
+/**
+ * Initialize CV Monitor module on first load
+ */
+function initializeCVMonitor() {
+    // CV Monitor is initialized automatically by admin-cv-monitor.js
+    // This function can be used for additional setup if needed
+    console.log('🤖 CV Monitor section activated');
 }
 
 /**
