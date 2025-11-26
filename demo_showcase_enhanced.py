@@ -65,11 +65,17 @@ class MoirAIDemoShowcase:
 
     def navigate_to_role_profile(self, role):
         """Navegar al DASHBOARD del rol en modo demo para flujo más lineal"""
+        # Para estudiantes: primero explorar la raíz por 3 minutos antes de ir al dashboard
+        if role == 'student':
+            self.navigate_root_sections()
+            print(f"\n✅ Exploración de raíz completada (3 minutos)")
+            print(f"🌐 Ahora navegando al dashboard de {role}...")
+
         url = f"{self.base_url}/dashboard?demo=true&role={role}"
         print(f"🌐 Navegando a dashboard de {role}: {url}")
 
         self.driver.get(url)
-        time.sleep(5)  # Tiempo para carga completa
+        time.sleep(6)  # Tiempo para carga completa (era 5, ahora 6)
 
         # Verificar que estamos en modo demo
         try:
@@ -77,6 +83,266 @@ class MoirAIDemoShowcase:
             print("✅ Modo demo activado")
         except:
             print("⚠️  Modo demo no detectado visualmente")
+
+    def navigate_root_sections(self):
+        """Navegar por secciones de la raíz durante 3 minutos antes de ir al dashboard del estudiante"""
+        print(f"\n🏠 === EXPLORACIÓN DE LA RAÍZ - 3 MINUTOS ===")
+        print("📖 Navegando por secciones principales antes de acceder al dashboard")
+
+        # Ir a la página raíz
+        root_url = f"{self.base_url}/"
+        print(f"🌐 Iniciando exploración en: {root_url}")
+        self.driver.get(root_url)
+        time.sleep(3)  # Tiempo inicial para carga
+
+        # Definir secciones de la raíz y su tiempo de exploración
+        # Total: 180 segundos (3 minutos) dividido en 4 secciones = 45 segundos cada una
+        root_sections = {
+            'hero-about': {
+                'name': '🎯 Hero/About - Presentación de MoirAI',
+                'selector': '[id*="hero"], [class*="hero"], [id*="about"], [class*="about"], header, .hero-section',
+                'description': 'Sección principal con presentación de la plataforma',
+                'time_seconds': 45
+            },
+            'for-students': {
+                'name': '👨‍🎓 For Students - Información para estudiantes',
+                'selector': '[id*="student"], [class*="student"], [href*="student"], #students-section',
+                'description': 'Información específica para estudiantes de UNRC',
+                'time_seconds': 45
+            },
+            'for-companies': {
+                'name': '🏢 For Companies - Información para empresas',
+                'selector': '[id*="company"], [class*="company"], [href*="company"], #companies-section',
+                'description': 'Información para empresas colaboradoras',
+                'time_seconds': 45
+            },
+            'how-it-works': {
+                'name': '⚙️ How it Works - Cómo funciona la plataforma',
+                'selector': '[id*="how"], [class*="how"], [id*="work"], [class*="work"], #how-it-works',
+                'description': 'Explicación del funcionamiento del sistema de matching',
+                'time_seconds': 45
+            }
+        }
+
+        total_time = 0
+        for section_key, section_info in root_sections.items():
+            section_start_time = time.time()
+
+            print(f"\n   📑 Explorando: {section_info['name']}")
+            print(f"      {section_info['description']}")
+            print(f"      ⏱️  Tiempo asignado: {section_info['time_seconds']} segundos")
+
+            # Scroll gradual y natural para simular exploración de usuario
+            print("         📜 Iniciando exploración gradual...")
+            self.perform_gradual_scroll_exploration(section_info['time_seconds'])
+            print("         ✅ Exploración gradual completada")
+
+            # Intentar navegar a la sección específica (sin scroll agresivo)
+            section_found = False
+            try:
+                # Buscar elementos de navegación a esta sección
+                nav_elements = self.driver.find_elements(By.CSS_SELECTOR, f"a[href*='{section_key}'], button[class*='{section_key}'], .{section_key}-nav")
+
+                if nav_elements:
+                    # Hacer clic en el primer elemento encontrado (sin scroll adicional)
+                    nav_elements[0].click()
+                    time.sleep(2)  # Tiempo para carga
+                    section_found = True
+                    print("         ✅ Navegación directa encontrada y ejecutada")
+                else:
+                    # Solo verificar si existen elementos de la sección (sin scroll)
+                    section_elements = self.driver.find_elements(By.CSS_SELECTOR, section_info['selector'])
+                    if section_elements:
+                        section_found = True
+                        print("         ✅ Elementos de sección encontrados (exploración continua)")
+                    else:
+                        print("         📝 Sección no localizada específicamente (exploración general)")
+                        section_found = True  # Continuar de todas formas
+            except Exception as e:
+                print(f"         ⚠️  Error en navegación: {str(e)} (continuando con exploración)")
+                section_found = True  # No fallar por esto
+
+            # Demostrar elementos encontrados en la sección
+            self.demonstrate_root_section_features(section_key, section_info)
+
+            # Esperar el tiempo asignado para esta sección (el scroll gradual continúa)
+            elapsed = time.time() - section_start_time
+            remaining_time = max(0, section_info['time_seconds'] - elapsed)
+
+            if remaining_time > 0:
+                print(f"         ⏳ Completando exploración gradual: {remaining_time:.1f} segundos restantes...")
+                # El scroll gradual continúa automáticamente en perform_gradual_scroll_exploration
+                time.sleep(remaining_time)
+
+            total_time += section_info['time_seconds']
+            print(f"      ✅ Sección {section_key} completada ({total_time}s total)")
+
+        print(f"\n🏁 Exploración de raíz completada: {total_time} segundos (3 minutos)")
+        print("   ✅ Todas las secciones principales han sido exploradas")
+
+    def perform_gradual_scroll_exploration(self, duration_seconds):
+        """Realizar exploración gradual con scrolls naturales durante el tiempo especificado"""
+        start_time = time.time()
+        scroll_count = 0
+
+        # Obtener altura total de la página
+        total_height = self.driver.execute_script("return document.body.scrollHeight")
+        current_position = self.driver.execute_script("return window.pageYOffset")
+        window_height = self.driver.execute_script("return window.innerHeight")
+
+        print(f"         📏 Página total: {total_height}px, Posición actual: {current_position}px")
+
+        while (time.time() - start_time) < duration_seconds:
+            elapsed = time.time() - start_time
+            remaining = duration_seconds - elapsed
+
+            # Calcular progreso (0-1)
+            progress = elapsed / duration_seconds
+
+            # Hacer scroll gradual hacia abajo (no volver arriba)
+            if current_position < total_height - window_height:
+                # Scroll pequeño y natural (100-200px)
+                scroll_amount = 150 + (progress * 50)  # Aumenta ligeramente con el tiempo
+
+                # Asegurar que no se pase del final
+                new_position = min(current_position + scroll_amount, total_height - window_height)
+
+                self.driver.execute_script(f"window.scrollTo({{top: {new_position}, behavior: 'smooth'}});")
+                scroll_count += 1
+
+                # Pequeña pausa para que el scroll sea visible
+                time.sleep(1.5 + (progress * 0.5))  # Pausa aumenta ligeramente
+
+                current_position = new_position
+
+                # Mostrar progreso cada pocos scrolls
+                if scroll_count % 3 == 0:
+                    progress_pct = int(progress * 100)
+                    print(f"         📜 Scroll {scroll_count} - Progreso: {progress_pct}% ({int(elapsed)}s/{duration_seconds}s)")
+            else:
+                # Si llegó al final, hacer pequeños movimientos para mantener actividad
+                self.driver.execute_script("window.scrollBy(0, -50);")
+                time.sleep(1)
+                self.driver.execute_script("window.scrollBy(0, 50);")
+                time.sleep(1)
+                print("         🔄 Movimiento sutil en final de página")
+
+                # Pequeña pausa antes de continuar
+                time.sleep(min(remaining, 2))
+
+        print(f"         ✅ Exploración completada: {scroll_count} scrolls realizados")
+
+    def demonstrate_root_section_features(self, section_key, section_info):
+        """Demostrar funcionalidades específicas de cada sección de la raíz"""
+        print(f"         🔍 Explorando contenido de la sección:")
+
+        try:
+            if section_key == 'hero-about':
+                self.demonstrate_hero_about_section()
+            elif section_key == 'for-students':
+                self.demonstrate_for_students_section()
+            elif section_key == 'for-companies':
+                self.demonstrate_for_companies_section()
+            elif section_key == 'how-it-works':
+                self.demonstrate_how_it_works_section()
+        except Exception as e:
+            print(f"            ⚠️  Error demostrando funcionalidades: {str(e)}")
+
+    def demonstrate_hero_about_section(self):
+        """Demostrar funcionalidades de la sección Hero/About"""
+        print("            🎯 Explorando sección principal:")
+
+        # Verificar elementos del hero (sin scroll adicional)
+        hero_elements = self.driver.find_elements(By.CSS_SELECTOR, "[class*='hero'], [id*='hero'], h1, .title, .subtitle")
+        if hero_elements:
+            print(f"               📋 {len(hero_elements)} elementos de presentación encontrados")
+
+        # Verificar botones de acción principales
+        cta_buttons = self.driver.find_elements(By.CSS_SELECTOR, ".btn-primary, .cta-btn, [class*='call-to-action'], button")
+        if cta_buttons:
+            print(f"               🎯 {len(cta_buttons)} botones de acción principales")
+
+        # Verificar elementos visuales
+        images = self.driver.find_elements(By.CSS_SELECTOR, "img, .hero-image, .background-image")
+        if images:
+            print(f"               🖼️  {len(images)} elementos visuales")
+
+        # Verificar navegación
+        nav_elements = self.driver.find_elements(By.CSS_SELECTOR, "nav, .navbar, .navigation")
+        if nav_elements:
+            print("               🧭 Elementos de navegación presentes")
+
+    def demonstrate_for_students_section(self):
+        """Demostrar funcionalidades de la sección For Students"""
+        print("            👨‍🎓 Explorando sección estudiantes:")
+
+        # Verificar información específica para estudiantes
+        student_info = self.driver.find_elements(By.CSS_SELECTOR, "[class*='student'], [id*='student'], .student-info, .student-benefits")
+        if student_info:
+            print(f"               📚 {len(student_info)} elementos informativos para estudiantes")
+
+        # Verificar beneficios o características
+        benefits = self.driver.find_elements(By.CSS_SELECTOR, ".benefit, .feature, .advantage, [class*='benefit']")
+        if benefits:
+            print(f"               ✅ {len(benefits)} beneficios destacados")
+
+        # Verificar llamadas a acción para estudiantes
+        student_ctas = self.driver.find_elements(By.CSS_SELECTOR, "[href*='student'], [href*='register'], .student-btn")
+        if student_ctas:
+            print(f"               🎓 {len(student_ctas)} acciones específicas para estudiantes")
+
+        # Verificar testimonios o casos de éxito
+        testimonials = self.driver.find_elements(By.CSS_SELECTOR, ".testimonial, .success-story, [class*='testimonial']")
+        if testimonials:
+            print(f"               💬 {len(testimonials)} testimonios o casos de éxito")
+
+    def demonstrate_for_companies_section(self):
+        """Demostrar funcionalidades de la sección For Companies"""
+        print("            🏢 Explorando sección empresas:")
+
+        # Verificar información específica para empresas
+        company_info = self.driver.find_elements(By.CSS_SELECTOR, "[class*='company'], [id*='company'], .company-info, .employer-info")
+        if company_info:
+            print(f"               🏭 {len(company_info)} elementos informativos para empresas")
+
+        # Verificar procesos de reclutamiento
+        recruitment = self.driver.find_elements(By.CSS_SELECTOR, "[class*='recruit'], [class*='hire'], .recruitment-process")
+        if recruitment:
+            print(f"               🎯 {len(recruitment)} elementos sobre reclutamiento")
+
+        # Verificar llamadas a acción para empresas
+        company_ctas = self.driver.find_elements(By.CSS_SELECTOR, "[href*='company'], [href*='employer'], .company-btn")
+        if company_ctas:
+            print(f"               💼 {len(company_ctas)} acciones específicas para empresas")
+
+        # Verificar estadísticas o métricas
+        stats = self.driver.find_elements(By.CSS_SELECTOR, ".stat, .metric, .number, [class*='stat']")
+        if stats:
+            print(f"               📊 {len(stats)} estadísticas o métricas mostradas")
+
+    def demonstrate_how_it_works_section(self):
+        """Demostrar funcionalidades de la sección How it Works"""
+        print("            ⚙️ Explorando sección funcionamiento:")
+
+        # Verificar pasos del proceso
+        steps = self.driver.find_elements(By.CSS_SELECTOR, ".step, .process-step, [class*='step'], .phase")
+        if steps:
+            print(f"               🔢 {len(steps)} pasos del proceso identificados")
+
+        # Verificar explicaciones o guías
+        explanations = self.driver.find_elements(By.CSS_SELECTOR, ".explanation, .guide, .how-to, [class*='explain']")
+        if explanations:
+            print(f"               📖 {len(explanations)} explicaciones disponibles")
+
+        # Verificar elementos interactivos
+        interactive = self.driver.find_elements(By.CSS_SELECTOR, ".interactive, .demo, button, .clickable")
+        if interactive:
+            print(f"               🖱️  {len(interactive)} elementos interactivos")
+
+        # Verificar diagramas o flujos
+        diagrams = self.driver.find_elements(By.CSS_SELECTOR, ".diagram, .flowchart, canvas, svg")
+        if diagrams:
+            print(f"               📈 {len(diagrams)} diagramas o representaciones visuales")
 
     def display_role_info(self, role):
         """Mostrar información específica del rol"""
@@ -209,6 +475,9 @@ class MoirAIDemoShowcase:
         else:
             print("      ⚠️  Estado del sistema no visible")
 
+        print("   🧭 4. Navegación por Sidebar del Dashboard")
+        self.navigate_admin_sidebar()
+
     def showcase_navbar_navigation(self, role):
         """Demostrar navegación completa del navbar para cada rol"""
         print(f"\n🧭 === NAVEGACIÓN COMPLETA DEL NAVBAR PARA {role.upper()} ===")
@@ -251,10 +520,10 @@ class MoirAIDemoShowcase:
                 'Mis Vacantes': {'href_contains': 'mis-vacantes', 'expected_elements': ['vacancy-list', 'create-vacancy-btn']}
             },
             'admin': {
-                # Empezamos en Dashboard, navegamos linealmente: Usuarios → Analítica → Configuración
-                'Usuarios': {'href_contains': 'admin/users', 'expected_elements': ['user-table', 'user-management']},
-                'Analítica': {'href_contains': 'admin/analytics', 'expected_elements': ['analytics-charts', 'reports']},
-                'Configuración': {'href_contains': 'admin/settings', 'expected_elements': ['system-settings', 'config-options']}
+                # Para admin, la navegación se hace dentro del dashboard via sidebar
+                # Ya se exploró completamente en demonstrate_admin_dashboard()
+                # No navegamos a URLs externas adicionales
+                'Dashboard Completado': {'href_contains': 'dashboard', 'expected_elements': ['kpi-grid', 'charts-grid']}
             }
         }
 
@@ -265,6 +534,12 @@ class MoirAIDemoShowcase:
         try:
             href_contains = path_config['href_contains']
             expected_elements = path_config['expected_elements']
+
+            # Para admin, si ya exploramos la sidebar, solo confirmar
+            if role == 'admin' and 'Dashboard Completado' in str(path_config):
+                print(f"      ✅ Dashboard ya explorado completamente via sidebar")
+                print(f"         📊 Secciones exploradas: Estudiantes, Empresas, Empleos, API, Aplicaciones, CV Monitor, Analytics, Configuración")
+                return
 
             # Buscar el enlace correspondiente
             nav_links = self.driver.find_elements(By.CSS_SELECTOR, f"a[href*='{href_contains}']")
@@ -283,7 +558,7 @@ class MoirAIDemoShowcase:
             time.sleep(1)
 
             link.click()
-            time.sleep(4)  # Tiempo para carga completa
+            time.sleep(5)  # Tiempo para carga completa (era 4, ahora 5)
 
             # Verificar que llegamos a la página correcta
             current_url = self.driver.current_url
@@ -322,6 +597,110 @@ class MoirAIDemoShowcase:
             self.demonstrate_company_functionality(section)
         elif role == 'admin':
             self.demonstrate_admin_functionality(section)
+
+    def navigate_admin_sidebar(self):
+        """Navegar por todos los elementos de la sidebar del admin dashboard"""
+        print("      🔍 Explorando secciones del admin dashboard:")
+
+        # Definir las secciones de la sidebar y sus elementos característicos
+        sidebar_sections = {
+            'students': {
+                'name': '👨‍🎓 Estudiantes',
+                'selector': '.nav-item[data-section="students"]',
+                'expected_elements': ['.kpi-card', '.data-table', '#users-tbody'],
+                'description': 'Gestión completa de estudiantes registrados'
+            },
+            'companies': {
+                'name': '🏢 Empresas',
+                'selector': '.nav-item[data-section="companies"]',
+                'expected_elements': ['.companies-grid', '.company-card', '#addCompanyBtn'],
+                'description': 'Administrar empresas y reclutadores'
+            },
+            'jobs': {
+                'name': '💼 Empleos',
+                'selector': '.nav-item[data-section="jobs"]',
+                'expected_elements': ['.data-table', '.filter-select', '.job-listing'],
+                'description': 'Revisar y moderar ofertas de empleo'
+            },
+            'api': {
+                'name': '🔌 API Endpoints',
+                'selector': '.nav-item[data-section="api"]',
+                'expected_elements': ['.api-endpoints', '.endpoint-card', '.system-status'],
+                'description': 'Monitorear endpoints y documentación API'
+            },
+            'applications': {
+                'name': '📄 Aplicaciones',
+                'selector': '.nav-item[data-section="applications"]',
+                'expected_elements': ['.data-table', '.status-badge', '.application-list'],
+                'description': 'Seguimiento de postulaciones y matching'
+            },
+            'cv-monitor': {
+                'name': '🤖 CV Monitor',
+                'selector': '.nav-item[data-section="cv-monitor"]',
+                'expected_elements': ['.progress-card', '.industry-stats', '.seniority-stats'],
+                'description': 'Monitoreo de procesamiento de CVs'
+            },
+            'analytics': {
+                'name': '📊 Analytics',
+                'selector': '.nav-item[data-section="analytics"]',
+                'expected_elements': ['.charts-section', '.kpi-grid', '.date-range'],
+                'description': 'Análisis avanzado y reportes detallados'
+            },
+            'settings': {
+                'name': '⚙️ Configuración',
+                'selector': '.nav-item[data-section="settings"]',
+                'expected_elements': ['.settings-group', '.setting-item', '.btn-primary'],
+                'description': 'Configuración del sistema y preferencias'
+            }
+        }
+
+        # Navegar por cada sección de la sidebar
+        for section_key, section_info in sidebar_sections.items():
+            try:
+                print(f"         {section_info['name']}: {section_info['description']}")
+
+                # Buscar el elemento de navegación
+                nav_item = self.wait.until(
+                    EC.element_to_be_clickable((By.CSS_SELECTOR, section_info['selector']))
+                )
+
+                # Hacer clic en el elemento
+                nav_item.click()
+                time.sleep(4)  # Esperar carga de la sección (era 3, ahora 4)
+
+                # Verificar elementos característicos de la sección
+                found_elements = 0
+                for element_selector in section_info['expected_elements']:
+                    try:
+                        elements = self.driver.find_elements(By.CSS_SELECTOR, element_selector)
+                        if elements:
+                            found_elements += len(elements)
+                    except:
+                        pass
+
+                if found_elements > 0:
+                    print(f"            ✅ {found_elements} elementos encontrados")
+                else:
+                    print("            ⚠️  Sección cargada (elementos no visibles en demo)")
+
+                # Demostrar funcionalidades específicas de cada sección
+                self.demonstrate_admin_section_features(section_key)
+
+                time.sleep(3)  # Pausa entre secciones (era 2, ahora 3)
+
+            except Exception as e:
+                print(f"            ❌ Error navegando a {section_info['name']}: {str(e)}")
+
+        # Volver al dashboard principal
+        try:
+            dashboard_nav = self.wait.until(
+                EC.element_to_be_clickable((By.CSS_SELECTOR, '.nav-item[data-section="dashboard"]'))
+            )
+            dashboard_nav.click()
+            time.sleep(3)  # Pausa después de regresar (era 2, ahora 3)
+            print("         🔄 Regresando al dashboard principal")
+        except Exception as e:
+            print(f"         ⚠️  Error regresando al dashboard: {str(e)}")
 
     def demonstrate_student_functionality(self, section):
         """Demostrar funcionalidades específicas para estudiantes"""
@@ -363,26 +742,155 @@ class MoirAIDemoShowcase:
             if action_buttons:
                 print(f"         ⚙️  {len(action_buttons)} acciones disponibles")
 
-    def demonstrate_admin_functionality(self, section):
-        """Demostrar funcionalidades específicas para administradores"""
-        if 'users' in section:
-            print("         👥 Gestionando usuarios...")
-            # Verificar tabla de usuarios
-            user_rows = self.driver.find_elements(By.CSS_SELECTOR, "tr, .user-row")
-            if user_rows:
-                print(f"         📋 {len(user_rows)} usuarios en el sistema")
-        elif 'analytics' in section:
-            print("         📊 Revisando métricas del sistema...")
-            # Verificar gráficos y métricas
-            charts = self.driver.find_elements(By.CSS_SELECTOR, ".chart, .metric, canvas")
-            if charts:
-                print(f"         📈 {len(charts)} elementos analíticos encontrados")
-        elif 'settings' in section:
-            print("         ⚙️  Configurando sistema...")
-            # Verificar opciones de configuración
-            settings = self.driver.find_elements(By.CSS_SELECTOR, ".setting, .config-option")
-            if settings:
-                print(f"         🔧 {len(settings)} opciones de configuración")
+    def demonstrate_admin_section_features(self, section_key):
+        """Demostrar funcionalidades específicas de cada sección del admin dashboard"""
+        try:
+            if section_key == 'students':
+                self.demonstrate_admin_students_section()
+            elif section_key == 'companies':
+                self.demonstrate_admin_companies_section()
+            elif section_key == 'jobs':
+                self.demonstrate_admin_jobs_section()
+            elif section_key == 'api':
+                self.demonstrate_admin_api_section()
+            elif section_key == 'applications':
+                self.demonstrate_admin_applications_section()
+            elif section_key == 'cv-monitor':
+                self.demonstrate_admin_cv_monitor_section()
+            elif section_key == 'analytics':
+                self.demonstrate_admin_analytics_section()
+            elif section_key == 'settings':
+                self.demonstrate_admin_settings_section()
+        except Exception as e:
+            print(f"            ⚠️  Error demostrando funcionalidades: {str(e)}")
+
+    def demonstrate_admin_students_section(self):
+        """Demostrar funcionalidades de la sección de estudiantes"""
+        print("            �‍🎓 Gestionando estudiantes:")
+        # Verificar KPIs de estudiantes
+        kpi_cards = self.driver.find_elements(By.CLASS_NAME, "kpi-card")
+        if kpi_cards:
+            print(f"               📊 {len(kpi_cards)} métricas de estudiantes")
+        # Verificar tabla de usuarios
+        user_rows = self.driver.find_elements(By.CSS_SELECTOR, "#users-tbody tr")
+        if user_rows:
+            print(f"               👥 {len(user_rows)} estudiantes listados")
+        # Verificar filtros
+        filters = self.driver.find_elements(By.CSS_SELECTOR, "#role-filter, #status-filter, #search-input")
+        if filters:
+            print(f"               🔍 {len(filters)} opciones de filtrado")
+
+    def demonstrate_admin_companies_section(self):
+        """Demostrar funcionalidades de la sección de empresas"""
+        print("            🏢 Gestionando empresas:")
+        # Verificar grid de empresas
+        company_cards = self.driver.find_elements(By.CLASS_NAME, "company-card")
+        if company_cards:
+            print(f"               🏢 {len(company_cards)} empresas listadas")
+        # Verificar botón de agregar empresa
+        add_btn = self.driver.find_elements(By.ID, "addCompanyBtn")
+        if add_btn:
+            print("               ➕ Opción para agregar nuevas empresas")
+        # Verificar filtros
+        filters = self.driver.find_elements(By.CLASS_NAME, "filter-select")
+        if filters:
+            print(f"               � {len(filters)} filtros disponibles")
+
+    def demonstrate_admin_jobs_section(self):
+        """Demostrar funcionalidades de la sección de empleos"""
+        print("            💼 Gestionando empleos:")
+        # Verificar tabla de empleos
+        job_rows = self.driver.find_elements(By.CSS_SELECTOR, ".data-table tbody tr")
+        if job_rows:
+            print(f"               💼 {len(job_rows)} empleos listados")
+        # Verificar badges de estado
+        status_badges = self.driver.find_elements(By.CLASS_NAME, "status-badge")
+        if status_badges:
+            print(f"               📊 {len(status_badges)} estados de empleos")
+        # Verificar filtros
+        filters = self.driver.find_elements(By.CLASS_NAME, "filter-select")
+        if filters:
+            print("               🔍 Filtros por estado disponibles")
+
+    def demonstrate_admin_api_section(self):
+        """Demostrar funcionalidades de la sección API"""
+        print("            🔌 Monitoreando APIs:")
+        # Verificar endpoints
+        endpoints = self.driver.find_elements(By.CLASS_NAME, "endpoint-card")
+        if endpoints:
+            print(f"               � {len(endpoints)} endpoints monitoreados")
+        # Verificar estado del sistema
+        status_items = self.driver.find_elements(By.CLASS_NAME, "status-item")
+        if status_items:
+            print(f"               ⚙️  {len(status_items)} servicios del sistema")
+        # Verificar pestañas
+        tabs = self.driver.find_elements(By.CLASS_NAME, "tab-btn")
+        if tabs:
+            print(f"               📑 {len(tabs)} secciones de monitoreo")
+
+    def demonstrate_admin_applications_section(self):
+        """Demostrar funcionalidades de la sección de aplicaciones"""
+        print("            📄 Gestionando aplicaciones:")
+        # Verificar tabla de aplicaciones
+        app_rows = self.driver.find_elements(By.CSS_SELECTOR, ".data-table tbody tr")
+        if app_rows:
+            print(f"               📄 {len(app_rows)} aplicaciones registradas")
+        # Verificar estados
+        status_badges = self.driver.find_elements(By.CLASS_NAME, "status-badge")
+        if status_badges:
+            print(f"               📊 {len(status_badges)} estados de aplicación")
+        # Verificar filtros
+        filters = self.driver.find_elements(By.CLASS_NAME, "filter-select")
+        if filters:
+            print("               🔍 Filtros por estado disponibles")
+
+    def demonstrate_admin_cv_monitor_section(self):
+        """Demostrar funcionalidades de la sección CV Monitor"""
+        print("            🤖 Monitoreando CVs:")
+        # Verificar progreso
+        progress_bars = self.driver.find_elements(By.CLASS_NAME, "progress-bar")
+        if progress_bars:
+            print(f"               📈 {len(progress_bars)} barras de progreso")
+        # Verificar estadísticas por industria
+        industry_stats = self.driver.find_elements(By.CLASS_NAME, "industry-stats")
+        if industry_stats:
+            print("               🏭 Estadísticas por industria disponibles")
+        # Verificar estadísticas por seniority
+        seniority_stats = self.driver.find_elements(By.CLASS_NAME, "seniority-stats")
+        if seniority_stats:
+            print("               📊 Estadísticas por seniority disponibles")
+
+    def demonstrate_admin_analytics_section(self):
+        """Demostrar funcionalidades de la sección Analytics"""
+        print("            📊 Analizando datos:")
+        # Verificar gráficos
+        charts = self.driver.find_elements(By.CSS_SELECTOR, ".chart-card, canvas")
+        if charts:
+            print(f"               📈 {len(charts)} gráficos analíticos")
+        # Verificar KPIs
+        kpi_cards = self.driver.find_elements(By.CLASS_NAME, "kpi-card")
+        if kpi_cards:
+            print(f"               📊 {len(kpi_cards)} métricas principales")
+        # Verificar selectores de fecha
+        date_inputs = self.driver.find_elements(By.CSS_SELECTOR, "input[type='date']")
+        if date_inputs:
+            print("               📅 Filtros de fecha disponibles")
+
+    def demonstrate_admin_settings_section(self):
+        """Demostrar funcionalidades de la sección de configuración"""
+        print("            ⚙️ Configurando sistema:")
+        # Verificar grupos de configuración
+        settings_groups = self.driver.find_elements(By.CLASS_NAME, "settings-group")
+        if settings_groups:
+            print(f"               ⚙️  {len(settings_groups)} grupos de configuración")
+        # Verificar items de configuración
+        setting_items = self.driver.find_elements(By.CLASS_NAME, "setting-item")
+        if setting_items:
+            print(f"               🔧 {len(setting_items)} opciones configurables")
+        # Verificar botones de acción
+        action_btns = self.driver.find_elements(By.CSS_SELECTOR, ".btn-primary, .btn-outline")
+        if action_btns:
+            print(f"               💾 {len(action_btns)} acciones disponibles")
 
     def capture_final_state(self, role):
         """Capturar el estado final de la demostración"""
@@ -416,7 +924,7 @@ class MoirAIDemoShowcase:
         """Ejecutar demostración completa de todos los roles"""
         print("🎬 === MOIRAI MVP DEMO SHOWCASE ===")
         print("=" * 60)
-        print("🚀 Demostrando navegación LINEAL del navbar y funcionalidades")
+        print("🚀 Demostrando EXPLORACIÓN COMPLETA: raíz + navegación lineal + funcionalidades")
         print("📱 Navegación visual - Flujo continuo sin repeticiones")
         print("=" * 60)
 
@@ -433,8 +941,8 @@ class MoirAIDemoShowcase:
 
             # Pausa entre roles para observación
             if role != self.roles[-1]:  # No pausar después del último
-                print(f"\n⏳ Preparando siguiente rol... ({5} segundos)")
-                time.sleep(5)
+                print(f"\n⏳ Preparando siguiente rol... ({6} segundos)")
+                time.sleep(6)
 
         print("\n" + "=" * 60)
         print("📊 RESULTADOS DE LA DEMOSTRACIÓN:")
@@ -467,38 +975,74 @@ class MoirAIDemoShowcase:
 
 
 def main():
-    showcase = MoirAIDemoShowcase()
+    print("🎬 === MOIRAI MVP DEMO SHOWCASE - MODO CONTINUO ===")
+    print("=" * 60)
+    print("🚀 Demostración automática en bucle continuo")
+    print("📱 Navegación visual - Se repite automáticamente")
+    print("⏹️  Presiona Ctrl+C para detener")
+    print("=" * 60)
+
+    cycle_count = 0
 
     try:
-        print("🎬 Iniciando Demo Showcase de MoirAI MVP...")
-        print("💡 Esta demostración mostrará navegación LINEAL del navbar")
-        print("   desde Dashboard hasta la última sección sin repeticiones")
-        print("⏳ Asegúrate de que el servidor esté corriendo en localhost:8000")
-        input("\n🔥 Presiona ENTER para comenzar la demostración...")
+        while True:
+            cycle_count += 1
+            print(f"\n🔄 === CICLO #{cycle_count} ===")
+            print(f"⏰ Iniciado: {time.strftime('%H:%M:%S')}")
 
-        results = showcase.run_complete_showcase()
+            # Crear nueva instancia para cada ciclo
+            showcase = MoirAIDemoShowcase()
 
-        # Guardar resultados
-        with open('/Users/sparkmachine/MoirAI/demo_showcase_results.json', 'w') as f:
-            json.dump({
-                'timestamp': time.strftime('%Y-%m-%d %H:%M:%S'),
-                'results': results,
-                'demo_data': showcase.demo_data
-            }, f, indent=2, ensure_ascii=False)
+            try:
+                print("🎬 Iniciando Demo Showcase de MoirAI MVP...")
+                print("💡 Esta demostración mostrará EXPLORACIÓN COMPLETA:")
+                print("   🏠 3 minutos explorando la raíz por secciones principales")
+                print("   🧭 Navegación LINEAL del navbar desde Dashboard hasta la última sección")
+                print("   👥 Demostración de funcionalidades para todos los roles")
+                print("⏳ Asegúrate de que el servidor esté corriendo en localhost:8000")
 
-        print("\n💾 Resultados guardados en: demo_showcase_results.json")
+                results = showcase.run_complete_showcase()
 
-        print("\n🎯 RESUMEN DE FUNCIONALIDADES DEMOSTRADAS:")
-        print("👨‍🎓 ESTUDIANTES: Dashboard personal → Oportunidades → Mi Perfil (CV) → Aplicaciones")
-        print("🏢 EMPRESAS: Dashboard KPIs → Búsqueda candidatos → Gestión vacantes")
-        print("👨‍💼 ADMINS: Dashboard sistema → Gestión usuarios → Analytics → Configuración")
+                # Guardar resultados
+                with open('/Users/sparkmachine/MoirAI/demo_showcase_results.json', 'w') as f:
+                    json.dump({
+                        'timestamp': time.strftime('%Y-%m-%d %H:%M:%S'),
+                        'cycle': cycle_count,
+                        'results': results,
+                        'demo_data': showcase.demo_data
+                    }, f, indent=2, ensure_ascii=False)
+
+                print("\n💾 Resultados guardados en: demo_showcase_results.json")
+
+                print("\n🎯 RESUMEN DE FUNCIONALIDADES DEMOSTRADAS:")
+                print("🏠 RAÍZ: Exploración completa de 4 secciones principales (Hero/About, For Students, For Companies, How it Works) - 3 minutos")
+                print("👨‍🎓 ESTUDIANTES: Dashboard personal → Oportunidades → Mi Perfil (CV) → Aplicaciones")
+                print("🏢 EMPRESAS: Dashboard KPIs → Búsqueda candidatos → Gestión vacantes")
+                print("👨‍💼 ADMINS: Dashboard sistema → Exploración completa de sidebar (Estudiantes, Empresas, Empleos, API, Aplicaciones, CV Monitor, Analytics, Configuración)")
+
+                successful = sum(1 for r in results.values() if r["success"])
+                total = len(results)
+
+                if successful == total:
+                    print(f"\n🎉 ¡Ciclo #{cycle_count} completado exitosamente!")
+                    print("✅ Navegación completa del navbar y funcionalidades demostradas")
+                else:
+                    print(f"\n⚠️  Ciclo #{cycle_count} completado con algunos problemas")
+
+            finally:
+                showcase.cleanup()
+
+            # Pausa entre ciclos
+            print(f"\n⏳ Esperando 10 segundos antes del siguiente ciclo...")
+            print("   Presiona Ctrl+C para detener la demostración")
+            time.sleep(10)
 
     except KeyboardInterrupt:
-        print("\n⏹️  Demostración interrumpida por el usuario")
+        print("\n⏹️  Demostración detenida por el usuario")
+        print(f"✅ Total de ciclos completados: {cycle_count}")
     except Exception as e:
         print(f"❌ Error general en la demostración: {str(e)}")
-    finally:
-        showcase.cleanup()
+        print(f"✅ Ciclos completados antes del error: {cycle_count}")
 
 
 if __name__ == "__main__":
