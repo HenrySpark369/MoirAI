@@ -292,6 +292,14 @@ async def admin_analytics_page():
     return {"message": "Página de analítica no encontrada", "status": "error"}
 
 
+@app.get("/admin/settings", tags=["frontend"], include_in_schema=False)
+async def admin_settings_page():
+    """Servir la página de configuración del sistema (para administradores)"""
+    template_path = Path(__file__).parent / "frontend" / "templates" / "admin" / "settings.html"
+    if template_path.exists():
+        return FileResponse(str(template_path), media_type="text/html")
+    return {"message": "Página de configuración no encontrada", "status": "error"}
+
 
 @app.get("/applications", tags=["frontend"], include_in_schema=False)
 async def applications_page():
