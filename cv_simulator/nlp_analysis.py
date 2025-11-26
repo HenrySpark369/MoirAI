@@ -491,13 +491,28 @@ class NLPAnalyzer:
         tfidf = TfidfVectorizer(max_features=1000, ngram_range=(1, 2))
         X = tfidf.fit_transform(processed_texts)
 
-        # 1. Clasificación por Industria
-        print("🏭 CLASIFICACIÓN POR INDUSTRIA:")
-        print("-" * 30)
+        # Filtrar clases con muy pocos ejemplos para evitar errores de estratificación
+        industry_counts = pd.Series(industries).value_counts()
+        valid_industries = industry_counts[industry_counts >= 2].index.tolist()
 
-        X_train_ind, X_test_ind, y_train_ind, y_test_ind = train_test_split(
-            X, industries, test_size=0.3, random_state=42, stratify=industries
-        )
+        # Filtrar datos para incluir solo clases válidas
+        valid_indices = [i for i, ind in enumerate(industries) if ind in valid_industries]
+        X_filtered = X[valid_indices]
+        y_ind_filtered = [industries[i] for i in valid_indices]
+
+        if len(set(y_ind_filtered)) < 2:
+            print("❌ Insuficientes clases válidas para clasificación por industria")
+            return
+
+        try:
+            X_train_ind, X_test_ind, y_train_ind, y_test_ind = train_test_split(
+                X_filtered, y_ind_filtered, test_size=0.3, random_state=42, stratify=y_ind_filtered
+            )
+        except ValueError:
+            # Fallback a split no estratificado si hay clases con muy pocos ejemplos
+            X_train_ind, X_test_ind, y_train_ind, y_test_ind = train_test_split(
+                X_filtered, y_ind_filtered, test_size=0.3, random_state=42
+            )
 
         nb_industry = MultinomialNB()
         nb_industry.fit(X_train_ind, y_train_ind)
@@ -513,9 +528,28 @@ class NLPAnalyzer:
         print("\n📊 CLASIFICACIÓN POR SENIORITY:")
         print("-" * 30)
 
-        X_train_sen, X_test_sen, y_train_sen, y_test_sen = train_test_split(
-            X, seniorities, test_size=0.3, random_state=42, stratify=seniorities
-        )
+        # Filtrar clases con muy pocos ejemplos
+        seniority_counts = pd.Series(seniorities).value_counts()
+        valid_seniorities = seniority_counts[seniority_counts >= 2].index.tolist()
+
+        # Filtrar datos para incluir solo clases válidas
+        valid_indices_sen = [i for i, sen in enumerate(seniorities) if sen in valid_seniorities]
+        X_filtered_sen = X[valid_indices_sen]
+        y_sen_filtered = [seniorities[i] for i in valid_indices_sen]
+
+        if len(set(y_sen_filtered)) < 2:
+            print("❌ Insuficientes clases válidas para clasificación por seniority")
+            return
+
+        try:
+            X_train_sen, X_test_sen, y_train_sen, y_test_sen = train_test_split(
+                X_filtered_sen, y_sen_filtered, test_size=0.3, random_state=42, stratify=y_sen_filtered
+            )
+        except ValueError:
+            # Fallback a split no estratificado
+            X_train_sen, X_test_sen, y_train_sen, y_test_sen = train_test_split(
+                X_filtered_sen, y_sen_filtered, test_size=0.3, random_state=42
+            )
 
         nb_seniority = MultinomialNB()
         nb_seniority.fit(X_train_sen, y_train_sen)
@@ -643,8 +677,8 @@ class NLPAnalyzer:
         self.tfidf_analysis()
         self.bow_analysis()
         self.lda_topic_modeling()
-        self.classification_experiment()
-        self.harvard_style_analysis()
+        self.automatic_cv_classification()
+        self.advanced_text_preprocessing()
 
         print("\n" + "="*60)
         print("✅ ANÁLISIS COMPLETADO")

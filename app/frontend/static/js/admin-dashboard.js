@@ -12,6 +12,8 @@ document.addEventListener('DOMContentLoaded', () => {
     checkAdminPermissions().then(() => {
         initializeNavigation();
         initializeEventListeners();
+        initializeSidebarState();
+        initializeEnhancedSidebar(); // Initialize enhanced sidebar features
     });
 });
 
@@ -71,6 +73,11 @@ function switchSection(sectionId) {
     // Show target section
     const section = document.getElementById(sectionId);
     if (section) section.classList.add('active');
+
+    // Update sidebar active state
+    document.querySelectorAll('.nav-item').forEach(nav => nav.classList.remove('active'));
+    const activeNavItem = document.querySelector(`.nav-item[data-section="${sectionId}"]`);
+    if (activeNavItem) activeNavItem.classList.add('active');
 
     // Update page title
     updatePageTitle(sectionId);
@@ -159,6 +166,25 @@ function initializeCompanies() {
  * Initialize event listeners for tabs and actions
  */
 function initializeEventListeners() {
+    // Sidebar toggle functionality
+    const toggleBtn = document.querySelector('.toggle-sidebar');
+    if (toggleBtn) {
+        toggleBtn.addEventListener('click', toggleSidebar);
+    }
+
+    // Sidebar navigation items
+    document.querySelectorAll('.nav-item[data-section]').forEach(item => {
+        item.addEventListener('click', (e) => {
+            e.preventDefault();
+            const section = item.getAttribute('data-section');
+            switchSection(section);
+
+            // Update active state
+            document.querySelectorAll('.nav-item').forEach(nav => nav.classList.remove('active'));
+            item.classList.add('active');
+        });
+    });
+
     // Tab buttons within sections
     document.querySelectorAll('.tab-btn').forEach(btn => {
         btn.addEventListener('click', () => switchTab(btn.getAttribute('data-tab')));
@@ -174,6 +200,54 @@ function initializeEventListeners() {
 
     // Add event listeners for section-specific buttons
     initializeSectionButtons();
+}
+
+/**
+ * Toggle sidebar visibility
+ */
+function toggleSidebar() {
+    const sidebar = document.querySelector('.sidebar');
+    const mainContent = document.querySelector('.main-content');
+
+    if (sidebar && mainContent) {
+        sidebar.classList.toggle('collapsed');
+        mainContent.classList.toggle('sidebar-collapsed');
+
+        // Save sidebar state to localStorage
+        const isCollapsed = sidebar.classList.contains('collapsed');
+        localStorage.setItem('sidebarCollapsed', isCollapsed);
+
+        // Update toggle button icon
+        const toggleBtn = document.querySelector('.toggle-sidebar i');
+        if (toggleBtn) {
+            toggleBtn.className = isCollapsed ? 'fas fa-bars' : 'fas fa-times';
+        }
+    }
+}
+
+/**
+ * Initialize sidebar state on page load
+ */
+function initializeSidebarState() {
+    const sidebar = document.querySelector('.sidebar');
+    const mainContent = document.querySelector('.main-content');
+    const toggleBtn = document.querySelector('.toggle-sidebar i');
+
+    if (sidebar && mainContent) {
+        const isCollapsed = localStorage.getItem('sidebarCollapsed') === 'true';
+
+        if (isCollapsed) {
+            sidebar.classList.add('collapsed');
+            mainContent.classList.add('sidebar-collapsed');
+            if (toggleBtn) {
+                toggleBtn.className = 'fas fa-bars';
+            }
+        } else {
+            if (toggleBtn) {
+                toggleBtn.className = 'fas fa-times';
+            }
+        }
+    }
 }
 
 /**
@@ -871,17 +945,122 @@ function getApiKey() {
 }
 
 /**
- * Student action handlers (legacy - kept for compatibility)
+ * Initialize tooltips and status indicators for sidebar navigation
  */
-function viewStudent(studentId) {
-    viewUser(studentId);
+function initializeSidebarTooltips() {
+    // Tooltips are handled via CSS hover effects
+    // Status indicators are updated based on system status
+    updateStatusIndicators();
 }
 
-function editStudent(studentId) {
-    // TODO: Implement edit student
-    notificationManager?.show('Función de editar estudiante próximamente', 'info');
+/**
+ * Update status indicators for navigation items based on system status
+ */
+async function updateStatusIndicators() {
+    try {
+        const apiKey = getApiKey();
+        if (!apiKey) return;
+
+        // Check API status
+        const apiResponse = await fetch(`${window.API_BASE_URL}/health`, {
+            headers: { 'X-API-Key': apiKey }
+        }).catch(() => ({ ok: false }));
+
+        // Update API status indicator
+        const apiNavItem = document.querySelector('.nav-item[data-section="api"]');
+        if (apiNavItem) {
+            const indicator = apiNavItem.querySelector('.status-indicator');
+            if (indicator) {
+                indicator.style.background = apiResponse.ok ? 'var(--success)' : 'var(--error)';
+            }
+        }
+
+        // Check database status (via users endpoint)
+        const dbResponse = await fetch(`${window.API_BASE_URL}/admin/users?limit=1`, {
+            headers: { 'X-API-Key': apiKey }
+        }).catch(() => ({ ok: false }));
+
+        // Update dashboard status (represents overall system health)
+        const dashboardNavItem = document.querySelector('.nav-item[data-section="dashboard"]');
+        if (dashboardNavItem) {
+            const indicator = dashboardNavItem.querySelector('.status-indicator');
+            if (indicator) {
+                indicator.style.background = (apiResponse.ok && dbResponse.ok) ? 'var(--success)' : 'var(--error)';
+            }
+        }
+
+        // Update other sections with default active status
+        const sections = ['students', 'companies', 'jobs', 'applications', 'cv-monitor', 'analytics', 'settings'];
+        sections.forEach(section => {
+            if (section !== 'api' && section !== 'dashboard') {
+                const navItem = document.querySelector(`.nav-item[data-section="${section}"]`);
+                if (navItem) {
+                    const indicator = navItem.querySelector('.status-indicator');
+                    if (indicator) {
+                        indicator.style.background = 'var(--success)'; // Default to active
+                    }
+                }
+            }
+        });
+
+    } catch (error) {
+        console.warn('Error updating status indicators:', error);
+        // Set all indicators to warning state on error
+        document.querySelectorAll('.status-indicator').forEach(indicator => {
+            indicator.style.background = 'var(--warning)';
+        });
+    }
 }
 
-async function deleteStudent(studentId, studentName) {
-    deleteUser(studentId, studentName);
+/**
+ * Enhanced sidebar toggle with tooltip adjustments
+ */
+function toggleSidebar() {
+    const sidebar = document.querySelector('.sidebar');
+    const mainContent = document.querySelector('.main-content');
+
+    if (sidebar && mainContent) {
+        sidebar.classList.toggle('collapsed');
+        mainContent.classList.toggle('sidebar-collapsed');
+
+        // Save sidebar state to localStorage
+        const isCollapsed = sidebar.classList.contains('collapsed');
+        localStorage.setItem('sidebarCollapsed', isCollapsed);
+
+        // Update toggle button icon
+        const toggleBtn = document.querySelector('.toggle-sidebar i');
+        if (toggleBtn) {
+            toggleBtn.className = isCollapsed ? 'fas fa-bars' : 'fas fa-times';
+        }
+
+        // Update tooltip visibility for collapsed state
+        if (isCollapsed) {
+            // Tooltips will show on hover when collapsed
+            console.log('📱 Sidebar collapsed - tooltips enabled on hover');
+        } else {
+            // Tooltips hidden when expanded
+            console.log('📱 Sidebar expanded - tooltips disabled');
+        }
+    }
+}
+
+/**
+ * Initialize enhanced sidebar features
+ */
+function initializeEnhancedSidebar() {
+    initializeSidebarTooltips();
+
+    // Update status indicators periodically
+    setInterval(updateStatusIndicators, 30000); // Update every 30 seconds
+
+    // Add keyboard navigation support for accessibility
+    document.addEventListener('keydown', (e) => {
+        if (e.key === 'Escape') {
+            // Close any open tooltips or modals
+            const sidebar = document.querySelector('.sidebar');
+            if (sidebar.classList.contains('collapsed')) {
+                // Could add logic to hide tooltips if needed
+            }
+        }
+    });
 }
