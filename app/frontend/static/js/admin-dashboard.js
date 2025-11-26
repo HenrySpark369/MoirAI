@@ -15,30 +15,64 @@ document.addEventListener('DOMContentLoaded', () => {
 });
 
 /**
- * Navigate between sections (Overview, Students, Companies, Analytics, Settings)
+ * Navigate between sections using URL-based navigation
+ * Updated for unified navbar - listens for URL changes and section clicks
  */
 function initializeNavigation() {
-    document.querySelectorAll('.nav-item').forEach(item => {
-        item.addEventListener('click', (e) => {
+    // Listen for clicks on navbar links that navigate to admin sections
+    document.addEventListener('click', (e) => {
+        const link = e.target.closest('a[href*="/admin/"]');
+        if (link) {
             e.preventDefault();
-            const section = item.getAttribute('data-section');
-            if (section) switchSection(section);
-        });
+            const href = link.getAttribute('href');
+            const section = getSectionFromUrl(href);
+            if (section) {
+                switchSection(section);
+                // Update URL without page reload
+                history.pushState(null, '', href);
+            }
+        }
     });
+
+    // Handle browser back/forward buttons
+    window.addEventListener('popstate', () => {
+        const section = getSectionFromUrl(window.location.pathname + window.location.search);
+        if (section) {
+            switchSection(section);
+        }
+    });
+
+    // Initialize with current URL section
+    const currentSection = getSectionFromUrl(window.location.pathname + window.location.search);
+    if (currentSection) {
+        switchSection(currentSection);
+    }
 }
 
 /**
- * Switch main section content
+ * Extract section name from admin URL
+ */
+function getSectionFromUrl(url) {
+    if (url.includes('/admin/users')) return 'students';
+    if (url.includes('/admin/analytics')) return 'analytics';
+    if (url.includes('/admin/settings')) return 'settings';
+    if (url.includes('/admin/dashboard') || url === '/admin' || url === '/admin/') return 'dashboard';
+    return null;
+}
+
+/**
+ * Switch main section content and update navbar active state
  */
 function switchSection(sectionId) {
+    // Hide all sections
     document.querySelectorAll('.content-section').forEach(s => s.classList.remove('active'));
-    document.querySelectorAll('.nav-item').forEach(i => i.classList.remove('active'));
 
+    // Show target section
     const section = document.getElementById(sectionId);
     if (section) section.classList.add('active');
 
-    const navItem = document.querySelector(`[data-section="${sectionId}"]`);
-    if (navItem) navItem.classList.add('active');
+    // Update page title
+    updatePageTitle(sectionId);
 
     // Load specific section content
     if (sectionId === 'analytics') {
@@ -50,6 +84,27 @@ function switchSection(sectionId) {
     } else if (sectionId === 'students') {
         initializeStudents();
     }
+
+    console.log(`📱 Switched to section: ${sectionId}`);
+}
+
+/**
+ * Update page title based on current section
+ */
+function updatePageTitle(sectionId) {
+    const titles = {
+        'dashboard': 'Dashboard - MoirAI Admin',
+        'students': 'Gestión de Estudiantes - MoirAI Admin',
+        'companies': 'Gestión de Empresas - MoirAI Admin',
+        'api': 'API Endpoints - MoirAI Admin',
+        'applications': 'Aplicaciones - MoirAI Admin',
+        'cv-monitor': 'CV Monitor - MoirAI Admin',
+        'analytics': 'Analítica - MoirAI Admin',
+        'settings': 'Configuración - MoirAI Admin'
+    };
+
+    const title = titles[sectionId] || 'MoirAI - Admin Dashboard';
+    document.title = title;
 }
 
 /**
@@ -100,21 +155,13 @@ function initializeCompanies() {
 }
 
 /**
- * Tab switching (for tables/content within sections)
+ * Initialize event listeners for tabs and actions
  */
 function initializeEventListeners() {
-    // Tab buttons
+    // Tab buttons within sections
     document.querySelectorAll('.tab-btn').forEach(btn => {
         btn.addEventListener('click', () => switchTab(btn.getAttribute('data-tab')));
     });
-
-    // Sidebar toggle
-    const toggleBtn = document.getElementById('toggleSidebar');
-    if (toggleBtn) {
-        toggleBtn.addEventListener('click', () => {
-            document.querySelector('.sidebar')?.classList.toggle('collapsed');
-        });
-    }
 
     // Action buttons (view/edit/delete)
     document.querySelectorAll('.action-btn').forEach(btn => {
@@ -123,6 +170,66 @@ function initializeEventListeners() {
             handleActionButton(btn);
         });
     });
+
+    // Add event listeners for section-specific buttons
+    initializeSectionButtons();
+}
+
+/**
+ * Initialize buttons specific to each section
+ */
+function initializeSectionButtons() {
+    // Add Student button
+    const addStudentBtn = document.getElementById('addStudentBtn');
+    if (addStudentBtn) {
+        addStudentBtn.addEventListener('click', () => {
+            notificationManager?.show('Función de agregar estudiante próximamente', 'info');
+        });
+    }
+
+    // Add Company button
+    const addCompanyBtn = document.getElementById('addCompanyBtn');
+    if (addCompanyBtn) {
+        addCompanyBtn.addEventListener('click', () => {
+            notificationManager?.show('Función de agregar empresa próximamente', 'info');
+        });
+    }
+
+    // Generate Docs button
+    const generateDocsBtn = document.getElementById('generateDocsBtn');
+    if (generateDocsBtn) {
+        generateDocsBtn.addEventListener('click', () => {
+            notificationManager?.show('Generación de documentación próximamente', 'info');
+        });
+    }
+
+    // Refresh buttons
+    const refreshBtn = document.getElementById('refresh-btn');
+    if (refreshBtn) {
+        refreshBtn.addEventListener('click', () => {
+            notificationManager?.show('Refrescando datos...', 'info');
+            // Trigger refresh for current section
+            const activeSection = document.querySelector('.content-section.active');
+            if (activeSection) {
+                const sectionId = activeSection.id;
+                if (sectionId === 'cv-monitor') {
+                    initializeCVMonitor();
+                }
+            }
+        });
+    }
+
+    const refreshAnalytics = document.getElementById('refreshAnalytics');
+    if (refreshAnalytics) {
+        refreshAnalytics.addEventListener('click', () => {
+            if (dashboardAnalytics) {
+                dashboardAnalytics.loadAnalytics(true).catch(err => {
+                    console.error('Error refreshing analytics:', err);
+                    notificationManager?.show('Error al refrescar analítica', 'error');
+                });
+            }
+        });
+    }
 }
 
 /**
@@ -270,13 +377,18 @@ function renderStudentsTable(students) {
 }
 
 /**
- * Update students badge count in sidebar
+ * Update students badge count (can be used in navbar or other locations)
  */
 function updateStudentsBadge(count) {
-    const badge = document.querySelector('.nav-item[data-section="students"] .badge');
-    if (badge) {
-        badge.textContent = count;
-    }
+    // Look for any badge that might show student count
+    const badges = document.querySelectorAll('.badge');
+    badges.forEach(badge => {
+        if (badge.textContent.includes('estudiantes') || badge.closest('a')?.href?.includes('/admin/users')) {
+            badge.textContent = count;
+        }
+    });
+
+    console.log(`👥 Updated students badge to: ${count}`);
 }
 
 /**
