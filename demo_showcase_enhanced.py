@@ -134,7 +134,7 @@ class MoirAIDemoShowcase:
 
             # Scroll gradual y natural para simular exploración de usuario
             print("         📜 Iniciando exploración gradual...")
-            self.perform_gradual_scroll_exploration(section_info['time_seconds'])
+            self.perform_gradual_scroll_exploration(section_info['time_seconds'], section_key)
             print("         ✅ Exploración gradual completada")
 
             # Intentar navegar a la sección específica (sin scroll agresivo)
@@ -180,8 +180,8 @@ class MoirAIDemoShowcase:
         print(f"\n🏁 Exploración de raíz completada: {total_time} segundos (2.5 minutos)")
         print("   ✅ Todas las secciones principales han sido exploradas")
 
-    def perform_gradual_scroll_exploration(self, duration_seconds):
-        """Realizar exploración gradual con scrolls naturales hasta la sección de Historias de Éxito"""
+    def perform_gradual_scroll_exploration(self, duration_seconds, section_key=None):
+        """Realizar exploración gradual con scrolls naturales según la sección actual"""
         start_time = time.time()
         scroll_count = 0
 
@@ -192,153 +192,126 @@ class MoirAIDemoShowcase:
 
         print(f"         📏 Página total: {total_height}px, Posición actual: {current_position}px")
 
-        # Buscar la sección de Historias de Éxito
-        testimonials_section = None
-        testimonial_selectors = [
-            "[class*='testimonials']",
-            "[id*='testimonials']",
-            "[class*='historias']",
-            "[id*='historias']",
-            "[class*='success-stories']",
-            "[id*='success-stories']",
-            ".testimonial-section",
-            "#testimonial-section",
-            "[data-section*='testimonials']",
-            "[data-section*='historias']"
-        ]
-
-        for selector in testimonial_selectors:
-            try:
-                elements = self.driver.find_elements(By.CSS_SELECTOR, selector)
-                if elements:
-                    testimonials_section = elements[0]
-                    print(f"         🎯 Sección de Historias de Éxito encontrada con selector: {selector}")
-                    break
-            except:
-                continue
-
-        # Si no encontramos la sección por selectores, buscar por texto
-        if not testimonials_section:
-            try:
-                elements = self.driver.find_elements(By.XPATH, "//*[contains(text(), 'Historias de Éxito') or contains(text(), 'Testimonios') or contains(text(), 'Casos de Éxito')]")
-                if elements:
-                    testimonials_section = elements[0]
-                    print("         🎯 Sección de Historias de Éxito encontrada por texto")
-            except:
-                pass
-
-        # Buscar testimonios específicos
-        testimonial_found = False
-        specific_testimonials = [
-            "Ana Carrillo",
-            "Jorge Rodríguez",
-            "María Bernal"
-        ]
-
-        for name in specific_testimonials:
-            try:
-                elements = self.driver.find_elements(By.XPATH, f"//*[contains(text(), '{name}')]")
-                if elements:
-                    testimonial_found = True
-                    print(f"         👤 Testimonio encontrado: {name}")
-                    if not testimonials_section:
-                        testimonials_section = elements[0]
-            except:
-                continue
-
-        if testimonial_found:
-            print("         ✅ Testimonios específicos localizados")
+        # Si es la última sección (how-it-works), buscar específicamente testimonios
+        if section_key == 'how-it-works':
+            return self._scroll_to_testimonials(duration_seconds)
         else:
-            print("         ⚠️  Testimonios específicos no encontrados (puede ser normal)")
+            # Para las primeras secciones, hacer scroll gradual normal
+            return self._scroll_gradual_normal(duration_seconds)
 
-        # Si encontramos la sección, hacer scroll hasta ella
-        if testimonials_section:
-            try:
-                # Obtener posición de la sección
-                section_position = self.driver.execute_script("""
-                    var element = arguments[0];
-                    var rect = element.getBoundingClientRect();
-                    return rect.top + window.pageYOffset;
-                """, testimonials_section)
 
-                target_position = section_position - (window_height * 0.3)  # Posicionar con margen superior
-                max_scroll_position = total_height - window_height * 0.8  # No llegar al 100% de la página
 
-                # Asegurar que no se pase del límite
-                target_position = min(target_position, max_scroll_position)
-
-                print(f"         📍 Desplazándose a posición: {int(target_position)}px (sección testimonios)")
-
-                # Scroll gradual hasta la sección
-                steps = 20  # Más pasos para scroll más suave
-                step_duration = duration_seconds / steps
-
-                for step in range(steps):
-                    elapsed = time.time() - start_time
-                    if elapsed >= duration_seconds:
-                        break
-
-                    progress = step / (steps - 1)
-                    current_target = current_position + (target_position - current_position) * progress
-
-                    self.driver.execute_script(f"window.scrollTo({{top: {current_target}, behavior: 'smooth'}});")
-                    scroll_count += 1
-
-                    time.sleep(step_duration)
-
-                    # Verificar si ya estamos cerca de la posición objetivo
-                    current_pos = self.driver.execute_script("return window.pageYOffset")
-                    if abs(current_pos - target_position) < 50:  # Margen de 50px
-                        print(f"         ✅ Posición objetivo alcanzada en paso {step + 1}")
-                        break
-
-                print(f"         🎯 Exploración completada: {scroll_count} scrolls realizados hasta testimonios")
-
-            except Exception as e:
-                print(f"         ⚠️  Error en scroll inteligente: {str(e)}")
-                # Fallback a scroll gradual normal
-                self._fallback_gradual_scroll(duration_seconds)
-        else:
-            print("         ⚠️  Sección de testimonios no encontrada, realizando scroll gradual normal")
-            self._fallback_gradual_scroll(duration_seconds)
-
-    def _fallback_gradual_scroll(self, duration_seconds):
-        """Método de respaldo para scroll gradual normal"""
+    def _scroll_gradual_normal(self, duration_seconds):
+        """Realizar scroll gradual normal por la página"""
         start_time = time.time()
         scroll_count = 0
 
+        # Obtener altura total de la página
         total_height = self.driver.execute_script("return document.body.scrollHeight")
         current_position = self.driver.execute_script("return window.pageYOffset")
         window_height = self.driver.execute_script("return window.innerHeight")
 
-        max_scroll_position = total_height - window_height * 0.8  # No llegar al 100%
+        # Calcular intervalos de scroll (cada 2-3 segundos)
+        scroll_interval = 2.5
+        max_scrolls = int(duration_seconds / scroll_interval)
 
-        while (time.time() - start_time) < duration_seconds:
-            elapsed = time.time() - start_time
-            remaining = duration_seconds - elapsed
+        for i in range(max_scrolls):
+            if time.time() - start_time >= duration_seconds:
+                break
 
-            progress = elapsed / duration_seconds
+            # Calcular nueva posición (avanzar gradualmente)
+            scroll_increment = min(window_height * 0.7, total_height - current_position - window_height)
+            new_position = current_position + scroll_increment
 
-            if current_position < max_scroll_position:
-                scroll_amount = 100 + (progress * 50)
+            # Evitar llegar al final de la página
+            if new_position >= total_height - window_height * 2:
+                new_position = total_height - window_height * 2
 
-                new_position = min(current_position + scroll_amount, max_scroll_position)
+            # Ejecutar scroll
+            self.driver.execute_script(f"window.scrollTo({{top: {new_position}, behavior: 'smooth'}});")
+            scroll_count += 1
 
-                self.driver.execute_script(f"window.scrollTo({{top: {new_position}, behavior: 'smooth'}});")
+            # Actualizar posición actual
+            current_position = new_position
+
+            # Pausa entre scrolls
+            time.sleep(scroll_interval)
+
+        print(f"         📜 {scroll_count} scrolls graduales realizados")
+
+    def _scroll_to_testimonials(self, duration_seconds):
+        """Buscar y hacer scroll específicamente hacia testimonios"""
+        start_time = time.time()
+        scroll_count = 0
+
+        # Obtener altura total de la página
+        total_height = self.driver.execute_script("return document.body.scrollHeight")
+        window_height = self.driver.execute_script("return window.innerHeight")
+
+        # Buscar elementos de testimonios
+        testimonial_selectors = [
+            ".testimonial", ".testimonials", "[class*='testimonial']",
+            ".success-story", ".review", ".feedback",
+            "[id*='testimonial']", "[class*='review']"
+        ]
+
+        testimonials_found = []
+        for selector in testimonial_selectors:
+            try:
+                elements = self.driver.find_elements(By.CSS_SELECTOR, selector)
+                if elements:
+                    testimonials_found.extend(elements)
+            except:
+                pass
+
+        if testimonials_found:
+            print(f"         💬 {len(testimonials_found)} elementos de testimonios encontrados")
+
+            # Hacer scroll hacia el primer testimonio encontrado
+            first_testimonial = testimonials_found[0]
+            self.driver.execute_script("arguments[0].scrollIntoView({behavior: 'smooth', block: 'center'});", first_testimonial)
+            scroll_count += 1
+
+            # Pausa para que se vea el scroll
+            time.sleep(2)
+
+            # Hacer algunos scrolls adicionales alrededor de los testimonios
+            remaining_time = duration_seconds - (time.time() - start_time)
+            if remaining_time > 0:
+                scroll_interval = 3
+                max_additional_scrolls = int(remaining_time / scroll_interval)
+
+                for i in range(min(max_additional_scrolls, 3)):  # Máximo 3 scrolls adicionales
+                    if time.time() - start_time >= duration_seconds:
+                        break
+
+                    # Scroll suave hacia abajo para mostrar más testimonios
+                    self.driver.execute_script("window.scrollBy({top: 300, behavior: 'smooth'});")
+                    scroll_count += 1
+                    time.sleep(scroll_interval)
+        else:
+            print("         ⚠️  No se encontraron testimonios específicos, haciendo scroll gradual normal")
+            # Si no hay testimonios, hacer scroll gradual normal pero sin llegar al final
+            scroll_interval = 2.5
+            max_scrolls = int(duration_seconds / scroll_interval)
+
+            for i in range(max_scrolls):
+                if time.time() - start_time >= duration_seconds:
+                    break
+
+                # Scroll moderado, evitando el final de la página
+                current_position = self.driver.execute_script("return window.pageYOffset")
+                scroll_increment = window_height * 0.6
+
+                # No llegar al final
+                if current_position + scroll_increment >= total_height - window_height * 1.5:
+                    break
+
+                self.driver.execute_script(f"window.scrollBy({{top: {scroll_increment}, behavior: 'smooth'}});")
                 scroll_count += 1
+                time.sleep(scroll_interval)
 
-                time.sleep(1.2)
-
-                current_position = new_position
-
-                if scroll_count % 5 == 0:
-                    progress_pct = int(progress * 100)
-                    print(f"         � Scroll {scroll_count} - Progreso: {progress_pct}% ({int(elapsed)}s/{duration_seconds}s)")
-            else:
-                print("         🔄 Manteniendo posición (límite alcanzado)")
-                time.sleep(min(remaining, 2))
-
-        print(f"         ✅ Scroll gradual completado: {scroll_count} scrolls realizados")
+        print(f"         📜 {scroll_count} scrolls realizados hacia testimonios")
 
     def demonstrate_root_section_features(self, section_key, section_info):
         """Demostrar funcionalidades específicas de cada sección de la raíz"""
