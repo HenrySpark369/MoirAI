@@ -65,10 +65,10 @@ class MoirAIDemoShowcase:
 
     def navigate_to_role_profile(self, role):
         """Navegar al DASHBOARD del rol en modo demo para flujo más lineal"""
-        # Para estudiantes: primero explorar la raíz por 3 minutos antes de ir al dashboard
+        # Para estudiantes: primero explorar la raíz por 2.5 minutos antes de ir al dashboard
         if role == 'student':
             self.navigate_root_sections()
-            print(f"\n✅ Exploración de raíz completada (3 minutos)")
+            print(f"\n✅ Exploración de raíz completada (2.5 minutos)")
             print(f"🌐 Ahora navegando al dashboard de {role}...")
 
         url = f"{self.base_url}/dashboard?demo=true&role={role}"
@@ -85,8 +85,8 @@ class MoirAIDemoShowcase:
             print("⚠️  Modo demo no detectado visualmente")
 
     def navigate_root_sections(self):
-        """Navegar por secciones de la raíz durante 3 minutos antes de ir al dashboard del estudiante"""
-        print(f"\n🏠 === EXPLORACIÓN DE LA RAÍZ - 3 MINUTOS ===")
+        """Navegar por secciones de la raíz durante 2.5 minutos antes de ir al dashboard del estudiante"""
+        print(f"\n🏠 === EXPLORACIÓN DE LA RAÍZ - 2.5 MINUTOS ===")
         print("📖 Navegando por secciones principales antes de acceder al dashboard")
 
         # Ir a la página raíz
@@ -96,31 +96,31 @@ class MoirAIDemoShowcase:
         time.sleep(3)  # Tiempo inicial para carga
 
         # Definir secciones de la raíz y su tiempo de exploración
-        # Total: 180 segundos (3 minutos) dividido en 4 secciones = 45 segundos cada una
+        # Total: 150 segundos (2.5 minutos) dividido en 4 secciones = 37.5 segundos cada una
         root_sections = {
             'hero-about': {
                 'name': '🎯 Hero/About - Presentación de MoirAI',
                 'selector': '[id*="hero"], [class*="hero"], [id*="about"], [class*="about"], header, .hero-section',
                 'description': 'Sección principal con presentación de la plataforma',
-                'time_seconds': 45
+                'time_seconds': 37.5
             },
             'for-students': {
                 'name': '👨‍🎓 For Students - Información para estudiantes',
                 'selector': '[id*="student"], [class*="student"], [href*="student"], #students-section',
                 'description': 'Información específica para estudiantes de UNRC',
-                'time_seconds': 45
+                'time_seconds': 37.5
             },
             'for-companies': {
                 'name': '🏢 For Companies - Información para empresas',
                 'selector': '[id*="company"], [class*="company"], [href*="company"], #companies-section',
                 'description': 'Información para empresas colaboradoras',
-                'time_seconds': 45
+                'time_seconds': 37.5
             },
             'how-it-works': {
                 'name': '⚙️ How it Works - Cómo funciona la plataforma',
                 'selector': '[id*="how"], [class*="how"], [id*="work"], [class*="work"], #how-it-works',
                 'description': 'Explicación del funcionamiento del sistema de matching',
-                'time_seconds': 45
+                'time_seconds': 37.5
             }
         }
 
@@ -177,11 +177,11 @@ class MoirAIDemoShowcase:
             total_time += section_info['time_seconds']
             print(f"      ✅ Sección {section_key} completada ({total_time}s total)")
 
-        print(f"\n🏁 Exploración de raíz completada: {total_time} segundos (3 minutos)")
+        print(f"\n🏁 Exploración de raíz completada: {total_time} segundos (2.5 minutos)")
         print("   ✅ Todas las secciones principales han sido exploradas")
 
     def perform_gradual_scroll_exploration(self, duration_seconds):
-        """Realizar exploración gradual con scrolls naturales durante el tiempo especificado"""
+        """Realizar exploración gradual con scrolls naturales hasta la sección de Historias de Éxito"""
         start_time = time.time()
         scroll_count = 0
 
@@ -192,45 +192,153 @@ class MoirAIDemoShowcase:
 
         print(f"         📏 Página total: {total_height}px, Posición actual: {current_position}px")
 
+        # Buscar la sección de Historias de Éxito
+        testimonials_section = None
+        testimonial_selectors = [
+            "[class*='testimonials']",
+            "[id*='testimonials']",
+            "[class*='historias']",
+            "[id*='historias']",
+            "[class*='success-stories']",
+            "[id*='success-stories']",
+            ".testimonial-section",
+            "#testimonial-section",
+            "[data-section*='testimonials']",
+            "[data-section*='historias']"
+        ]
+
+        for selector in testimonial_selectors:
+            try:
+                elements = self.driver.find_elements(By.CSS_SELECTOR, selector)
+                if elements:
+                    testimonials_section = elements[0]
+                    print(f"         🎯 Sección de Historias de Éxito encontrada con selector: {selector}")
+                    break
+            except:
+                continue
+
+        # Si no encontramos la sección por selectores, buscar por texto
+        if not testimonials_section:
+            try:
+                elements = self.driver.find_elements(By.XPATH, "//*[contains(text(), 'Historias de Éxito') or contains(text(), 'Testimonios') or contains(text(), 'Casos de Éxito')]")
+                if elements:
+                    testimonials_section = elements[0]
+                    print("         🎯 Sección de Historias de Éxito encontrada por texto")
+            except:
+                pass
+
+        # Buscar testimonios específicos
+        testimonial_found = False
+        specific_testimonials = [
+            "Ana Carrillo",
+            "Jorge Rodríguez",
+            "María Bernal"
+        ]
+
+        for name in specific_testimonials:
+            try:
+                elements = self.driver.find_elements(By.XPATH, f"//*[contains(text(), '{name}')]")
+                if elements:
+                    testimonial_found = True
+                    print(f"         👤 Testimonio encontrado: {name}")
+                    if not testimonials_section:
+                        testimonials_section = elements[0]
+            except:
+                continue
+
+        if testimonial_found:
+            print("         ✅ Testimonios específicos localizados")
+        else:
+            print("         ⚠️  Testimonios específicos no encontrados (puede ser normal)")
+
+        # Si encontramos la sección, hacer scroll hasta ella
+        if testimonials_section:
+            try:
+                # Obtener posición de la sección
+                section_position = self.driver.execute_script("""
+                    var element = arguments[0];
+                    var rect = element.getBoundingClientRect();
+                    return rect.top + window.pageYOffset;
+                """, testimonials_section)
+
+                target_position = section_position - (window_height * 0.3)  # Posicionar con margen superior
+                max_scroll_position = total_height - window_height * 0.8  # No llegar al 100% de la página
+
+                # Asegurar que no se pase del límite
+                target_position = min(target_position, max_scroll_position)
+
+                print(f"         📍 Desplazándose a posición: {int(target_position)}px (sección testimonios)")
+
+                # Scroll gradual hasta la sección
+                steps = 20  # Más pasos para scroll más suave
+                step_duration = duration_seconds / steps
+
+                for step in range(steps):
+                    elapsed = time.time() - start_time
+                    if elapsed >= duration_seconds:
+                        break
+
+                    progress = step / (steps - 1)
+                    current_target = current_position + (target_position - current_position) * progress
+
+                    self.driver.execute_script(f"window.scrollTo({{top: {current_target}, behavior: 'smooth'}});")
+                    scroll_count += 1
+
+                    time.sleep(step_duration)
+
+                    # Verificar si ya estamos cerca de la posición objetivo
+                    current_pos = self.driver.execute_script("return window.pageYOffset")
+                    if abs(current_pos - target_position) < 50:  # Margen de 50px
+                        print(f"         ✅ Posición objetivo alcanzada en paso {step + 1}")
+                        break
+
+                print(f"         🎯 Exploración completada: {scroll_count} scrolls realizados hasta testimonios")
+
+            except Exception as e:
+                print(f"         ⚠️  Error en scroll inteligente: {str(e)}")
+                # Fallback a scroll gradual normal
+                self._fallback_gradual_scroll(duration_seconds)
+        else:
+            print("         ⚠️  Sección de testimonios no encontrada, realizando scroll gradual normal")
+            self._fallback_gradual_scroll(duration_seconds)
+
+    def _fallback_gradual_scroll(self, duration_seconds):
+        """Método de respaldo para scroll gradual normal"""
+        start_time = time.time()
+        scroll_count = 0
+
+        total_height = self.driver.execute_script("return document.body.scrollHeight")
+        current_position = self.driver.execute_script("return window.pageYOffset")
+        window_height = self.driver.execute_script("return window.innerHeight")
+
+        max_scroll_position = total_height - window_height * 0.8  # No llegar al 100%
+
         while (time.time() - start_time) < duration_seconds:
             elapsed = time.time() - start_time
             remaining = duration_seconds - elapsed
 
-            # Calcular progreso (0-1)
             progress = elapsed / duration_seconds
 
-            # Hacer scroll gradual hacia abajo (no volver arriba)
-            if current_position < total_height - window_height:
-                # Scroll pequeño y natural (100-200px)
-                scroll_amount = 150 + (progress * 50)  # Aumenta ligeramente con el tiempo
+            if current_position < max_scroll_position:
+                scroll_amount = 100 + (progress * 50)
 
-                # Asegurar que no se pase del final
-                new_position = min(current_position + scroll_amount, total_height - window_height)
+                new_position = min(current_position + scroll_amount, max_scroll_position)
 
                 self.driver.execute_script(f"window.scrollTo({{top: {new_position}, behavior: 'smooth'}});")
                 scroll_count += 1
 
-                # Pequeña pausa para que el scroll sea visible
-                time.sleep(1.5 + (progress * 0.5))  # Pausa aumenta ligeramente
+                time.sleep(1.2)
 
                 current_position = new_position
 
-                # Mostrar progreso cada pocos scrolls
-                if scroll_count % 3 == 0:
+                if scroll_count % 5 == 0:
                     progress_pct = int(progress * 100)
-                    print(f"         📜 Scroll {scroll_count} - Progreso: {progress_pct}% ({int(elapsed)}s/{duration_seconds}s)")
+                    print(f"         � Scroll {scroll_count} - Progreso: {progress_pct}% ({int(elapsed)}s/{duration_seconds}s)")
             else:
-                # Si llegó al final, hacer pequeños movimientos para mantener actividad
-                self.driver.execute_script("window.scrollBy(0, -50);")
-                time.sleep(1)
-                self.driver.execute_script("window.scrollBy(0, 50);")
-                time.sleep(1)
-                print("         🔄 Movimiento sutil en final de página")
-
-                # Pequeña pausa antes de continuar
+                print("         🔄 Manteniendo posición (límite alcanzado)")
                 time.sleep(min(remaining, 2))
 
-        print(f"         ✅ Exploración completada: {scroll_count} scrolls realizados")
+        print(f"         ✅ Scroll gradual completado: {scroll_count} scrolls realizados")
 
     def demonstrate_root_section_features(self, section_key, section_info):
         """Demostrar funcionalidades específicas de cada sección de la raíz"""
@@ -996,7 +1104,7 @@ def main():
             try:
                 print("🎬 Iniciando Demo Showcase de MoirAI MVP...")
                 print("💡 Esta demostración mostrará EXPLORACIÓN COMPLETA:")
-                print("   🏠 3 minutos explorando la raíz por secciones principales")
+                print("   🏠 2.5 minutos explorando la raíz por secciones principales")
                 print("   🧭 Navegación LINEAL del navbar desde Dashboard hasta la última sección")
                 print("   👥 Demostración de funcionalidades para todos los roles")
                 print("⏳ Asegúrate de que el servidor esté corriendo en localhost:8000")
@@ -1015,7 +1123,7 @@ def main():
                 print("\n💾 Resultados guardados en: demo_showcase_results.json")
 
                 print("\n🎯 RESUMEN DE FUNCIONALIDADES DEMOSTRADAS:")
-                print("🏠 RAÍZ: Exploración completa de 4 secciones principales (Hero/About, For Students, For Companies, How it Works) - 3 minutos")
+                print("🏠 RAÍZ: Exploración completa de 4 secciones principales (Hero/About, For Students, For Companies, How it Works) - 2.5 minutos")
                 print("👨‍🎓 ESTUDIANTES: Dashboard personal → Oportunidades → Mi Perfil (CV) → Aplicaciones")
                 print("🏢 EMPRESAS: Dashboard KPIs → Búsqueda candidatos → Gestión vacantes")
                 print("👨‍💼 ADMINS: Dashboard sistema → Exploración completa de sidebar (Estudiantes, Empresas, Empleos, API, Aplicaciones, CV Monitor, Analytics, Configuración)")
