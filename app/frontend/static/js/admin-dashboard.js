@@ -5,6 +5,7 @@
  */
 
 let dashboardAnalytics = null;
+let currentPage = 1, allUsers = [];
 
 document.addEventListener('DOMContentLoaded', () => {
     // ✅ Verificar permisos de admin automáticamente al cargar
@@ -251,164 +252,362 @@ function switchTab(tabId) {
  */
 function initializeStudents() {
     console.log('🎓 Students section activated');
-    loadStudents();
+    loadUsers();
     
     // Add event listeners for filters
-    const searchInput = document.querySelector('#students .filter-input');
-    const statusSelect = document.querySelector('#students .filter-select:nth-child(2)');
-    const programSelect = document.querySelector('#students .filter-select:nth-child(3)');
-    const selectAllCheckbox = document.getElementById('selectAllStudents');
+    const searchInput = document.getElementById('search-input');
+    const roleFilter = document.getElementById('role-filter');
+    const statusFilter = document.getElementById('status-filter');
     
-    if (searchInput) searchInput.addEventListener('input', filterStudents);
-    if (statusSelect) statusSelect.addEventListener('change', filterStudents);
-    if (programSelect) programSelect.addEventListener('change', filterStudents);
-    if (selectAllCheckbox) selectAllCheckbox.addEventListener('change', toggleSelectAllStudents);
+    if (searchInput) searchInput.addEventListener('input', applyFilters);
+    if (roleFilter) roleFilter.addEventListener('change', applyFilters);
+    if (statusFilter) statusFilter.addEventListener('change', applyFilters);
 }
 
 /**
- * Load students data from API
+ * Load users data from API (replaces loadStudents)
  */
-async function loadStudents() {
-    const studentsSection = document.getElementById('students');
-    const tableBody = studentsSection.querySelector('tbody');
-    const loadingState = studentsSection.querySelector('.loading-state') || createLoadingState();
+async function loadUsers() {
+    const usersSection = document.getElementById('students');
+    const tableBody = document.getElementById('users-tbody');
+    const loadingState = document.getElementById('loading-state');
+    const tableContainer = document.getElementById('table-container');
+    const emptyState = document.getElementById('empty-state');
+    
+    // Check if we're in demo mode
+    const urlParams = new URLSearchParams(window.location.search);
+    const isDemoMode = urlParams.get('demo') === 'true';
     
     try {
         // Show loading state
-        if (!studentsSection.querySelector('.loading-state')) {
-            studentsSection.insertBefore(loadingState, studentsSection.querySelector('.table-container'));
-        }
-        loadingState.style.display = 'block';
+        if (loadingState) loadingState.style.display = 'block';
+        if (tableContainer) tableContainer.style.display = 'none';
+        if (emptyState) emptyState.style.display = 'none';
         
-        // Get API key
-        const apiKey = getApiKey();
-        if (!apiKey) {
-            throw new Error('No API key available');
-        }
-        
-        // Fetch students data
-        const response = await fetch(`${window.API_BASE_URL}/admin/users`, {
-            headers: {
-                'X-API-Key': apiKey,
-                'Content-Type': 'application/json'
+        if (isDemoMode) {
+            // Use mock data for demo mode
+            console.log('🎭 Modo demo - usando datos mock de usuarios');
+            allUsers = generateMockUsers();
+        } else {
+            // Get API key
+            const apiKey = getApiKey();
+            if (!apiKey) {
+                throw new Error('No API key available');
             }
-        });
-        
-        if (!response.ok) {
-            throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+            
+            // Fetch users data
+            const response = await fetch(`${window.API_BASE_URL}/admin/users`, {
+                headers: {
+                    'X-API-Key': apiKey,
+                    'Content-Type': 'application/json'
+                }
+            });
+            
+            if (!response.ok) {
+                throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+            }
+            
+            const data = await response.json();
+            allUsers = data.items || data.users || [];
         }
         
-        const data = await response.json();
-        const students = data.items || data.users || [];
-        
-        // Filter only students
-        const studentUsers = students.filter(user => user.role === 'student');
-        
-        // Update badge count
-        updateStudentsBadge(studentUsers.length);
-        
-        // Render students table
-        renderStudentsTable(studentUsers);
+        // Update stats
+        updateUserStats(allUsers);
         
         // Hide loading state
-        loadingState.style.display = 'none';
+        if (loadingState) loadingState.style.display = 'none';
         
-        console.log(`✅ Loaded ${studentUsers.length} students`);
+        if (allUsers.length === 0) {
+            if (emptyState) emptyState.style.display = 'block';
+        } else {
+            renderUsersTable(allUsers);
+            if (tableContainer) tableContainer.style.display = 'block';
+        }
+        
+        console.log(`✅ Loaded ${allUsers.length} users`);
         
     } catch (error) {
-        console.error('❌ Error loading students:', error);
-        loadingState.innerHTML = `
-            <div class="error-state">
-                <i class="fas fa-exclamation-triangle"></i>
-                <p>Error al cargar estudiantes: ${error.message}</p>
-                <button onclick="loadStudents()" class="btn btn-primary">Reintentar</button>
-            </div>
-        `;
-        notificationManager?.show('Error al cargar estudiantes', 'error');
+        console.error('❌ Error loading users:', error);
+        if (loadingState) loadingState.style.display = 'none';
+        showError('Error al cargar usuarios: ' + error.message);
+        notificationManager?.show('Error al cargar usuarios', 'error');
     }
 }
 
 /**
- * Render students table with data
+ * Update user statistics
  */
-function renderStudentsTable(students) {
-    const tableBody = document.getElementById('studentsTableBody');
-    
-    if (students.length === 0) {
-        tableBody.innerHTML = `
-            <tr>
-                <td colspan="8" style="text-align: center; padding: 2rem; color: #666;">
-                    <i class="fas fa-users" style="font-size: 2rem; margin-bottom: 1rem;"></i>
-                    <br>No hay estudiantes registrados
-                </td>
-            </tr>
-        `;
-        return;
-    }
-    
-    tableBody.innerHTML = students.map(student => `
+function updateUserStats(users) {
+    document.getElementById('total-users').textContent = users.length;
+    document.getElementById('total-students').textContent = users.filter(u => u.role === 'student').length;
+    document.getElementById('total-companies').textContent = users.filter(u => u.role === 'company').length;
+    document.getElementById('active-users').textContent = users.filter(u => u.is_active).length;
+}
+
+/**
+ * Apply filters to users list
+ */
+function applyFilters() {
+    const search = document.getElementById('search-input').value.toLowerCase();
+    const role = document.getElementById('role-filter').value;
+    const status = document.getElementById('status-filter').value;
+
+    let filtered = allUsers.filter(u => {
+        const matchSearch = !search || (u.name && u.name.toLowerCase().includes(search)) || (u.email && u.email.toLowerCase().includes(search));
+        const matchRole = !role || u.role === role;
+        const matchStatus = !status || (status === 'active' ? u.is_active : !u.is_active);
+        return matchSearch && matchRole && matchStatus;
+    });
+
+    currentPage = 1;
+    renderUsersTable(filtered);
+}
+
+/**
+ * Render users table with data
+ */
+function renderUsersTable(users) {
+    const tbody = document.getElementById('users-tbody');
+    const start = (currentPage - 1) * 20, end = start + 20;
+    const pageUsers = users.slice(start, end);
+
+    tbody.innerHTML = pageUsers.map(u => `
         <tr>
-            <td><input type="checkbox" class="student-checkbox" data-student-id="${student.id}"></td>
-            <td><strong>${student.name || 'N/A'}</strong></td>
-            <td>${student.email || 'N/A'}</td>
-            <td>${student.program || 'No especificado'}</td>
-            <td>${student.phone || 'N/A'}</td>
-            <td><span class="status-badge ${student.is_active ? 'active' : 'inactive'}">${student.is_active ? 'Activo' : 'Inactivo'}</span></td>
-            <td>${student.created_at ? new Date(student.created_at).toLocaleDateString('es-MX') : 'N/A'}</td>
-            <td>
-                <button class="action-btn view" title="Ver" onclick="viewStudent('${student.id}')">
-                    <i class="fas fa-eye"></i>
-                </button>
-                <button class="action-btn edit" title="Editar" onclick="editStudent('${student.id}')">
-                    <i class="fas fa-edit"></i>
-                </button>
-                <button class="action-btn delete" title="Eliminar" onclick="deleteStudent('${student.id}', '${student.name}')">
-                    <i class="fas fa-trash"></i>
-                </button>
-            </td>
+            <td><strong>${u.name || 'N/A'}</strong></td>
+            <td><small>${u.email || ''}</small></td>
+            <td><span class="badge ${u.role}">${u.role.toUpperCase()}</span></td>
+            <td><span class="badge ${u.is_active ? 'active' : 'inactive'}">${u.is_active ? 'Activo' : 'Inactivo'}</span></td>
+            <td><div class="actions">
+                <button class="btn-sm btn-info" onclick="viewUser('${u.id}')"><i class="fas fa-eye"></i></button>
+                <button class="btn-sm btn-danger" onclick="deleteUser('${u.id}', '${u.name}')"><i class="fas fa-trash"></i></button>
+            </div></td>
         </tr>
     `).join('');
+
+    const totalPages = Math.ceil(users.length / 20);
+    renderPagination(totalPages);
+}
+
+/**
+ * Render pagination controls
+ */
+function renderPagination(total) {
+    const pag = document.getElementById('pagination');
+    if (total <= 1) { 
+        pag.style.display = 'none'; 
+        return; 
+    }
     
-    // Add event listeners to individual checkboxes
-    const studentCheckboxes = tableBody.querySelectorAll('.student-checkbox');
-    studentCheckboxes.forEach(checkbox => {
-        checkbox.addEventListener('change', updateSelectAllCheckbox);
-    });
+    let html = '';
+    if (currentPage > 1) html += `<button onclick="goToPage(${currentPage - 1})">← Ant</button>`;
+    
+    for (let i = Math.max(1, currentPage - 2); i <= Math.min(total, currentPage + 2); i++) {
+        html += `<button onclick="goToPage(${i})" ${i === currentPage ? 'class="active"' : ''}>${i}</button>`;
+    }
+    
+    if (currentPage < total) html += `<button onclick="goToPage(${currentPage + 1})">Sig →</button>`;
+    
+    pag.innerHTML = html;
+    pag.style.display = 'flex';
 }
 
 /**
- * Update students badge count (can be used in navbar or other locations)
+ * Go to specific page
  */
-function updateStudentsBadge(count) {
-    // Look for any badge that might show student count
-    const badges = document.querySelectorAll('.badge');
-    badges.forEach(badge => {
-        if (badge.textContent.includes('estudiantes') || badge.closest('a')?.href?.includes('/admin/users')) {
-            badge.textContent = count;
+function goToPage(p) { 
+    currentPage = p; 
+    renderUsersTable(allUsers); 
+    window.scrollTo(0, 0); 
+}
+
+/**
+ * View user details
+ */
+function viewUser(id) { 
+    const urlParams = new URLSearchParams(window.location.search);
+    const isDemoMode = urlParams.get('demo') === 'true';
+    
+    if (isDemoMode) {
+        notificationManager?.show('Vista de detalles de usuario próximamente (modo demo)', 'info');
+    } else {
+        window.location.href = `/admin/user-details?user_id=${id}`;
+    }
+}
+
+/**
+ * Delete user
+ */
+async function deleteUser(id, name) {
+    const urlParams = new URLSearchParams(window.location.search);
+    const isDemoMode = urlParams.get('demo') === 'true';
+    
+    if (isDemoMode) {
+        // In demo mode, just remove from local array
+        if (!confirm(`¿Eliminar a ${name}? (Modo Demo)`)) return;
+        
+        allUsers = allUsers.filter(u => u.id !== id);
+        updateUserStats(allUsers);
+        renderUsersTable(allUsers);
+        notificationManager?.show('Usuario eliminado (modo demo)', 'success');
+    } else {
+        if (!confirm(`¿Eliminar a ${name}?`)) return;
+        
+        try {
+            const response = await fetch(`${window.API_BASE_URL}/admin/users/${id}`, { 
+                method: 'DELETE', 
+                headers: { 'X-API-Key': getApiKey() } 
+            });
+            
+            if (!response.ok) throw new Error();
+            
+            loadUsers();
+            notificationManager?.show('Usuario eliminado exitosamente', 'success');
+            
+        } catch { 
+            showError('Error al eliminar usuario');
+            notificationManager?.show('Error al eliminar usuario', 'error');
         }
-    });
-
-    console.log(`👥 Updated students badge to: ${count}`);
+    }
 }
 
 /**
- * Create loading state element
+ * Export users to CSV
  */
-function createLoadingState() {
-    const loading = document.createElement('div');
-    loading.className = 'loading-state';
-    loading.innerHTML = `
-        <div class="spinner"></div>
-        <p>Cargando estudiantes...</p>
-    `;
-    return loading;
+function exportUsers() {
+    const urlParams = new URLSearchParams(window.location.search);
+    const isDemoMode = urlParams.get('demo') === 'true';
+    
+    try {
+        const headers = ['Nombre', 'Email', 'Rol', 'Estado', 'Fecha'];
+        const rows = allUsers.map(u => [
+            u.name, 
+            u.email, 
+            u.role.toUpperCase(), 
+            u.is_active ? 'Activo' : 'Inactivo', 
+            u.created_at ? new Date(u.created_at).toLocaleDateString('es-MX') : 'N/A'
+        ]);
+        
+        let csv = headers.join(',') + '\n';
+        rows.forEach(r => { 
+            csv += r.map(c => `"${c.toString().replace(/"/g, '""')}"`).join(',') + '\n'; 
+        });
+        
+        const blob = new Blob([csv], { type: 'text/csv' });
+        const a = document.createElement('a');
+        a.href = URL.createObjectURL(blob);
+        a.download = `usuarios${isDemoMode ? '_demo' : ''}.csv`;
+        document.body.appendChild(a);
+        a.click();
+        document.body.removeChild(a);
+        
+        notificationManager?.show('Usuarios exportados exitosamente', 'success');
+        
+    } catch { 
+        showError('Error al exportar usuarios');
+        notificationManager?.show('Error al exportar usuarios', 'error');
+    }
 }
 
 /**
- * Get API key from localStorage
+ * Generate mock users data for demo mode
  */
-function getApiKey() {
-    return localStorage.getItem('api_key');
+function generateMockUsers() {
+    const mockUsers = [
+        {
+            id: 'demo-1',
+            name: 'María González López',
+            email: 'maria.gonzalez@unrc.edu.ar',
+            role: 'student',
+            is_active: true,
+            program: 'Ingeniería en Sistemas',
+            phone: '+54 9 358 123 4567',
+            created_at: '2024-09-15T10:30:00Z'
+        },
+        {
+            id: 'demo-2',
+            name: 'Juan Pérez García',
+            email: 'juan.perez@unrc.edu.ar',
+            role: 'student',
+            is_active: true,
+            program: 'Administración de Empresas',
+            phone: '+54 9 358 234 5678',
+            created_at: '2024-08-22T14:15:00Z'
+        },
+        {
+            id: 'demo-3',
+            name: 'Ana Rodríguez Martínez',
+            email: 'ana.rodriguez@unrc.edu.ar',
+            role: 'student',
+            is_active: false,
+            program: 'Contabilidad',
+            phone: '+54 9 358 345 6789',
+            created_at: '2024-07-10T09:45:00Z'
+        },
+        {
+            id: 'demo-4',
+            name: 'Carlos Sánchez Díaz',
+            email: 'carlos.sanchez@unrc.edu.ar',
+            role: 'student',
+            is_active: true,
+            program: 'Ingeniería en Sistemas',
+            phone: '+54 9 358 456 7890',
+            created_at: '2024-10-05T16:20:00Z'
+        },
+        {
+            id: 'demo-5',
+            name: 'Laura Fernández Ruiz',
+            email: 'laura.fernandez@unrc.edu.ar',
+            role: 'student',
+            is_active: true,
+            program: 'Administración de Empresas',
+            phone: '+54 9 358 567 8901',
+            created_at: '2024-06-18T11:10:00Z'
+        },
+        {
+            id: 'demo-6',
+            name: 'TechCorp México',
+            email: 'contact@techcorp.mx',
+            role: 'company',
+            is_active: true,
+            program: null,
+            phone: '+52 55 1234 5678',
+            created_at: '2024-05-12T13:25:00Z'
+        },
+        {
+            id: 'demo-7',
+            name: 'FinServe Corp',
+            email: 'hr@finserve.com',
+            role: 'company',
+            is_active: true,
+            program: null,
+            phone: '+52 55 2345 6789',
+            created_at: '2024-04-08T15:40:00Z'
+        },
+        {
+            id: 'demo-8',
+            name: 'DataSys Solutions',
+            email: 'recruiting@datasys.mx',
+            role: 'company',
+            is_active: false,
+            program: null,
+            phone: '+52 55 3456 7890',
+            created_at: '2024-03-20T12:55:00Z'
+        }
+    ];
+    
+    return mockUsers;
+}
+
+/**
+ * Student action handlers (legacy - kept for compatibility)
+ */
+function viewStudent(studentId) {
+    viewUser(studentId);
+}
+
+function editStudent(studentId) {
+    // TODO: Implement edit student
+    notificationManager?.show('Función de editar estudiante próximamente', 'info');
 }
 
 /**
@@ -416,6 +615,21 @@ function getApiKey() {
  */
 async function checkAdminPermissions() {
     console.log('🔐 Verificando permisos de admin...');
+
+    // Check if we're in demo mode
+    const urlParams = new URLSearchParams(window.location.search);
+    const isDemoMode = urlParams.get('demo') === 'true';
+    
+    if (isDemoMode) {
+        console.log('🎭 Modo demo detectado - usando credenciales demo');
+        // Set demo admin credentials
+        localStorage.setItem('api_key', 'admin-key-123-change-me');
+        localStorage.setItem('user_role', 'admin');
+        localStorage.setItem('user_name', 'Demo Admin');
+        
+        notificationManager?.show('Modo demo activado - Acceso de administrador concedido', 'success', 2000);
+        return;
+    }
 
     // Show initial loading indicator
     notificationManager?.loading('Verificando permisos de administrador...');
@@ -470,7 +684,10 @@ async function checkAdminPermissions() {
             showAdminLoginPrompt();
         }
     }
-}/**
+}
+
+
+/**
  * Attempt automatic admin login with retry logic for rate limiting
  */
 async function attemptAdminAutoLogin(retryCount = 0) {
@@ -719,75 +936,17 @@ function showAdminLoginPrompt() {
 }
 
 /**
- * Filter students based on search criteria
+ * Get API key from localStorage
  */
-function filterStudents() {
-    const searchInput = document.querySelector('#students .filter-input');
-    const statusSelect = document.querySelector('#students .filter-select:nth-child(2)');
-    const programSelect = document.querySelector('#students .filter-select:nth-child(3)');
-    
-    const searchTerm = searchInput ? searchInput.value.toLowerCase() : '';
-    const statusFilter = statusSelect ? statusSelect.value : '';
-    const programFilter = programSelect ? programSelect.value : '';
-    
-    const tableBody = document.getElementById('studentsTableBody');
-    const rows = tableBody.querySelectorAll('tr');
-    
-    rows.forEach(row => {
-        const name = row.cells[1]?.textContent.toLowerCase() || '';
-        const email = row.cells[2]?.textContent.toLowerCase() || '';
-        const program = row.cells[3]?.textContent.toLowerCase() || '';
-        const status = row.cells[5]?.querySelector('.status-badge')?.textContent.toLowerCase() || '';
-        
-        const matchesSearch = !searchTerm || name.includes(searchTerm) || email.includes(searchTerm);
-        const matchesStatus = !statusFilter || status.includes(statusFilter.toLowerCase());
-        const matchesProgram = !programFilter || program.includes(programFilter.toLowerCase());
-        
-        row.style.display = matchesSearch && matchesStatus && matchesProgram ? '' : 'none';
-    });
-    
-    updateSelectAllCheckbox();
+function getApiKey() {
+    return localStorage.getItem('api_key');
 }
 
 /**
- * Toggle select all students checkbox
- */
-function toggleSelectAllStudents() {
-    const selectAllCheckbox = document.getElementById('selectAllStudents');
-    const studentCheckboxes = document.querySelectorAll('#studentsTableBody input[type="checkbox"]');
-    
-    const isChecked = selectAllCheckbox.checked;
-    studentCheckboxes.forEach(checkbox => {
-        // Only check visible (filtered) students
-        const row = checkbox.closest('tr');
-        if (row.style.display !== 'none') {
-            checkbox.checked = isChecked;
-        }
-    });
-}
-
-/**
- * Update select all checkbox state based on individual selections
- */
-function updateSelectAllCheckbox() {
-    const selectAllCheckbox = document.getElementById('selectAllStudents');
-    const studentCheckboxes = document.querySelectorAll('#studentsTableBody input[type="checkbox"]');
-    const visibleCheckboxes = Array.from(studentCheckboxes).filter(checkbox => {
-        const row = checkbox.closest('tr');
-        return row.style.display !== 'none';
-    });
-    
-    const checkedCount = visibleCheckboxes.filter(checkbox => checkbox.checked).length;
-    selectAllCheckbox.checked = checkedCount === visibleCheckboxes.length && visibleCheckboxes.length > 0;
-    selectAllCheckbox.indeterminate = checkedCount > 0 && checkedCount < visibleCheckboxes.length;
-}
-
-/**
- * Student action handlers
+ * Student action handlers (legacy - kept for compatibility)
  */
 function viewStudent(studentId) {
-    // TODO: Implement view student details
-    notificationManager?.show('Función de ver estudiante próximamente', 'info');
+    viewUser(studentId);
 }
 
 function editStudent(studentId) {
@@ -796,27 +955,5 @@ function editStudent(studentId) {
 }
 
 async function deleteStudent(studentId, studentName) {
-    if (!confirm(`¿Eliminar al estudiante ${studentName}?`)) return;
-    
-    try {
-        const apiKey = getApiKey();
-        const response = await fetch(`${window.API_BASE_URL}/admin/users/${studentId}`, {
-            method: 'DELETE',
-            headers: {
-                'X-API-Key': apiKey,
-                'Content-Type': 'application/json'
-            }
-        });
-        
-        if (!response.ok) {
-            throw new Error(`HTTP ${response.status}: ${response.statusText}`);
-        }
-        
-        notificationManager?.show('Estudiante eliminado exitosamente', 'success');
-        loadStudents(); // Reload students list
-        
-    } catch (error) {
-        console.error('Error deleting student:', error);
-        notificationManager?.show('Error al eliminar estudiante', 'error');
-    }
+    deleteUser(studentId, studentName);
 }
