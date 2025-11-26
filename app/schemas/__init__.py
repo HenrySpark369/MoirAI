@@ -80,6 +80,10 @@ class StudentProfile(BaseModel):
     certifications: Optional[List[str]] = None
     languages: Optional[List[str]] = None
     
+    # 🤖 Clasificación automática ML (OPCIONALES)
+    industry: Optional[str] = None
+    seniority_level: Optional[str] = None
+    
     cv_uploaded: bool = False
     cv_filename: Optional[str] = None
     cv_upload_date: Optional[datetime] = None

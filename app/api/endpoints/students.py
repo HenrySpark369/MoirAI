@@ -353,6 +353,9 @@ def _convert_to_student_profile(student: Student) -> StudentProfile:
         experience=json.loads(student.experience or "[]") if student.experience else None,
         certifications=json.loads(student.certifications or "[]") if student.certifications else None,
         languages=json.loads(student.languages or "[]") if student.languages else None,
+        # 🤖 ML Classification Fields (NEW)
+        industry=student.industry,
+        seniority_level=student.seniority_level,
         cv_uploaded=student.cv_uploaded or False,
         cv_filename=student.cv_filename,
         cv_upload_date=student.cv_upload_date,
@@ -519,6 +522,9 @@ async def upload_resume(
     
     # Análisis NLP
     try:
+        import logging
+        logger = logging.getLogger(__name__)
+        
         analysis = _extract_resume_analysis(resume_text)
         harvard_fields = _extract_harvard_cv_fields(resume_text)
         
@@ -527,8 +533,6 @@ async def upload_resume(
             not harvard_fields.get("experience") and
             len(resume_text.split()) > 50):  # Solo si hay suficiente contenido
             
-            import logging
-            logger = logging.getLogger(__name__)
             logger.info("🔄 Regex no encontró campos, intentando extracción con spaCy NLP...")
             
             try:
@@ -568,6 +572,22 @@ async def upload_resume(
             except Exception as e:
                 logger.error(f"❌ Error en extracción spaCy NLP: {str(e)}")
                 # Fallback: mantener resultado de regex (podría estar vacío)
+        
+        # 🤖 CLASIFICACIÓN AUTOMÁTICA ML: Usar modelos entrenados para inferir industria y seniority
+        try:
+            from app.services.cv_classification_service import cv_classification_service
+            cv_classification = cv_classification_service.classify_cv(resume_text, extracted_data=analysis)
+            
+            # Agregar campos inferidos por ML
+            inferred_industry = cv_classification.industry.value if cv_classification.industry else None
+            inferred_seniority = cv_classification.seniority.value if cv_classification.seniority else None
+            
+            logger.info(f"🤖 Clasificación ML completada - Industria: {inferred_industry}, Seniority: {inferred_seniority}")
+            
+        except Exception as e:
+            logger.warning(f"⚠️ Error en clasificación ML: {str(e)} - Continuando sin clasificación automática")
+            inferred_industry = None
+            inferred_seniority = None
     
     except Exception as e:
         await _log_audit_action(
@@ -608,6 +628,12 @@ async def upload_resume(
         student.certifications = json.dumps(harvard_fields["certifications"])
         student.languages = json.dumps(harvard_fields["languages"])
         
+        # 🤖 Guardar clasificación ML automática (NEW)
+        if inferred_industry:
+            student.industry = inferred_industry
+        if inferred_seniority:
+            student.seniority_level = inferred_seniority
+        
         # ✅ Actualizar banderas de CV (FIX: persistencia en BD)
         student.cv_uploaded = True
         student.cv_filename = file.filename
@@ -642,6 +668,9 @@ async def upload_resume(
             experience=json.dumps(harvard_fields["experience"]),
             certifications=json.dumps(harvard_fields["certifications"]),
             languages=json.dumps(harvard_fields["languages"]),
+            # 🤖 Guardar clasificación ML automática (NEW)
+            industry=inferred_industry,
+            seniority_level=inferred_seniority,
             # ✅ Establecer banderas de CV (FIX: persistencia en BD)
             cv_uploaded=True,
             cv_filename=file.filename,

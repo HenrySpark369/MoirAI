@@ -44,7 +44,7 @@ class Student(SQLModel, table=True):
     semester: Optional[str] = Field(default=None, max_length=20, description="Semestre de estudio")
     
     # Seguridad - Contraseña (aunque en MVP se usa API key después del login)
-    hashed_password: str = Field(max_length=255, description="Hash SHA256 de la contraseña")
+    hashed_password: Optional[str] = Field(default=None, max_length=255, description="Hash SHA256 de la contraseña")
     
     # Datos de privacidad y consentimiento (LFPDPPP)
     consent_data_processing: bool = Field(default=True, description="Consentimiento para procesamiento de datos")
@@ -62,6 +62,10 @@ class Student(SQLModel, table=True):
     experience: Optional[str] = Field(default=None, description="Experiencia profesional (JSON list)")
     certifications: Optional[str] = Field(default=None, description="Certificaciones (JSON list)")
     languages: Optional[str] = Field(default=None, description="Idiomas (JSON list)")
+    
+    # 🤖 Clasificación automática ML (OPCIONALES - inferidas del CV)
+    industry: Optional[str] = Field(default=None, max_length=50, description="Industria inferida automáticamente del CV")
+    seniority_level: Optional[str] = Field(default=None, max_length=20, description="Nivel de seniority inferido automáticamente del CV")
     
     # CV uploaded (documento)
     cv_uploaded: bool = Field(default=False, description="Si el currículum ha sido subido")

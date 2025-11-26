@@ -443,98 +443,195 @@ class NLPAnalyzer:
         else:
             print("✓ Todas las secciones críticas tienen buena cobertura")
 
-    def classification_experiment(self):
-        """Experimento de clasificación por industria usando skills"""
+    def automatic_cv_classification(self):
+        """Clasificación automática de CVs usando técnicas del cuaderno"""
         print("\n" + "="*60)
-        print("🤖 EXPERIMENTO DE CLASIFICACIÓN")
+        print("🤖 CLASIFICACIÓN AUTOMÁTICA DE CVs")
         print("="*60)
 
-        # Preparar datos: usar skills como features para predecir industria
-        X_data = []
-        y_data = []
-
-        for item in self.data:
-            skills = item['annotations'].get('skills', [])
-            if skills:
-                # Unir skills como texto
-                skills_text = ' '.join(skills)
-                X_data.append(skills_text)
-                y_data.append(item['industry'])
-
-        if len(X_data) < 20:
+        if len(self.data) < 20:
             print("❌ Insuficientes datos para clasificación")
             return
 
-        # Vectorizar
-        vectorizer = TfidfVectorizer(max_features=200)
-        X = vectorizer.fit_transform(X_data)
+        # Preparar datos de entrenamiento
+        cv_texts = []
+        industries = []
+        seniorities = []
 
-        # Split
-        X_train, X_test, y_train, y_test = train_test_split(
-            X, y_data, test_size=0.3, random_state=42, stratify=y_data
+        for item in self.data:
+            cv_texts.append(item['cv_text'])
+            industries.append(item['industry'])
+            seniorities.append(item['seniority'])
+
+        # Función de preprocesamiento (simplificada del cuaderno)
+        def preprocess_cv_text_simple(text):
+            """Preprocesamiento simple inspirado en el cuaderno"""
+            import re
+            import string
+
+            text = str(text).lower()
+            text = re.sub(r'\[.*?\]', '', text)
+            text = re.sub(r'https?://\S+|www\.\S+', '', text)
+            text = re.sub(r'<.*?>+', '', text)
+            text = re.sub('[%s]' % re.escape(string.punctuation), '', text)
+            text = re.sub(r'\n', ' ', text)
+            text = re.sub(r'\w*\d\w*', '', text)
+            text = re.sub(r'[^\x00-\x7F]+', '', text)
+            text = text.strip()
+
+            # Tokenización y filtrado básico
+            tokens = word_tokenize(text, language='spanish')
+            tokens = [t for t in tokens if t.isalnum() and t not in STOPWORDS_ES and len(t) > 2]
+            return ' '.join(tokens)
+
+        # Preprocesar textos
+        processed_texts = [preprocess_cv_text_simple(text) for text in cv_texts]
+
+        # Vectorización TF-IDF (como en el cuaderno)
+        tfidf = TfidfVectorizer(max_features=1000, ngram_range=(1, 2))
+        X = tfidf.fit_transform(processed_texts)
+
+        # 1. Clasificación por Industria
+        print("🏭 CLASIFICACIÓN POR INDUSTRIA:")
+        print("-" * 30)
+
+        X_train_ind, X_test_ind, y_train_ind, y_test_ind = train_test_split(
+            X, industries, test_size=0.3, random_state=42, stratify=industries
         )
 
-        # Clasificar
-        clf = MultinomialNB()
-        clf.fit(X_train, y_train)
-        y_pred = clf.predict(X_test)
+        nb_industry = MultinomialNB()
+        nb_industry.fit(X_train_ind, y_train_ind)
+        y_pred_ind = nb_industry.predict(X_test_ind)
 
-        # Métricas
-        accuracy = accuracy_score(y_test, y_pred)
-        f1 = f1_score(y_test, y_pred, average='weighted')
+        acc_ind = accuracy_score(y_test_ind, y_pred_ind)
+        f1_ind = f1_score(y_test_ind, y_pred_ind, average='weighted')
 
-        print(f"Accuracy: {accuracy:.3f}")
-        print(f"F1-Score (weighted): {f1:.3f}")
+        print(f"Accuracy: {acc_ind:.3f}")
+        print(f"F1-Score (weighted): {f1_ind:.3f}")
 
-        print("\n📋 Classification Report:")
-        print(classification_report(y_test, y_pred))
+        # 2. Clasificación por Seniority
+        print("\n📊 CLASIFICACIÓN POR SENIORITY:")
+        print("-" * 30)
 
-    def harvard_style_analysis(self):
-        """Análisis específico para formato Harvard"""
-        print("\n" + "="*60)
-        print("🎓 ANÁLISIS DE ESTILO HARVARD")
-        print("="*60)
+        X_train_sen, X_test_sen, y_train_sen, y_test_sen = train_test_split(
+            X, seniorities, test_size=0.3, random_state=42, stratify=seniorities
+        )
 
-        harvard_indicators = {
-            'sections': ['experiencia', 'educación', 'habilidades', 'proyectos'],
-            'structure': ['bullet points', 'fechas', 'roles', 'logros'],
-            'formality': ['sobrio', 'orientado a logros', 'profesional']
+        nb_seniority = MultinomialNB()
+        nb_seniority.fit(X_train_sen, y_train_sen)
+        y_pred_sen = nb_seniority.predict(X_test_sen)
+
+        acc_sen = accuracy_score(y_test_sen, y_pred_sen)
+        f1_sen = f1_score(y_test_sen, y_pred_sen, average='weighted')
+
+        print(f"Accuracy: {acc_sen:.3f}")
+        print(f"F1-Score (weighted): {f1_sen:.3f}")
+
+        # Guardar modelos (como en el cuaderno)
+        import joblib
+        import os
+
+        models_dir = "cv_simulator/models"
+        os.makedirs(models_dir, exist_ok=True)
+
+        joblib.dump(nb_industry, f"{models_dir}/industry_classifier.pkl")
+        joblib.dump(nb_seniority, f"{models_dir}/seniority_classifier.pkl")
+        joblib.dump(tfidf, f"{models_dir}/tfidf_vectorizer.pkl")
+
+        print(f"\n� Modelos guardados en {models_dir}/")
+
+        # Demo de predicción (como en el cuaderno)
+        print("\n🎯 DEMO DE PREDICCIÓN:")
+        print("-" * 30)
+
+        if self.data:
+            sample_cv = self.data[0]['cv_text']
+            sample_processed = preprocess_cv_text_simple(sample_cv)
+            sample_vector = tfidf.transform([sample_processed])
+
+            pred_industry = nb_industry.predict(sample_vector)[0]
+            pred_seniority = nb_seniority.predict(sample_vector)[0]
+
+            print(f"CV de ejemplo: {sample_cv[:100]}...")
+            print(f"Predicción - Industria: {pred_industry}")
+            print(f"Predicción - Seniority: {pred_seniority}")
+            print(f"Real - Industria: {industries[0]}, Seniority: {seniorities[0]}")
+
+        return {
+            'industry_accuracy': acc_ind,
+            'seniority_accuracy': acc_sen,
+            'industry_f1': f1_ind,
+            'seniority_f1': f1_sen
         }
 
-        compliance_scores = []
+    def advanced_text_preprocessing(self):
+        """Preprocesamiento avanzado de texto inspirado en el cuaderno de reseñas"""
+        print("\n" + "="*60)
+        print("🧹 PREPROCESAMIENTO AVANZADO DE TEXTO")
+        print("="*60)
 
-        for item in self.data[:20]:  # Analizar primeros 20
-            cv_text = item['cv_text'].lower()
-            score = 0
-            total_checks = 0
+        import re
+        from nltk.corpus import stopwords
+        import string
 
-            # Verificar secciones
-            for section in harvard_indicators['sections']:
-                total_checks += 1
-                if section in cv_text:
-                    score += 1
+        # Función de limpieza avanzada (inspirada en el cuaderno)
+        def clean_text_advanced(text):
+            """Limpieza avanzada como en el cuaderno de reseñas"""
+            # Convertir a minúsculas
+            text = str(text).lower()
 
-            # Verificar estructura
-            if '•' in cv_text or '- ' in cv_text:
-                score += 1
-                total_checks += 1
+            # Eliminar textos entre corchetes (ej.: etiquetas)
+            text = re.sub(r'\[.*?\]', '', text)
 
-            if any(char.isdigit() for char in cv_text):  # Fechas
-                score += 1
-                total_checks += 1
+            # Eliminar URLs
+            text = re.sub(r'https?://\S+|www\.\S+', '', text)
 
-            compliance_scores.append(score / total_checks if total_checks > 0 else 0)
+            # Eliminar etiquetas HTML
+            text = re.sub(r'<.*?>+', '', text)
 
-        avg_compliance = np.mean(compliance_scores)
-        print(f"📊 Cumplimiento promedio con estilo Harvard: {avg_compliance:.2f} ({avg_compliance*100:.1f}%)")
+            # Eliminar signos de puntuación
+            text = re.sub('[%s]' % re.escape(string.punctuation), '', text)
 
-        # Mostrar ejemplo
-        if self.data:
-            print("\n📄 Ejemplo de CV generado:")
-            print("-" * 40)
-            sample_cv = self.data[0]['cv_text'][:300] + "..."
-            print(sample_cv)
-            print("-" * 40)
+            # Eliminar saltos de línea
+            text = re.sub(r'\n', ' ', text)
+
+            # Eliminar palabras que contienen números
+            text = re.sub(r'\w*\d\w*', '', text)
+
+            # Eliminar emojis y caracteres especiales (no ASCII)
+            text = re.sub(r'[^\x00-\x7F]+', '', text)
+
+            # Eliminar espacios extras
+            text = text.strip()
+
+            return text
+
+        # Función de lematización con spaCy
+        def lemmatize_with_spacy(text):
+            """Lematización usando spaCy como en el cuaderno"""
+            doc = self.nlp(text)
+            # Eliminar stopwords y aplicar lematización
+            lemmatized = [token.lemma_ for token in doc if token.text.lower() not in STOPWORDS_ES]
+            return " ".join(lemmatized).strip()
+
+        # Aplicar preprocesamiento a una muestra
+        sample_size = min(10, len(self.data))
+        print(f"📊 Procesando muestra de {sample_size} CVs...")
+
+        processed_texts = []
+        for item in self.data[:sample_size]:
+            # Limpieza básica
+            clean_text = clean_text_advanced(item['cv_text'])
+            # Lematización avanzada
+            lemmatized_text = lemmatize_with_spacy(clean_text)
+            processed_texts.append(lemmatized_text)
+
+        print("✅ Preprocesamiento completado")
+        print(f"� Ejemplo de texto procesado:")
+        print(f"   Original: {self.data[0]['cv_text'][:100]}...")
+        print(f"   Procesado: {processed_texts[0][:100]}...")
+
+        return processed_texts
 
     def run_full_analysis(self):
         """Ejecutar análisis completo"""
