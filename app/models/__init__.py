@@ -16,6 +16,7 @@ from .job_scraping import (
     UserJobAlertDB,
     ScrapingLogDB
 )
+from .job_posting import JobPosting
 
 
 # ============================================================================
@@ -425,6 +426,7 @@ __all__ = [
     "Company",
     "Admin",
     "JobPosition",
+    "JobPosting",
     "JobMatchEvent",
     "AuditLog",
     "UserSession",

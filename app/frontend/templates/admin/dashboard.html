@@ -452,7 +452,7 @@
                 <table class="data-table">
                     <thead>
                         <tr>
-                            <th><input type="checkbox"></th>
+                            <th><input type="checkbox" id="selectAllStudents"></th>
                             <th>Nombre</th>
                             <th>Email</th>
                             <th>Carrera</th>
@@ -462,49 +462,8 @@
                             <th>Acciones</th>
                         </tr>
                     </thead>
-                    <tbody>
-                        <tr>
-                            <td><input type="checkbox"></td>
-                            <td><strong>Juan Pérez García</strong></td>
-                            <td>juan.perez@unrc.edu.mx</td>
-                            <td>Ingeniería en Sistemas</td>
-                            <td>+52 555 123 4567</td>
-                            <td><span class="status-badge active">Activo</span></td>
-                            <td>2025-11-05</td>
-                            <td>
-                                <button class="action-btn view" title="Ver"><i class="fas fa-eye"></i></button>
-                                <button class="action-btn edit" title="Editar"><i class="fas fa-edit"></i></button>
-                                <button class="action-btn delete" title="Eliminar"><i class="fas fa-trash"></i></button>
-                            </td>
-                        </tr>
-                        <tr>
-                            <td><input type="checkbox"></td>
-                            <td><strong>María González López</strong></td>
-                            <td>maria.gonzalez@unrc.edu.mx</td>
-                            <td>Administración de Empresas</td>
-                            <td>+52 555 234 5678</td>
-                            <td><span class="status-badge active">Activo</span></td>
-                            <td>2025-11-03</td>
-                            <td>
-                                <button class="action-btn view" title="Ver"><i class="fas fa-eye"></i></button>
-                                <button class="action-btn edit" title="Editar"><i class="fas fa-edit"></i></button>
-                                <button class="action-btn delete" title="Eliminar"><i class="fas fa-trash"></i></button>
-                            </td>
-                        </tr>
-                        <tr>
-                            <td><input type="checkbox"></td>
-                            <td><strong>Carlos Rodríguez Martínez</strong></td>
-                            <td>carlos.rodriguez@unrc.edu.mx</td>
-                            <td>Contabilidad</td>
-                            <td>+52 555 345 6789</td>
-                            <td><span class="status-badge inactive">Inactivo</span></td>
-                            <td>2025-10-15</td>
-                            <td>
-                                <button class="action-btn view" title="Ver"><i class="fas fa-eye"></i></button>
-                                <button class="action-btn edit" title="Editar"><i class="fas fa-edit"></i></button>
-                                <button class="action-btn delete" title="Eliminar"><i class="fas fa-trash"></i></button>
-                            </td>
-                        </tr>
+                    <tbody id="studentsTableBody">
+                        <!-- Students will be loaded dynamically -->
                     </tbody>
                 </table>
             </div>
@@ -539,65 +498,11 @@
                 </select>
             </div>
 
-            <div class="companies-grid">
-                <div class="company-card">
-                    <div class="company-header">
-                        <img src="https://via.placeholder.com/60" alt="TechCorp" class="company-logo">
-                        <div class="company-info">
-                            <h3>TechCorp México</h3>
-                            <p>Tecnología e Innovación</p>
-                        </div>
-                        <span class="status-badge verified">Verificada</span>
-                    </div>
-                    <div class="company-details">
-                        <p><strong>Email:</strong> hr@techcorp.com.mx</p>
-                        <p><strong>Empleos:</strong> 23 activos</p>
-                        <p><strong>Registrado:</strong> 2025-09-12</p>
-                    </div>
-                    <div class="company-actions">
-                        <button class="btn btn-small btn-primary">Ver Empleos</button>
-                        <button class="btn btn-small btn-outline">Contactar</button>
-                    </div>
-                </div>
-
-                <div class="company-card">
-                    <div class="company-header">
-                        <img src="https://via.placeholder.com/60" alt="FinServe" class="company-logo">
-                        <div class="company-info">
-                            <h3>FinServe Corp</h3>
-                            <p>Servicios Financieros</p>
-                        </div>
-                        <span class="status-badge verified">Verificada</span>
-                    </div>
-                    <div class="company-details">
-                        <p><strong>Email:</strong> careers@finserve.com.mx</p>
-                        <p><strong>Empleos:</strong> 15 activos</p>
-                        <p><strong>Registrado:</strong> 2025-08-20</p>
-                    </div>
-                    <div class="company-actions">
-                        <button class="btn btn-small btn-primary">Ver Empleos</button>
-                        <button class="btn btn-small btn-outline">Contactar</button>
-                    </div>
-                </div>
-
-                <div class="company-card">
-                    <div class="company-header">
-                        <img src="https://via.placeholder.com/60" alt="ConsultX" class="company-logo">
-                        <div class="company-info">
-                            <h3>ConsultX Solutions</h3>
-                            <p>Consultoría Empresarial</p>
-                        </div>
-                        <span class="status-badge pending">Pendiente</span>
-                    </div>
-                    <div class="company-details">
-                        <p><strong>Email:</strong> info@consultx.com.mx</p>
-                        <p><strong>Empleos:</strong> 0 activos</p>
-                        <p><strong>Registrado:</strong> 2025-11-08</p>
-                    </div>
-                    <div class="company-actions">
-                        <button class="btn btn-small btn-success">Verificar</button>
-                        <button class="btn btn-small btn-outline">Rechazar</button>
-                    </div>
+            <div class="companies-grid" id="companiesGrid">
+                <!-- Companies will be loaded dynamically by JavaScript -->
+                <div class="loading-state">
+                    <div class="spinner"></div>
+                    <p>Cargando empresas...</p>
                 </div>
             </div>
         </section>
@@ -1138,6 +1043,12 @@
     <!-- Chart.js Library -->
     <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.js"></script>
 
+    <!-- API Client -->
+    <script src="/static/js/api-client.js"></script>
+
+    <!-- Notification Manager -->
+    <script src="/static/js/notification-manager.js"></script>
+
     <!-- Navbar Manager -->
     <script src="/static/js/navbar-manager.js"></script>
 
@@ -1149,6 +1060,9 @@
 
     <!-- Admin CV Monitor Script -->
     <script src="/static/js/pages/admin-cv-monitor.js"></script>
+
+    <!-- Admin Companies Script -->
+    <script src="/static/js/pages/admin-companies.js"></script>
 
     <!-- Admin Dashboard Script -->
     <script src="/static/js/admin-dashboard.js"></script>

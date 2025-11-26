@@ -193,6 +193,10 @@ async def login_user(
         user = result.scalars().first()
         user_type = "student"
         
+        # Si es admin (program="Administration"), cambiar tipo
+        if user and user.program == "Administration":
+            user_type = "admin"
+        
         # Si no es estudiante, buscar en empresas
         if not user:
             result = await session.execute(
