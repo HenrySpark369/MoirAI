@@ -841,6 +841,207 @@ async def generate_cv_simulator_data(
 
 
 # ============================================================================
+# USERS FROM CV SIMULATOR
+# ============================================================================
+
+@router.get("/users-from-cv-simulator", response_model=dict)
+async def get_users_from_cv_simulator(
+    offset: int = Query(0),
+    limit: int = Query(100),
+    role_filter: Optional[str] = Query(None, description="Filter by role: student, company"),
+    industry_filter: Optional[str] = Query(None, description="Filter by industry"),
+    seniority_filter: Optional[str] = Query(None, description="Filter by seniority level"),
+    current_user: UserContext = Depends(AuthService.get_current_user),
+    session: AsyncSession = Depends(get_session)
+):
+    """
+    Obtener usuarios generados desde el simulador de CVs
+
+    Convierte los CVs de la base de datos del simulador en objetos de usuario
+    que el frontend puede consumir, eliminando la necesidad de datos mock.
+
+    Parámetros:
+    - offset: Número de registros a saltar (default: 0)
+    - limit: Número de resultados por página (default: 100)
+    - role_filter: Filtrar por rol (student, company)
+    - industry_filter: Filtrar por industria
+    - seniority_filter: Filtrar por nivel de seniority
+
+    Retorna:
+    - Lista de usuarios generados desde CVs
+    - Total de usuarios para paginación
+    """
+    try:
+        _require_admin(current_user)
+
+        import sqlite3
+        import json
+        from pathlib import Path
+
+        # Ruta a la base de datos del simulador
+        db_path = Path(__file__).parent.parent.parent.parent / "cv_simulator" / "training_data_cvs.db"
+
+        if not db_path.exists():
+            # Si no existe la DB, retornar datos vacíos
+            return {
+                "items": [],
+                "total": 0,
+                "offset": offset,
+                "limit": limit,
+                "count": 0
+            }
+
+        # Conectar a la base de datos SQLite
+        conn = sqlite3.connect(str(db_path))
+        cursor = conn.cursor()
+
+        # Construir query con filtros
+        query = """
+            SELECT id, industry, seniority, cv_text, annotations, created_at
+            FROM cv_dataset
+            WHERE 1=1
+        """
+        params = []
+
+        if industry_filter:
+            query += " AND industry = ?"
+            params.append(industry_filter)
+
+        if seniority_filter:
+            query += " AND seniority = ?"
+            params.append(seniority_filter)
+
+        # Aplicar paginación
+        query += " ORDER BY created_at DESC LIMIT ? OFFSET ?"
+        params.extend([limit, offset])
+
+        cursor.execute(query, params)
+        cv_rows = cursor.fetchall()
+
+        # Obtener total para paginación
+        count_query = """
+            SELECT COUNT(*)
+            FROM cv_dataset
+            WHERE 1=1
+        """
+        count_params = []
+
+        if industry_filter:
+            count_query += " AND industry = ?"
+            count_params.append(industry_filter)
+
+        if seniority_filter:
+            count_query += " AND seniority = ?"
+            count_params.append(seniority_filter)
+
+        cursor.execute(count_query, count_params)
+        total = cursor.fetchone()[0]
+
+        conn.close()
+
+        # Convertir CVs a usuarios
+        users = []
+        for row in cv_rows:
+            cv_id, industry, seniority, cv_text, annotations_json, created_at = row
+
+            try:
+                # Parsear annotations JSON
+                annotations = json.loads(annotations_json) if annotations_json else {}
+
+                # Extraer información del perfil
+                name = annotations.get('name', f'CV-{cv_id}')
+                email = annotations.get('email', f'cv{cv_id}@example.com')
+
+                # Determinar rol basado en seniority/industria
+                # Los CVs son principalmente de estudiantes, pero algunos pueden ser de empresas
+                role = "student"  # Default
+
+                # Si es seniority alto y ciertas industrias, podría ser empresa
+                if seniority in ['Senior', 'Lead', 'Principal'] and industry in ['Consultoría', 'Tecnología']:
+                    # Algunos senior podrían representar empresas
+                    if cv_id % 10 == 0:  # Cada 10mo CV es empresa para variedad
+                        role = "company"
+
+                # Mapear seniority a programa para estudiantes
+                program_mapping = {
+                    'Junior': 'Computer Science',
+                    'Mid-Level': 'Software Engineering',
+                    'Senior': 'Data Science',
+                    'Lead': 'AI/ML Engineering',
+                    'Principal': 'Systems Architecture'
+                }
+                program = program_mapping.get(seniority, 'Computer Science')
+
+                # Para empresas, usar industry como campo industry
+                user_industry = industry if role == "company" else ""
+
+                # Crear objeto usuario
+                user = {
+                    "id": cv_id,
+                    "name": name,
+                    "email": email,
+                    "role": role,
+                    "program": program if role == "student" else "",
+                    "industry": user_industry,
+                    "is_active": True,
+                    "created_at": created_at,
+                    "seniority": seniority,
+                    "cv_industry": industry,
+                    "source": "cv_simulator"  # Indicar que viene del simulador
+                }
+
+                users.append(user)
+
+            except Exception as e:
+                print(f"⚠️  Error procesando CV {cv_id}: {e}")
+                # Crear usuario básico si hay error en parsing
+                users.append({
+                    "id": cv_id,
+                    "name": f'CV-{cv_id}',
+                    "email": f'cv{cv_id}@example.com',
+                    "role": "student",
+                    "program": "Computer Science",
+                    "industry": "",
+                    "is_active": True,
+                    "created_at": created_at,
+                    "seniority": seniority,
+                    "cv_industry": industry,
+                    "source": "cv_simulator"
+                })
+
+        # Aplicar filtro de rol si se especifica
+        if role_filter:
+            users = [u for u in users if u["role"] == role_filter]
+
+        await _log_audit_action(
+            session, "GET_USERS_FROM_CV_SIMULATOR", "cv_simulator",
+            current_user, details=f"Obtenidos {len(users)} usuarios desde CV simulator (total: {total})"
+        )
+
+        return {
+            "items": users,
+            "total": total,
+            "offset": offset,
+            "limit": limit,
+            "count": len(users)
+        }
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        print(f"❌ Error obteniendo usuarios desde CV simulator: {e}")
+        import traceback
+        traceback.print_exc()
+
+        await _log_audit_action(
+            session, "GET_USERS_FROM_CV_SIMULATOR", "cv_simulator",
+            current_user, success=False, error_message=str(e)
+        )
+
+        raise HTTPException(status_code=500, detail=f"Error obteniendo usuarios desde CV simulator: {str(e)}")
+
+
+# ============================================================================
 # ADMIN COMPANIES FROM JOB POSTINGS
 # ============================================================================
 

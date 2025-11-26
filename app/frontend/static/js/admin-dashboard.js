@@ -285,9 +285,27 @@ async function loadUsers() {
         if (emptyState) emptyState.style.display = 'none';
         
         if (isDemoMode) {
-            // Use mock data for demo mode
-            console.log('🎭 Modo demo - usando datos mock de usuarios');
-            allUsers = generateMockUsers();
+            // Use real CV simulator data instead of mock data for demo mode
+            console.log('🎭 Modo demo - usando datos reales del simulador de CVs');
+            const apiKey = getApiKey();
+            if (!apiKey) {
+                throw new Error('No API key available for demo mode');
+            }
+            
+            // Fetch users from CV simulator instead of mock data
+            const response = await fetch(`${window.API_BASE_URL}/admin/users-from-cv-simulator?limit=50`, {
+                headers: {
+                    'X-API-Key': apiKey,
+                    'Content-Type': 'application/json'
+                }
+            });
+            
+            if (!response.ok) {
+                throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+            }
+            
+            const data = await response.json();
+            allUsers = data.items || [];
         } else {
             // Get API key
             const apiKey = getApiKey();
@@ -506,96 +524,6 @@ function exportUsers() {
         showError('Error al exportar usuarios');
         notificationManager?.show('Error al exportar usuarios', 'error');
     }
-}
-
-/**
- * Generate mock users data for demo mode
- */
-function generateMockUsers() {
-    const mockUsers = [
-        {
-            id: 'demo-1',
-            name: 'María González López',
-            email: 'maria.gonzalez@unrc.edu.ar',
-            role: 'student',
-            is_active: true,
-            program: 'Ingeniería en Sistemas',
-            phone: '+54 9 358 123 4567',
-            created_at: '2024-09-15T10:30:00Z'
-        },
-        {
-            id: 'demo-2',
-            name: 'Juan Pérez García',
-            email: 'juan.perez@unrc.edu.ar',
-            role: 'student',
-            is_active: true,
-            program: 'Administración de Empresas',
-            phone: '+54 9 358 234 5678',
-            created_at: '2024-08-22T14:15:00Z'
-        },
-        {
-            id: 'demo-3',
-            name: 'Ana Rodríguez Martínez',
-            email: 'ana.rodriguez@unrc.edu.ar',
-            role: 'student',
-            is_active: false,
-            program: 'Contabilidad',
-            phone: '+54 9 358 345 6789',
-            created_at: '2024-07-10T09:45:00Z'
-        },
-        {
-            id: 'demo-4',
-            name: 'Carlos Sánchez Díaz',
-            email: 'carlos.sanchez@unrc.edu.ar',
-            role: 'student',
-            is_active: true,
-            program: 'Ingeniería en Sistemas',
-            phone: '+54 9 358 456 7890',
-            created_at: '2024-10-05T16:20:00Z'
-        },
-        {
-            id: 'demo-5',
-            name: 'Laura Fernández Ruiz',
-            email: 'laura.fernandez@unrc.edu.ar',
-            role: 'student',
-            is_active: true,
-            program: 'Administración de Empresas',
-            phone: '+54 9 358 567 8901',
-            created_at: '2024-06-18T11:10:00Z'
-        },
-        {
-            id: 'demo-6',
-            name: 'TechCorp México',
-            email: 'contact@techcorp.mx',
-            role: 'company',
-            is_active: true,
-            program: null,
-            phone: '+52 55 1234 5678',
-            created_at: '2024-05-12T13:25:00Z'
-        },
-        {
-            id: 'demo-7',
-            name: 'FinServe Corp',
-            email: 'hr@finserve.com',
-            role: 'company',
-            is_active: true,
-            program: null,
-            phone: '+52 55 2345 6789',
-            created_at: '2024-04-08T15:40:00Z'
-        },
-        {
-            id: 'demo-8',
-            name: 'DataSys Solutions',
-            email: 'recruiting@datasys.mx',
-            role: 'company',
-            is_active: false,
-            program: null,
-            phone: '+52 55 3456 7890',
-            created_at: '2024-03-20T12:55:00Z'
-        }
-    ];
-    
-    return mockUsers;
 }
 
 /**
