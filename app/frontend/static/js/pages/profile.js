@@ -43,36 +43,31 @@ async function initProfilePage() {
 async function initDemoProfile(demoRole = 'student') {
     console.log(`🎭 Demo Profile: Iniciando modo demo con rol ${demoRole}...`);
     
+    // Leer el rol del localStorage o URL si no se proporciona
+    if (!demoRole) {
+        const urlParams = new URLSearchParams(window.location.search);
+        demoRole = urlParams.get('role') || localStorage.getItem('user_role') || 'admin';
+        console.log(`🎭 Demo Profile: Rol obtenido de URL/localStorage: ${demoRole}`);
+    }
+    
     try {
         // Configurar usuario demo según el rol
         switch (demoRole) {
             case 'student':
                 currentUser = {
                     role: 'student',
-                    name: 'Demo Estudiante',
+                    name: 'Estudiante Demo',
                     email: 'estudiante.demo@moirai.com',
                     first_name: 'Demo',
                     last_name: 'Estudiante',
                     university: 'Universidad Nacional de Córdoba',
                     program: 'Ingeniería en Sistemas',
                     graduation_year: 2025,
-                    skills: ['Python', 'JavaScript', 'React', 'Node.js', 'SQL'],
-                    soft_skills: ['Trabajo en equipo', 'Comunicación', 'Adaptabilidad'],
-                    experience: [
-                        {
-                            company: 'TechCorp',
-                            position: 'Desarrollador Junior',
-                            duration: '2023 - Presente',
-                            description: 'Desarrollo de aplicaciones web con React y Node.js'
-                        }
-                    ],
-                    education: [
-                        {
-                            institution: 'Universidad Nacional de Córdoba',
-                            degree: 'Ingeniería en Sistemas',
-                            year: 2025
-                        }
-                    ]
+                    skills: [],
+                    soft_skills: [],
+                    experience: [],
+                    education: [],
+                    objective: 'Profesional en busca de oportunidades para aplicar mis conocimientos y crecer profesionalmente.'
                 };
                 break;
             case 'company':
@@ -123,6 +118,13 @@ async function loadDemoProfile(demoRole = 'student') {
     try {
         console.log(`🎭 Loading demo profile data for role: ${demoRole}`);
         
+        // Leer el rol del localStorage o URL si no se proporciona
+        if (!demoRole) {
+            const urlParams = new URLSearchParams(window.location.search);
+            demoRole = urlParams.get('role') || localStorage.getItem('user_role') || 'admin';
+            console.log(`🎭 Demo Profile: Rol obtenido para carga: ${demoRole}`);
+        }
+        
         // Actualizar elementos de la interfaz con datos demo
         updateProfileUI(currentUser, demoRole);
         
@@ -137,8 +139,18 @@ async function loadDemoProfile(demoRole = 'student') {
  * Configurar interfaz según el rol demo
  */
 function setupDemoInterface(demoRole = 'student') {
+    // Leer el rol del localStorage o URL si no se proporciona
+    if (!demoRole) {
+        const urlParams = new URLSearchParams(window.location.search);
+        demoRole = urlParams.get('role') || localStorage.getItem('user_role') || 'admin';
+        console.log(`🎭 Demo Interface: Rol obtenido: ${demoRole}`);
+    }
+    
     // Configurar manejadores de eventos para demo
     setupFormHandlers();
+    
+    // Configurar upload de CV para demo
+    setupCVUpload();
     
     // Mostrar mensaje de demo
     if (typeof notificationManager !== 'undefined') {
@@ -153,55 +165,78 @@ function setupDemoInterface(demoRole = 'student') {
  * Deshabilitar edición en modo demo
  */
 function disableEditingForDemo() {
-    // Deshabilitar todos los inputs y botones de guardar
-    const inputs = document.querySelectorAll('input, textarea, select');
+    // Deshabilitar todos los inputs y botones de guardar, EXCEPTO el input de CV
+    const inputs = document.querySelectorAll('input:not(#cv-file-input), textarea, select');
     const saveButtons = document.querySelectorAll('button[type="submit"], .btn-primary');
-    
+
     inputs.forEach(input => {
         input.disabled = true;
         input.placeholder = input.placeholder + ' (Solo lectura - Modo Demo)';
     });
-    
+
     saveButtons.forEach(button => {
         button.disabled = true;
         button.textContent = button.textContent + ' (Deshabilitado)';
     });
-    
-    // Mostrar overlay de demo
-    const overlay = document.createElement('div');
-    overlay.style.cssText = `
+
+    // Mostrar banner de demo (menos invasivo)
+    const banner = document.createElement('div');
+    banner.id = 'demo-banner';
+    banner.style.cssText = `
         position: fixed;
-        top: 0;
-        left: 0;
-        right: 0;
-        bottom: 0;
-        background: rgba(255, 255, 255, 0.8);
-        z-index: 9999;
+        top: 60px;
+        right: 20px;
+        background: var(--primary-color);
+        color: white;
+        padding: 12px 16px;
+        border-radius: 8px;
+        font-size: 14px;
+        font-weight: 600;
+        z-index: 1000;
+        box-shadow: 0 4px 12px rgba(0,0,0,0.15);
         display: flex;
         align-items: center;
-        justify-content: center;
-        pointer-events: none;
+        gap: 10px;
+        max-width: 300px;
     `;
-    
-    overlay.innerHTML = `
-        <div style="
-            background: var(--primary-color);
-            color: white;
-            padding: 20px;
-            border-radius: 10px;
-            text-align: center;
-            font-size: 18px;
-            font-weight: bold;
-        ">
-            🎭 MODO DEMOSTRACIÓN<br>
-            <small style="font-size: 14px; font-weight: normal;">Esta es una vista previa. Los cambios no se guardan.</small>
-        </div>
-    `;
-    
-    document.body.appendChild(overlay);
-}
 
-/**
+    banner.innerHTML = `
+        <div style="flex: 1;">
+            🎭 MODO DEMO
+            <div style="font-size: 12px; font-weight: normal; margin-top: 2px; opacity: 0.9;">
+                Vista previa - Los cambios no se guardan
+            </div>
+        </div>
+        <button id="demo-banner-close" style="
+            background: none;
+            border: none;
+            color: white;
+            cursor: pointer;
+            font-size: 16px;
+            padding: 0;
+            opacity: 0.8;
+            transition: opacity 0.2s;
+        " title="Cerrar banner">
+            ×
+        </button>
+    `;
+
+    document.body.appendChild(banner);
+
+    // Agregar funcionalidad para cerrar el banner
+    const closeBtn = document.getElementById('demo-banner-close');
+    if (closeBtn) {
+        closeBtn.addEventListener('click', () => {
+            banner.style.display = 'none';
+        });
+        closeBtn.addEventListener('mouseenter', () => {
+            closeBtn.style.opacity = '1';
+        });
+        closeBtn.addEventListener('mouseleave', () => {
+            closeBtn.style.opacity = '0.8';
+        });
+    }
+}/**
  * ✅ Cargar perfil del usuario desde BD (NO localStorage)
  * Funciona para estudiantes y empresas
  * Si falla, usa localStorage como fallback
@@ -325,8 +360,8 @@ async function loadUserProfile() {
                 fallbackCard.style.display = 'block';
             }
             
-            // Ocultar secciones de CV para empresas
-            const cvCard = document.querySelector('.profile-card:has(#cv-upload-area)');
+            // Ocultar área de upload de CV para empresas
+            const cvCard = document.getElementById('cv-upload-card');
             if (cvCard) cvCard.style.display = 'none';
         }
 
@@ -469,33 +504,89 @@ function setupFormHandlers() {
  * Setup del upload de CV
  */
 function setupCVUpload() {
+    // Esperar a que el DOM esté completamente cargado
+    if (document.readyState === 'loading') {
+        document.addEventListener('DOMContentLoaded', () => setupCVUploadInternal());
+        return;
+    }
+    setupCVUploadInternal();
+}
+
+function setupCVUploadInternal() {
     const uploadArea = document.getElementById('cv-upload-area');
     const fileInput = document.getElementById('cv-file-input');
     const uploadBtn = document.getElementById('cv-upload-btn');
 
-    if (!uploadArea || !fileInput) return;
+    console.log('🔧 Setting up CV upload:', { uploadArea, fileInput, uploadBtn });
+
+    if (!uploadArea || !fileInput) {
+        console.error('❌ CV upload elements not found:', { uploadArea: !!uploadArea, fileInput: !!fileInput });
+        return;
+    }
+
+    // Remover event listeners previos para evitar duplicados
+    uploadArea.removeEventListener('click', handleUploadAreaClick);
+    fileInput.removeEventListener('change', handleFileInputChange);
+    uploadArea.removeEventListener('dragover', handleDragOver);
+    uploadArea.removeEventListener('dragleave', handleDragLeave);
+    uploadArea.removeEventListener('drop', handleDrop);
 
     // Click en área para abrir file picker
-    uploadArea.addEventListener('click', () => fileInput.click());
+    uploadArea.addEventListener('click', handleUploadAreaClick);
 
     // Cambio en input de archivo
-    fileInput.addEventListener('change', (e) => handleCVUpload(e.target.files[0]));
+    fileInput.addEventListener('change', handleFileInputChange);
 
     // Drag and drop
-    uploadArea.addEventListener('dragover', (e) => {
-        e.preventDefault();
+    uploadArea.addEventListener('dragover', handleDragOver);
+    uploadArea.addEventListener('dragleave', handleDragLeave);
+    uploadArea.addEventListener('drop', handleDrop);
+
+    console.log('✅ CV upload setup complete');
+}
+
+// Funciones manejadoras separadas
+function handleUploadAreaClick(e) {
+    console.log('🖱️ Upload area clicked');
+    e.preventDefault();
+    const fileInput = document.getElementById('cv-file-input');
+    if (fileInput) {
+        fileInput.click();
+    }
+}
+
+function handleFileInputChange(e) {
+    console.log('📁 File input changed:', e.target.files);
+    if (e.target.files && e.target.files[0]) {
+        handleCVUpload(e.target.files[0]);
+    }
+}
+
+function handleDragOver(e) {
+    e.preventDefault();
+    const uploadArea = document.getElementById('cv-upload-area');
+    if (uploadArea) {
         uploadArea.classList.add('dragover');
-    });
+    }
+}
 
-    uploadArea.addEventListener('dragleave', () => {
+function handleDragLeave() {
+    const uploadArea = document.getElementById('cv-upload-area');
+    if (uploadArea) {
         uploadArea.classList.remove('dragover');
-    });
+    }
+}
 
-    uploadArea.addEventListener('drop', (e) => {
-        e.preventDefault();
+function handleDrop(e) {
+    e.preventDefault();
+    const uploadArea = document.getElementById('cv-upload-area');
+    if (uploadArea) {
         uploadArea.classList.remove('dragover');
+    }
+    console.log('📥 File dropped:', e.dataTransfer.files);
+    if (e.dataTransfer.files && e.dataTransfer.files[0]) {
         handleCVUpload(e.dataTransfer.files[0]);
-    });
+    }
 }
 
 /**
@@ -594,6 +685,14 @@ async function handleCVUpload(file) {
             // ✅ NUEVO: Recargar TODAS las secciones Harvard CV con datos extraídos
             console.log('🔄 Cargando nuevas secciones Harvard CV...');
             loadCVHarvardSections(currentUser);
+            
+            // ✅ DEMO MODE: Actualizar la UI del perfil completo con datos extraídos
+            const urlParams = new URLSearchParams(window.location.search);
+            const demoMode = urlParams.get('demo') === 'true';
+            if (demoMode) {
+                console.log('🎭 Demo mode: Actualizando perfil completo con datos del CV...');
+                updateProfileUI(currentUser, currentUser.role || 'student');
+            }
             
             // Scroll suave al container Harvard CV para mostrar los nuevos datos
             setTimeout(() => {
@@ -1253,11 +1352,17 @@ function updateProfileUI(userData, demoRole = 'student') {
     try {
         console.log(`🎭 Updating profile UI for demo role: ${demoRole}`, userData);
         
+        // Si demoRole es null, intentar obtenerlo del userData o usar admin por defecto
+        if (!demoRole) {
+            demoRole = userData?.role || 'admin';
+            console.log(`🎭 Profile UI: Rol corregido a ${demoRole} desde userData`);
+        }
+        
         // Actualizar sidebar
         const sidebarName = document.getElementById('sidebar-name');
         const sidebarRole = document.getElementById('sidebar-role');
         
-        if (sidebarName) sidebarName.textContent = userData.name || 'Demo Usuario';
+        if (sidebarName) sidebarName.textContent = userData.name || userData.first_name || 'Demo Usuario';
         if (sidebarRole) {
             switch (demoRole) {
                 case 'student':
@@ -1267,6 +1372,7 @@ function updateProfileUI(userData, demoRole = 'student') {
                     sidebarRole.textContent = 'Empresa Colaboradora';
                     break;
                 case 'admin':
+                default:
                     sidebarRole.textContent = 'Administrador';
                     break;
             }
@@ -1284,14 +1390,18 @@ function updateProfileUI(userData, demoRole = 'student') {
             if (firstNameField) firstNameField.value = userData.first_name || 'Demo';
             if (lastNameField) lastNameField.value = userData.last_name || 'Estudiante';
             if (emailField) emailField.value = userData.email || 'estudiante.demo@moirai.com';
-            if (careerField) careerField.value = userData.program || 'Ingeniería en Sistemas';
-            if (semesterField) semesterField.value = '8'; // Último semestre
+            if (careerField) careerField.value = userData.program || userData.career || 'Ingeniería en Sistemas';
+            if (semesterField) semesterField.value = userData.semester || '8'; // Último semestre
             
             // Mostrar campos de estudiante
             const studentFields = document.getElementById('student-fields');
             if (studentFields) studentFields.style.display = 'block';
             
-            // Actualizar CV Harvard con datos demo
+            // Mostrar área de upload de CV para estudiantes
+            const cvCard = document.getElementById('cv-upload-card');
+            if (cvCard) cvCard.style.display = 'block';
+            
+            // Actualizar CV Harvard con datos reales del usuario
             updateHarvardCV(userData);
             
         } else if (demoRole === 'company') {
@@ -1306,8 +1416,12 @@ function updateProfileUI(userData, demoRole = 'student') {
             const studentFields = document.getElementById('student-fields');
             if (studentFields) studentFields.style.display = 'none';
             
-        } else { // admin
-            // Para admin, mostrar campos básicos
+            // Ocultar área de upload de CV para empresas
+            const cvCard = document.getElementById('cv-upload-card');
+            if (cvCard) cvCard.style.display = 'none';
+            
+        } else { // admin o rol desconocido
+            // Para admin o rol desconocido, mostrar campos básicos
             const firstNameField = document.getElementById('first_name');
             const emailField = document.getElementById('email');
             
@@ -1317,6 +1431,10 @@ function updateProfileUI(userData, demoRole = 'student') {
             // Ocultar campos de estudiante
             const studentFields = document.getElementById('student-fields');
             if (studentFields) studentFields.style.display = 'none';
+            
+            // Ocultar área de upload de CV para admin
+            const cvCard = document.getElementById('cv-upload-card');
+            if (cvCard) cvCard.style.display = 'none';
         }
         
         // Actualizar fecha de miembro
@@ -1357,14 +1475,17 @@ function updateHarvardCV(userData) {
         // Actualizar objetivo profesional
         const objectiveField = document.getElementById('objective');
         if (objectiveField) {
-            objectiveField.value = 'Desarrollador full-stack apasionado por crear soluciones tecnológicas innovadoras que impacten positivamente en la sociedad. Busco oportunidades para aplicar mis conocimientos en desarrollo de software y contribuir al crecimiento de equipos multidisciplinarios.';
+            objectiveField.value = userData.objective || 'Desarrollador full-stack apasionado por crear soluciones tecnológicas innovadoras que impacten positivamente en la sociedad. Busco oportunidades para aplicar mis conocimientos en desarrollo de software y contribuir al crecimiento de equipos multidisciplinarios.';
         }
         
         // Actualizar educación
         const educationList = document.getElementById('education-list');
         if (educationList && userData.education) {
             educationList.innerHTML = '';
-            userData.education.forEach((edu, index) => {
+            const educationArray = Array.isArray(userData.education) ? userData.education : 
+                                   (typeof userData.education === 'string' ? JSON.parse(userData.education) : []);
+            
+            educationArray.forEach((edu, index) => {
                 const itemEl = document.createElement('div');
                 itemEl.className = 'form-nested';
                 itemEl.id = `education-item-${index}`;
@@ -1383,11 +1504,11 @@ function updateHarvardCV(userData) {
                     </div>
                     <div class="form-group" style="margin-bottom: 0.75rem;">
                         <label>Campo de Estudio</label>
-                        <input type="text" name="education[${index}][field_of_study]" value="Ingeniería en Sistemas" disabled />
+                        <input type="text" name="education[${index}][field_of_study]" value="${edu.field_of_study || 'Ingeniería en Sistemas'}" disabled />
                     </div>
                     <div class="form-group" style="margin-bottom: 0.75rem;">
                         <label>Año de Graduación</label>
-                        <input type="text" name="education[${index}][graduation_year]" value="${edu.year || ''}" disabled />
+                        <input type="text" name="education[${index}][graduation_year]" value="${edu.graduation_year || edu.year || ''}" disabled />
                     </div>
                 `;
                 
@@ -1399,7 +1520,10 @@ function updateHarvardCV(userData) {
         const experienceList = document.getElementById('experience-list');
         if (experienceList && userData.experience) {
             experienceList.innerHTML = '';
-            userData.experience.forEach((exp, index) => {
+            const experienceArray = Array.isArray(userData.experience) ? userData.experience : 
+                                    (typeof userData.experience === 'string' ? JSON.parse(userData.experience) : []);
+            
+            experienceArray.forEach((exp, index) => {
                 const itemEl = document.createElement('div');
                 itemEl.className = 'form-nested';
                 itemEl.id = `experience-item-${index}`;
@@ -1418,11 +1542,11 @@ function updateHarvardCV(userData) {
                     </div>
                     <div class="form-group" style="margin-bottom: 0.75rem;">
                         <label>Fecha Inicio</label>
-                        <input type="text" name="experience[${index}][start_date]" value="2023" disabled />
+                        <input type="text" name="experience[${index}][start_date]" value="${exp.start_date || '2023'}" disabled />
                     </div>
                     <div class="form-group" style="margin-bottom: 0.75rem;">
                         <label>Fecha Fin</label>
-                        <input type="text" name="experience[${index}][end_date]" value="Presente" disabled />
+                        <input type="text" name="experience[${index}][end_date]" value="${exp.end_date || 'Presente'}" disabled />
                     </div>
                     <div class="form-group" style="margin-bottom: 0.75rem;">
                         <label>Descripción</label>
@@ -1436,9 +1560,10 @@ function updateHarvardCV(userData) {
         
         // Actualizar habilidades inferidas
         const inferredSkills = document.getElementById('inferred-skills');
-        if (inferredSkills && userData.skills) {
+        if (inferredSkills) {
             inferredSkills.innerHTML = '';
-            userData.skills.forEach(skill => {
+            const skillsArray = userData.skills || [];
+            skillsArray.forEach(skill => {
                 const skillEl = document.createElement('div');
                 skillEl.className = 'cv-skill-tag';
                 skillEl.innerHTML = `<i class="fas fa-star"></i> ${skill}`;
@@ -1448,9 +1573,10 @@ function updateHarvardCV(userData) {
         
         // Actualizar habilidades blandas
         const softSkills = document.getElementById('inferred-skills-fallback');
-        if (softSkills && userData.soft_skills) {
+        if (softSkills) {
             softSkills.innerHTML = '<h4>Habilidades Blandas Inferidas</h4>';
-            userData.soft_skills.forEach(skill => {
+            const softSkillsArray = userData.soft_skills || [];
+            softSkillsArray.forEach(skill => {
                 const skillEl = document.createElement('div');
                 skillEl.className = 'cv-skill-tag';
                 skillEl.innerHTML = `<i class="fas fa-heart"></i> ${skill}`;

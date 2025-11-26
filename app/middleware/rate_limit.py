@@ -32,9 +32,9 @@ class RateLimitConfig:
     # Límites específicos por endpoint (requests / minuto)
     ENDPOINT_LIMITS = {
         # Auth endpoints - muy restrictivos
-        "POST /api/v1/auth/login": 10,  # Aumentado de 5 a 10
-        "POST /api/v1/auth/register": 5,
-        "POST /api/v1/auth/api-keys": 20,
+        "POST /api/v1/auth/login": 20,  # Aumentado de 5 a 10
+        "POST /api/v1/auth/register": 10,
+        "POST /api/v1/auth/api-keys": 40,
 
         # Matching endpoints - moderado
         "POST /api/v1/matching/recommendations": 60,

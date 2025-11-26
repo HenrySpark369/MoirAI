@@ -224,6 +224,8 @@
     cursor: pointer;
     transition: all 0.3s ease;
     background: var(--bg-lighter);
+    position: relative;
+    z-index: 1;
 }
 
 .cv-upload-area:hover {
