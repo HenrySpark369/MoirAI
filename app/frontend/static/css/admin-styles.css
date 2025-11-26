@@ -87,7 +87,7 @@ body {
     flex-direction: column;
 }
 
-.nav-item {
+.sidebar .nav-item {
     display: flex;
     align-items: center;
     gap: 0.75rem;
@@ -99,24 +99,24 @@ body {
     border-left: 3px solid transparent;
 }
 
-.nav-item:hover {
+.sidebar .nav-item:hover {
     background: var(--bg-light);
     color: var(--primary-color);
 }
 
-.nav-item.active {
+.sidebar .nav-item.active {
     background: rgba(115, 15, 51, 0.05);
     color: var(--primary-color);
     border-left-color: var(--primary-color);
     font-weight: 600;
 }
 
-.nav-item i {
+.sidebar .nav-item i {
     width: 20px;
     font-size: 1.125rem;
 }
 
-.nav-item span:last-child {
+.sidebar .nav-item span:last-child {
     margin-left: auto;
 }
 

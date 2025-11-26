@@ -4,6 +4,8 @@
  * - Si el usuario está autenticado o no
  * - El role del usuario (student/company/admin)
  * - La página actual
+ *
+ * Ahora usa la estructura de navbar raíz como base y la adapta para todos los roles
  */
 
 class NavbarManager {
@@ -22,15 +24,15 @@ class NavbarManager {
             return;
         }
         this.initialized = true;
-        
+
         console.log('🔄 Inicializando NavbarManager...');
-        
+
         try {
             // Check for demo mode from URL parameter
             const urlParams = new URLSearchParams(window.location.search);
             this.demoMode = urlParams.get('demo') === 'true';
             this.demoRole = urlParams.get('role') || 'admin'; // admin, student, company
-            
+
             // If no demo parameter and user is not authenticated, redirect to demo mode
             if (!this.demoMode && !this._isUserAuthenticated()) {
                 console.log('🎭 Usuario anónimo detectado - redirigiendo a modo demo');
@@ -40,12 +42,12 @@ class NavbarManager {
                 window.location.href = currentUrl.toString();
                 return;
             }
-            
+
             if (this.demoMode) {
                 console.log(`🎭 Demo mode detected - role: ${this.demoRole}`);
                 this.isAuthenticated = true;
                 this.userRole = this.demoRole;
-                
+
                 // Set appropriate demo user info and API key
                 if (this.demoRole === 'student') {
                     this.userName = 'Demo Estudiante';
@@ -63,11 +65,11 @@ class NavbarManager {
                     localStorage.setItem('user_role', 'admin');
                     localStorage.setItem('user_name', 'Demo Admin');
                 }
-                
+
                 this.setupDemoNavbar();
                 return;
             }
-            
+
             if (typeof storageManager !== 'undefined') {
                 this.isAuthenticated = storageManager.isAuthenticated();
                 this.userRole = storageManager.getUserRole();
@@ -77,7 +79,7 @@ class NavbarManager {
                 this.userRole = localStorage.getItem('user_role') || null;
                 this.userName = localStorage.getItem('user_name') || localStorage.getItem('user_email') || 'Usuario';
             }
-            
+
             this.currentPage = this.getCurrentPage();
 
             console.log(`📌 NavbarManager State:`, {
@@ -126,13 +128,14 @@ class NavbarManager {
 
     setupAuthenticatedNavbar() {
         console.log('🔐 Configurando navbar autenticada...');
-        
+
         // Si estamos en modo demo, usar navbar demo
         if (this.demoMode) {
             this.setupDemoNavbar();
             return;
         }
-        
+
+        // Usar la estructura de navbar raíz como base
         const navbarContainer = document.getElementById('navbar-container') || document.querySelector('.navbar');
         if (!navbarContainer) {
             console.warn('⚠️ Navbar container no encontrada');
@@ -141,17 +144,10 @@ class NavbarManager {
 
         navbarContainer.innerHTML = '';
 
-        const menuItems = this.getMenuItemsByRole(this.userRole).map(item => {
-            return `
-                <li class="nav-item">
-                    <a href="${item.href}" class="nav-link ${this.currentPage === item.page ? 'active' : ''}">
-                        <i class="fas ${item.icon}"></i>
-                        <span>${item.label}</span>
-                    </a>
-                </li>
-            `;
-        }).join('');
+        // Generar items de navegación según el rol
+        const navItems = this.getMenuItemsByRole(this.userRole);
 
+        // Construir navbar usando estructura raíz
         navbarContainer.innerHTML = `
             <div class="nav-container">
                 <div class="nav-logo">
@@ -161,9 +157,9 @@ class NavbarManager {
                     </a>
                 </div>
 
-                <div class="nav-menu" id="nav-menu">
+                <div class="nav-menu">
                     <ul class="nav-list">
-                        ${menuItems}
+                        ${navItems}
                     </ul>
                 </div>
 
@@ -183,7 +179,7 @@ class NavbarManager {
 
     setupDemoNavbar() {
         console.log(`🎭 Configurando navbar en modo demo (${this.demoRole})...`);
-        
+
         const navbarContainer = document.getElementById('navbar-container') || document.querySelector('.navbar');
         if (!navbarContainer) {
             console.warn('⚠️ Navbar container no encontrada');
@@ -192,36 +188,28 @@ class NavbarManager {
 
         navbarContainer.innerHTML = '';
 
-        const menuItems = this.getMenuItemsByRole(this.userRole).map(item => {
-            const demoParams = `?demo=true&role=${this.demoRole}`;
-            return `
-                <li class="nav-item">
-                    <a href="${item.href}${demoParams}" class="nav-link ${this.currentPage === item.page ? 'active' : ''}">
-                        <i class="fas ${item.icon}"></i>
-                        <span>${item.label}</span>
-                    </a>
-                </li>
-            `;
-        }).join('');
+        // Generar items de navegación según el rol
+        const navItems = this.getMenuItemsByRole(this.userRole);
 
         // Role switcher for demo mode
         const roleSwitcher = `
             <div class="demo-role-switcher" style="display: flex; gap: 10px; margin-right: 20px;">
-                <button class="btn btn-sm ${this.demoRole === 'student' ? 'btn-primary' : 'btn-outline'}" 
+                <button class="btn btn-sm ${this.demoRole === 'student' ? 'btn-primary' : 'btn-outline'}"
                         onclick="switchDemoRole('student')" style="font-size: 12px; padding: 4px 8px;">
                     👨‍🎓 Estudiante
                 </button>
-                <button class="btn btn-sm ${this.demoRole === 'company' ? 'btn-primary' : 'btn-outline'}" 
+                <button class="btn btn-sm ${this.demoRole === 'company' ? 'btn-primary' : 'btn-outline'}"
                         onclick="switchDemoRole('company')" style="font-size: 12px; padding: 4px 8px;">
                     🏢 Empresa
                 </button>
-                <button class="btn btn-sm ${this.demoRole === 'admin' ? 'btn-primary' : 'btn-outline'}" 
+                <button class="btn btn-sm ${this.demoRole === 'admin' ? 'btn-primary' : 'btn-outline'}"
                         onclick="switchDemoRole('admin')" style="font-size: 12px; padding: 4px 8px;">
                     ⚙️ Admin
                 </button>
             </div>
         `;
 
+        // Construir navbar usando estructura raíz
         navbarContainer.innerHTML = `
             <div class="nav-container">
                 <div class="nav-logo">
@@ -232,9 +220,9 @@ class NavbarManager {
                     </a>
                 </div>
 
-                <div class="nav-menu" id="nav-menu">
+                <div class="nav-menu">
                     <ul class="nav-list">
-                        ${menuItems}
+                        ${navItems}
                     </ul>
                 </div>
 
@@ -255,7 +243,7 @@ class NavbarManager {
 
     setupPublicNavbar() {
         console.log('🌐 Configurando navbar pública...');
-        
+
         const navbarContainer = document.getElementById('navbar-container') || document.querySelector('.navbar');
         if (!navbarContainer) {
             console.warn('⚠️ Navbar container no encontrada');
@@ -264,6 +252,7 @@ class NavbarManager {
 
         navbarContainer.innerHTML = '';
 
+        // Usar la estructura de navbar raíz del index.html
         navbarContainer.innerHTML = `
             <div class="nav-container">
                 <div class="nav-logo">
@@ -273,7 +262,7 @@ class NavbarManager {
                     </a>
                 </div>
 
-                <div class="nav-menu" id="nav-menu">
+                <div class="nav-menu">
                     <ul class="nav-list">
                         <li class="nav-item">
                             <a href="/" class="nav-link ${this.currentPage === 'home' ? 'active' : ''}">
@@ -287,12 +276,43 @@ class NavbarManager {
                                 <span>Oportunidades</span>
                             </a>
                         </li>
+                        <li class="nav-item">
+                            <a href="/empresas" class="nav-link ${this.currentPage === 'empresas' ? 'active' : ''}">
+                                <i class="fas fa-building"></i>
+                                <span>Empresas</span>
+                            </a>
+                        </li>
+                        <li class="nav-item">
+                            <a href="/estudiantes" class="nav-link ${this.currentPage === 'estudiantes' ? 'active' : ''}">
+                                <i class="fas fa-user-graduate"></i>
+                                <span>Estudiantes</span>
+                            </a>
+                        </li>
+                        <li class="nav-item">
+                            <a href="#contact" class="nav-link ${this.currentPage === 'contact' ? 'active' : ''}">
+                                <i class="fas fa-envelope"></i>
+                                <span>Contacto</span>
+                            </a>
+                        </li>
+                        <li class="nav-item demo-link">
+                            <a href="/dashboard?demo=true" class="nav-link demo-btn" data-tooltip="Ver Dashboard Demo">
+                                <i class="fas fa-play-circle"></i>
+                                <span>Demo</span>
+                                <span class="demo-badge">GRATIS</span>
+                            </a>
+                        </li>
                     </ul>
                 </div>
 
                 <div class="nav-cta">
-                    <button class="btn btn-primary" onclick="window.location.href='/login'" style="cursor: pointer;">
-                        <i class="fas fa-sign-in-alt"></i> Iniciar Sesión
+                    <a href="/dashboard?demo=true" class="btn btn-secondary demo-cta">
+                        <i class="fas fa-eye"></i> Ver Demo
+                    </a>
+                    <button class="btn btn-secondary" onclick="scrollToLogin()">
+                        <i class="fas fa-sign-in-alt"></i> Inicia Sesión
+                    </button>
+                    <button class="btn btn-primary" onclick="scrollToRegister()">
+                        <i class="fas fa-plus"></i> Únete Ahora
                     </button>
                 </div>
             </div>
@@ -302,28 +322,42 @@ class NavbarManager {
     }
 
     getMenuItemsByRole() {
+        const baseUrl = this.demoMode ? `?demo=true&role=${this.userRole}` : '';
+
         const menus = {
             'student': [
-                { href: '/dashboard', icon: 'fa-home', label: 'Dashboard', page: 'dashboard' },
-                { href: '/oportunidades', icon: 'fa-briefcase', label: 'Oportunidades', page: 'oportunidades' },
-                { href: '/profile', icon: 'fa-user', label: 'Mi Perfil', page: 'profile' },
-                { href: '/applications', icon: 'fa-file-alt', label: 'Mis Aplicaciones', page: 'applications' }
+                { href: `/dashboard${baseUrl}`, icon: 'fa-home', label: 'Dashboard', page: 'dashboard' },
+                { href: `/oportunidades${baseUrl}`, icon: 'fa-briefcase', label: 'Oportunidades', page: 'oportunidades' },
+                { href: `/profile${baseUrl}`, icon: 'fa-user', label: 'Mi Perfil', page: 'profile' },
+                { href: `/applications${baseUrl}`, icon: 'fa-file-alt', label: 'Mis Aplicaciones', page: 'applications' }
             ],
             'company': [
-                { href: '/dashboard', icon: 'fa-home', label: 'Dashboard', page: 'dashboard' },
-                { href: '/buscar-candidatos', icon: 'fa-search', label: 'Buscar Candidatos', page: 'buscar-candidatos' },
-                { href: '/profile', icon: 'fa-building', label: 'Mi Empresa', page: 'profile' },
-                { href: '/mis-vacantes', icon: 'fa-briefcase', label: 'Mis Vacantes', page: 'mis-vacantes' }
+                { href: `/dashboard${baseUrl}`, icon: 'fa-home', label: 'Dashboard', page: 'dashboard' },
+                { href: `/buscar-candidatos${baseUrl}`, icon: 'fa-search', label: 'Buscar Candidatos', page: 'buscar-candidatos' },
+                { href: `/profile${baseUrl}`, icon: 'fa-building', label: 'Mi Empresa', page: 'profile' },
+                { href: `/mis-vacantes${baseUrl}`, icon: 'fa-briefcase', label: 'Mis Vacantes', page: 'mis-vacantes' }
             ],
             'admin': [
-                { href: '/dashboard', icon: 'fa-home', label: 'Dashboard', page: 'dashboard' },
-                { href: '/admin/users', icon: 'fa-users', label: 'Usuarios', page: 'admin-users' },
-                { href: '/admin/analytics', icon: 'fa-chart-line', label: 'Analítica', page: 'admin-analytics' },
-                { href: '/admin/settings', icon: 'fa-cog', label: 'Configuración', page: 'admin-settings' }
+                { href: `/dashboard${baseUrl}`, icon: 'fa-home', label: 'Dashboard', page: 'dashboard' },
+                { href: `/admin/users${baseUrl}`, icon: 'fa-users', label: 'Usuarios', page: 'admin-users' },
+                { href: `/admin/analytics${baseUrl}`, icon: 'fa-chart-line', label: 'Analítica', page: 'admin-analytics' },
+                { href: `/admin/settings${baseUrl}`, icon: 'fa-cog', label: 'Configuración', page: 'admin-settings' }
             ]
         };
 
-        return menus[this.userRole] || menus['student'];
+        const menuItems = menus[this.userRole] || menus['student'];
+
+        return menuItems.map(item => {
+            const isActive = this.currentPage === item.page ? 'active' : '';
+            return `
+                <li class="nav-item">
+                    <a href="${item.href}" class="nav-link ${isActive}">
+                        <i class="fas ${item.icon}"></i>
+                        <span>${item.label}</span>
+                    </a>
+                </li>
+            `;
+        }).join('');
     }
 
     requireAuth() {
@@ -362,49 +396,115 @@ class NavbarManager {
 const navbarManager = new NavbarManager();
 console.log('✅ NavbarManager instance created:', navbarManager);
 
-// ✅ INICIALIZACIÓN ROBUSTA
-let navbarInitialized = false;
+// Simple navbar generator - executes immediately
+console.log('🚀 Simple navbar script loaded');
 
-function initializeNavbar() {
-    if (navbarInitialized) {
-        console.log('ℹ️ Navbar ya inicializada, previniendo duplicados...');
+try {
+    // Get navbar container
+    const navbarContainer = document.getElementById('navbar-container');
+    if (!navbarContainer) {
+        console.warn('⚠️ Navbar container not found');
         return;
     }
-    navbarInitialized = true;
-    
-    console.log('📍 Iniciando navbar (global)...');
-    console.log('navbarManager:', navbarManager);
-    
-    if (!navbarManager) {
-        console.error('❌ CRÍTICO: navbarManager no está definido');
-        navbarInitialized = false;
-        return;
+
+    // Get URL parameters
+    const urlParams = new URLSearchParams(window.location.search);
+    const demoMode = urlParams.get('demo') === 'true';
+    const demoRole = urlParams.get('role') || 'admin';
+
+    console.log(`🎭 Demo mode: ${demoMode}, Role: ${demoRole}`);
+
+    if (demoMode) {
+        // Generate demo navbar using root structure
+        const getNavItems = (role) => {
+            const baseUrl = `?demo=true&role=${role}`;
+            const menus = {
+                'student': [
+                    { href: `/dashboard${baseUrl}`, icon: 'fa-home', label: 'Dashboard' },
+                    { href: `/oportunidades${baseUrl}`, icon: 'fa-briefcase', label: 'Oportunidades' },
+                    { href: `/profile${baseUrl}`, icon: 'fa-user', label: 'Mi Perfil' },
+                    { href: `/applications${baseUrl}`, icon: 'fa-file-alt', label: 'Mis Aplicaciones' }
+                ],
+                'company': [
+                    { href: `/dashboard${baseUrl}`, icon: 'fa-home', label: 'Dashboard' },
+                    { href: `/buscar-candidatos${baseUrl}`, icon: 'fa-search', label: 'Buscar Candidatos' },
+                    { href: `/profile${baseUrl}`, icon: 'fa-building', label: 'Mi Empresa' },
+                    { href: `/mis-vacantes${baseUrl}`, icon: 'fa-briefcase', label: 'Mis Vacantes' }
+                ],
+                'admin': [
+                    { href: `/dashboard${baseUrl}`, icon: 'fa-home', label: 'Dashboard' },
+                    { href: `/admin/users${baseUrl}`, icon: 'fa-users', label: 'Usuarios' },
+                    { href: `/admin/analytics${baseUrl}`, icon: 'fa-chart-line', label: 'Analítica' },
+                    { href: `/admin/settings${baseUrl}`, icon: 'fa-cog', label: 'Configuración' }
+                ]
+            };
+
+            return (menus[role] || menus['admin']).map(item =>
+                `<li class="nav-item">
+                    <a href="${item.href}" class="nav-link">
+                        <i class="fas ${item.icon}"></i>
+                        <span>${item.label}</span>
+                    </a>
+                </li>`
+            ).join('');
+        };
+
+        const navbarHTML = `
+            <div class="nav-container">
+                <div class="nav-logo">
+                    <a href="/dashboard?demo=true&role=${demoRole}">
+                        <i class="fas fa-brain"></i>
+                        <span>MoirAI</span>
+                        <span class="demo-badge">DEMO</span>
+                    </a>
+                </div>
+                <div class="nav-menu">
+                    <ul class="nav-list">
+                        ${getNavItems(demoRole)}
+                    </ul>
+                </div>
+                <div class="nav-cta">
+                    <div class="demo-role-switcher" style="display: flex; gap: 10px; margin-right: 20px;">
+                        <button class="btn btn-sm ${demoRole === 'student' ? 'btn-primary' : 'btn-outline'}"
+                                onclick="switchDemoRole('student')" style="font-size: 12px; padding: 4px 8px;">
+                            👨‍🎓 Estudiante
+                        </button>
+                        <button class="btn btn-sm ${demoRole === 'company' ? 'btn-primary' : 'btn-outline'}"
+                                onclick="switchDemoRole('company')" style="font-size: 12px; padding: 4px 8px;">
+                            🏢 Empresa
+                        </button>
+                        <button class="btn btn-sm ${demoRole === 'admin' ? 'btn-primary' : 'btn-outline'}"
+                                onclick="switchDemoRole('admin')" style="font-size: 12px; padding: 4px 8px;">
+                            ⚙️ Admin
+                        </button>
+                    </div>
+                    <div class="user-info" style="display: flex; align-items: center; gap: 15px; margin-right: 20px;">
+                        <span class="user-name" style="font-size: 14px; color: #333;">Demo ${demoRole.charAt(0).toUpperCase() + demoRole.slice(1)}</span>
+                        <button class="btn btn-secondary" onclick="window.location.href='/'" style="cursor: pointer;">
+                            <i class="fas fa-home"></i> Salir Demo
+                        </button>
+                    </div>
+                </div>
+            </div>
+        `;
+
+        navbarContainer.innerHTML = navbarHTML;
+        console.log('✅ Simple navbar generated successfully');
+    } else {
+        console.log('ℹ️ Not in demo mode, skipping navbar generation');
     }
-    
-    navbarManager.initialize().then(() => {
-        console.log('✅ Navbar inicializada exitosamente');
-        setupMobileMenu();
-        setupScrollEffects();
-    }).catch(error => {
-        console.error('❌ Error inicializando navbar:', error);
-        navbarInitialized = false;
-    });
+
+} catch (error) {
+    console.error('❌ Error in simple navbar generation:', error);
 }
 
-// Inicializar cuando el DOM esté listo
-if (document.readyState === 'loading') {
-    document.addEventListener('DOMContentLoaded', () => {
-        setTimeout(() => {
-            initializeNavbar();
-        }, 50);
-    });
-} else {
-    setTimeout(() => {
-        initializeNavbar();
-    }, 50);
-}
-
-function setupMobileMenu() {
+// Demo role switching function
+function switchDemoRole(role) {
+    const currentUrl = new URL(window.location);
+    currentUrl.searchParams.set('demo', 'true');
+    currentUrl.searchParams.set('role', role);
+    window.location.href = currentUrl.toString();
+}function setupMobileMenu() {
     const navbar = document.querySelector('.navbar');
     const navContainer = document.querySelector('.nav-container');
     

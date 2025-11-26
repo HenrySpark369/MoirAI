@@ -150,10 +150,6 @@
             transform: none;
         }
 
-        .system-settings, .config-options {
-            /* IDs esperados por los scripts de demo - no necesitan estilos específicos */
-        }
-
         .status-indicator {
             display: inline-flex;
             align-items: center;
@@ -221,18 +217,10 @@
     </style>
 </head>
 <body>
-    <aside class="sidebar">
-        <div class="sidebar-header">
-            <div class="logo"><i class="fas fa-brain"></i> <span>MoirAI Admin</span></div>
-        </div>
-        <nav class="sidebar-nav"></nav>
-        <div class="sidebar-footer">
-            <a href="/" class="nav-item"><i class="fas fa-sign-out-alt"></i> <span>Volver al sitio</span></a>
-        </div>
-    </aside>
-
-    <!-- Navbar Container for Demo Navigation -->
-    <div id="navbar-container"></div>
+    <!-- Navbar - Estructura raíz unificada -->
+    <nav class="navbar" id="navbar-container">
+        <!-- Generado por navbar-manager.js -->
+    </nav>
 
     <main class="main-content">
         <header class="top-nav">
