@@ -32,31 +32,32 @@ class RateLimitConfig:
     # Límites específicos por endpoint (requests / minuto)
     ENDPOINT_LIMITS = {
         # Auth endpoints - muy restrictivos
-        "POST /api/v1/auth/login": 20,  # Aumentado de 5 a 10
-        "POST /api/v1/auth/register": 10,
-        "POST /api/v1/auth/api-keys": 40,
+        "POST /api/v1/auth/login": 200,  # Aumentado de 5 a 10
+        "POST /api/v1/auth/register": 100,
+        "POST /api/v1/auth/api-keys": 400,
 
         # Matching endpoints - moderado
-        "POST /api/v1/matching/recommendations": 60,
-        "POST /api/v1/matching/filter-by-criteria": 30,
+        "POST /api/v1/matching/recommendations": 600,
+        "POST /api/v1/matching/filter-by-criteria": 300,
         "GET /api/v1/matching/featured-students": 100,
 
         # Student endpoints
-        "GET /api/v1/students": 100,
-        "POST /api/v1/students": 10,
-        "PUT /api/v1/students/{id}": 20,
-        "DELETE /api/v1/students/{id}": 5,
+        "GET /api/v1/students": 200,
+        "POST /api/v1/students": 100,
+        "POST /api/v1/students/upload_resume": 500,  # Límite específico para upload de CV
+        "PUT /api/v1/students/{id}": 200,
+        "DELETE /api/v1/students/{id}": 500,
 
         # Job scraping - respetar límites de OCC
-        "GET /api/v1/jobs/search": 20,
-        "POST /api/v1/jobs/apply": 30,
+        "GET /api/v1/jobs/search": 200,
+        "POST /api/v1/jobs/apply": 300,
 
         # Companies
-        "GET /api/v1/companies": 100,
-        "POST /api/v1/companies": 5,
+        "GET /api/v1/companies": 200,
+        "POST /api/v1/companies": 500,
 
         # Default para otros endpoints
-        "DEFAULT": 100,
+        "DEFAULT": 200,
     }
 
     # Ventanas de tiempo
@@ -176,7 +177,7 @@ class RateLimiter:
         """
         return RateLimitConfig.ENDPOINT_LIMITS.get(
             endpoint_key,
-            RateLimitConfig.ENDPOINT_LIMITS.get("DEFAULT", 100)
+            RateLimitConfig.ENDPOINT_LIMITS.get("DEFAULT", 200)
         )
 
     def _clean_old_requests(self, key: str, now: datetime) -> None:

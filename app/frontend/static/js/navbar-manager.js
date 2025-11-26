@@ -117,12 +117,12 @@ class NavbarManager {
         if (typeof storageManager !== 'undefined' && storageManager) {
             return storageManager.isAuthenticated && storageManager.isAuthenticated();
         }
-        
+
         // Fallback: check for API key in localStorage
-        const apiKey = localStorage.getItem('api_key') || 
-                      localStorage.getItem('moirai_api_key') || 
-                      localStorage.getItem('moirai_token');
-        
+        const apiKey = localStorage.getItem('api_key') ||
+            localStorage.getItem('moirai_api_key') ||
+            localStorage.getItem('moirai_token');
+
         return !!apiKey;
     }
 
@@ -175,6 +175,7 @@ class NavbarManager {
         `;
 
         console.log('✅ Navbar autenticada configurada');
+        this.setupMobileMenu();
     }
 
     setupDemoNavbar() {
@@ -239,6 +240,7 @@ class NavbarManager {
         `;
 
         console.log('✅ Navbar demo configurada');
+        this.setupMobileMenu();
     }
 
     setupPublicNavbar() {
@@ -319,6 +321,7 @@ class NavbarManager {
         `;
 
         console.log('✅ Navbar pública configurada');
+        this.setupMobileMenu();
     }
 
     getMenuItemsByRole() {
@@ -390,168 +393,84 @@ class NavbarManager {
         }
         return true;
     }
+    setupMobileMenu() {
+        const navbar = document.querySelector('.navbar');
+        const navContainer = document.querySelector('.nav-container');
+
+        if (!navbar || !navContainer) return;
+
+        let mobileToggle = document.getElementById('mobileToggle');
+        if (!mobileToggle) {
+            mobileToggle = document.createElement('button');
+            mobileToggle.className = 'sidebar-toggle';
+            mobileToggle.innerHTML = '<i class="fas fa-bars"></i>';
+            mobileToggle.id = 'mobileToggle';
+            navContainer.appendChild(mobileToggle);
+        }
+
+        // Remove existing listeners to avoid duplicates if re-initialized
+        const newToggle = mobileToggle.cloneNode(true);
+        mobileToggle.parentNode.replaceChild(newToggle, mobileToggle);
+        mobileToggle = newToggle;
+
+        mobileToggle.addEventListener('click', () => {
+            navbar.classList.toggle('show');
+            mobileToggle.classList.toggle('active');
+        });
+
+        const navLinks = navbar.querySelectorAll('.nav-link');
+        navLinks.forEach(link => {
+            link.addEventListener('click', () => {
+                if (window.innerWidth <= 768) {
+                    navbar.classList.remove('show');
+                    mobileToggle.classList.remove('active');
+                }
+            });
+        });
+
+        // Close menu when clicking outside
+        document.addEventListener('click', (event) => {
+            if (window.innerWidth <= 768) {
+                const isClickInsideNavbar = navbar.contains(event.target);
+                const isClickOnToggle = mobileToggle.contains(event.target);
+
+                if (!isClickInsideNavbar && !isClickOnToggle && navbar.classList.contains('show')) {
+                    navbar.classList.remove('show');
+                    mobileToggle.classList.remove('active');
+                }
+            }
+        });
+
+        // Reset on resize
+        window.addEventListener('resize', () => {
+            if (window.innerWidth > 768) {
+                navbar.classList.remove('show');
+                if (mobileToggle) {
+                    mobileToggle.style.display = 'none';
+                    mobileToggle.classList.remove('active');
+                }
+            } else {
+                if (mobileToggle) mobileToggle.style.display = 'flex';
+            }
+        });
+    }
 }
+
+// Global function for demo role switching (called by HTML buttons)
+window.switchDemoRole = function (role) {
+    const currentUrl = new URL(window.location);
+    currentUrl.searchParams.set('demo', 'true');
+    currentUrl.searchParams.set('role', role);
+    window.location.href = currentUrl.toString();
+};
 
 // ✅ CREAR INSTANCIA GLOBAL
 const navbarManager = new NavbarManager();
 console.log('✅ NavbarManager instance created:', navbarManager);
 
-// Simple navbar generator - executes immediately
-console.log('🚀 Simple navbar script loaded');
-
-try {
-    // Get navbar container
-    const navbarContainer = document.getElementById('navbar-container');
-    if (!navbarContainer) {
-        console.warn('⚠️ Navbar container not found');
-        return;
-    }
-
-    // Get URL parameters
-    const urlParams = new URLSearchParams(window.location.search);
-    const demoMode = urlParams.get('demo') === 'true';
-    const demoRole = urlParams.get('role') || 'admin';
-
-    console.log(`🎭 Demo mode: ${demoMode}, Role: ${demoRole}`);
-
-    if (demoMode) {
-        // Generate demo navbar using root structure
-        const getNavItems = (role) => {
-            const baseUrl = `?demo=true&role=${role}`;
-            const menus = {
-                'student': [
-                    { href: `/dashboard${baseUrl}`, icon: 'fa-home', label: 'Dashboard' },
-                    { href: `/oportunidades${baseUrl}`, icon: 'fa-briefcase', label: 'Oportunidades' },
-                    { href: `/profile${baseUrl}`, icon: 'fa-user', label: 'Mi Perfil' },
-                    { href: `/applications${baseUrl}`, icon: 'fa-file-alt', label: 'Mis Aplicaciones' }
-                ],
-                'company': [
-                    { href: `/dashboard${baseUrl}`, icon: 'fa-home', label: 'Dashboard' },
-                    { href: `/buscar-candidatos${baseUrl}`, icon: 'fa-search', label: 'Buscar Candidatos' },
-                    { href: `/profile${baseUrl}`, icon: 'fa-building', label: 'Mi Empresa' },
-                    { href: `/mis-vacantes${baseUrl}`, icon: 'fa-briefcase', label: 'Mis Vacantes' }
-                ],
-                'admin': [
-                    { href: `/dashboard${baseUrl}`, icon: 'fa-home', label: 'Dashboard' },
-                    { href: `/admin/users${baseUrl}`, icon: 'fa-users', label: 'Usuarios' },
-                    { href: `/admin/analytics${baseUrl}`, icon: 'fa-chart-line', label: 'Analítica' },
-                    { href: `/admin/settings${baseUrl}`, icon: 'fa-cog', label: 'Configuración' }
-                ]
-            };
-
-            return (menus[role] || menus['admin']).map(item =>
-                `<li class="nav-item">
-                    <a href="${item.href}" class="nav-link">
-                        <i class="fas ${item.icon}"></i>
-                        <span>${item.label}</span>
-                    </a>
-                </li>`
-            ).join('');
-        };
-
-        const navbarHTML = `
-            <div class="nav-container">
-                <div class="nav-logo">
-                    <a href="/dashboard?demo=true&role=${demoRole}">
-                        <i class="fas fa-brain"></i>
-                        <span>MoirAI</span>
-                        <span class="demo-badge">DEMO</span>
-                    </a>
-                </div>
-                <div class="nav-menu">
-                    <ul class="nav-list">
-                        ${getNavItems(demoRole)}
-                    </ul>
-                </div>
-                <div class="nav-cta">
-                    <div class="demo-role-switcher" style="display: flex; gap: 10px; margin-right: 20px;">
-                        <button class="btn btn-sm ${demoRole === 'student' ? 'btn-primary' : 'btn-outline'}"
-                                onclick="switchDemoRole('student')" style="font-size: 12px; padding: 4px 8px;">
-                            👨‍🎓 Estudiante
-                        </button>
-                        <button class="btn btn-sm ${demoRole === 'company' ? 'btn-primary' : 'btn-outline'}"
-                                onclick="switchDemoRole('company')" style="font-size: 12px; padding: 4px 8px;">
-                            🏢 Empresa
-                        </button>
-                        <button class="btn btn-sm ${demoRole === 'admin' ? 'btn-primary' : 'btn-outline'}"
-                                onclick="switchDemoRole('admin')" style="font-size: 12px; padding: 4px 8px;">
-                            ⚙️ Admin
-                        </button>
-                    </div>
-                    <div class="user-info" style="display: flex; align-items: center; gap: 15px; margin-right: 20px;">
-                        <span class="user-name" style="font-size: 14px; color: #333;">Demo ${demoRole.charAt(0).toUpperCase() + demoRole.slice(1)}</span>
-                        <button class="btn btn-secondary" onclick="window.location.href='/'" style="cursor: pointer;">
-                            <i class="fas fa-home"></i> Salir Demo
-                        </button>
-                    </div>
-                </div>
-            </div>
-        `;
-
-        navbarContainer.innerHTML = navbarHTML;
-        console.log('✅ Simple navbar generated successfully');
-    } else {
-        console.log('ℹ️ Not in demo mode, skipping navbar generation');
-    }
-
-} catch (error) {
-    console.error('❌ Error in simple navbar generation:', error);
+// Initialize immediately
+if (document.readyState === 'loading') {
+    document.addEventListener('DOMContentLoaded', () => navbarManager.initialize());
+} else {
+    navbarManager.initialize();
 }
-
-// Demo role switching function
-function switchDemoRole(role) {
-    const currentUrl = new URL(window.location);
-    currentUrl.searchParams.set('demo', 'true');
-    currentUrl.searchParams.set('role', role);
-    window.location.href = currentUrl.toString();
-}
-    const navbar = document.querySelector('.navbar');
-    const navContainer = document.querySelector('.nav-container');
-    
-    if (!navbar || !navContainer) return;
-
-    let mobileToggle = document.getElementById('mobileToggle');
-    if (!mobileToggle) {
-        mobileToggle = document.createElement('button');
-        mobileToggle.className = 'sidebar-toggle';
-        mobileToggle.innerHTML = '<i class="fas fa-bars"></i>';
-        mobileToggle.id = 'mobileToggle';
-        navContainer.appendChild(mobileToggle);
-    }
-
-    mobileToggle.addEventListener('click', () => {
-        navbar.classList.toggle('show');
-        mobileToggle.classList.toggle('active');
-    });
-
-    const navLinks = navbar.querySelectorAll('.nav-link');
-    navLinks.forEach(link => {
-        link.addEventListener('click', () => {
-            if (window.innerWidth <= 768) {
-                navbar.classList.remove('show');
-                mobileToggle.classList.remove('active');
-            }
-        });
-    });
-
-    document.addEventListener('click', (event) => {
-        if (window.innerWidth <= 768) {
-            const isClickInsideNavbar = navbar.contains(event.target);
-            const isClickOnToggle = mobileToggle.contains(event.target);
-
-            if (!isClickInsideNavbar && !isClickOnToggle && navbar.classList.contains('show')) {
-                navbar.classList.remove('show');
-                mobileToggle.classList.remove('active');
-            }
-        }
-    });
-
-    window.addEventListener('resize', () => {
-        if (window.innerWidth > 768) {
-            navbar.classList.remove('show');
-            if (mobileToggle) mobileToggle.style.display = 'none';
-            if (mobileToggle) mobileToggle.classList.remove('active');
-        } else {
-            if (mobileToggle) mobileToggle.style.display = 'flex';
-        }
-    });
