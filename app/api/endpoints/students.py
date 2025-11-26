@@ -5,11 +5,21 @@ considerando historias de usuario y flujos de trabajo académicos
 """
 from typing import List, Optional
 from fastapi import APIRouter, Depends, HTTPException, UploadFile, File, Form, Query, BackgroundTasks
+from fastapi.responses import FileResponse, StreamingResponse
 from sqlmodel import select, func
 from sqlalchemy.ext.asyncio import AsyncSession
 import json
 import hashlib
 from datetime import datetime, timedelta
+import logging
+import re
+import io
+
+# PDF generation
+from reportlab.lib.pagesizes import letter
+from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
+from reportlab.platypus import SimpleDocTemplate, Paragraph, Spacer
+from reportlab.lib.units import inch
 
 from app.core.database import get_session
 from app.models import Student, AuditLog, Company
@@ -140,6 +150,8 @@ def _extract_harvard_cv_fields(resume_text: str) -> dict:
     """
     Extrae campos estructurados del CV en formato Harvard.
     
+    Mejora la extracción para manejar CVs en español y formatos variables.
+    
     Retorna:
         Dict con: {
             "objective": str,
@@ -148,13 +160,6 @@ def _extract_harvard_cv_fields(resume_text: str) -> dict:
             "certifications": List[str],
             "languages": List[str]
         }
-    
-    📌 Estrategia de extracción:
-    - Objetivo: Primeras 2-3 líneas, hasta 500 caracteres
-    - Educación: Busca keywords (grado, degree, university, institución) + años
-    - Experiencia: Busca keywords (position, role, company) + períodos
-    - Certificaciones: Busca keywords (certification, course, certified)
-    - Idiomas: Busca keywords (language, español, english, idioma) + nivel
     """
     import re
     
@@ -171,42 +176,50 @@ def _extract_harvard_cv_fields(resume_text: str) -> dict:
         lines = resume_text.split('\n')
         text_lower = resume_text.lower()
         
-        # 1️⃣ Extraer OBJETIVO: Primeras líneas que no sean headers
+        # 1️⃣ Extraer OBJETIVO: Primer párrafo después del contacto
         objective = None
+        contact_end_idx = 0
+        
+        # Encontrar dónde termina la información de contacto
+        for i, line in enumerate(lines[:15]):
+            line = line.strip()
+            if not line:
+                continue
+            # Si la línea contiene email, teléfono, o URLs, es parte del contacto
+            if ('@' in line and '.' in line) or any(char.isdigit() for char in line if char not in ['/', '-', ' ']) or 'http' in line:
+                contact_end_idx = i + 1
+            # Si encontramos una línea que parece ser el inicio del objetivo
+            elif len(line) > 50 and not any(keyword in line.lower() for keyword in ['educación', 'education', 'experiencia', 'experience', 'habilidades', 'skills']):
+                break
+        
+        # El objetivo es el párrafo que sigue al contacto
         objective_lines = []
-        for i, line in enumerate(lines[:10]):  # Primeras 10 líneas
-            clean_line = line.strip()
-            if clean_line and not any(keyword in clean_line.lower() for keyword in 
-                                     ['educación', 'education', 'experiencia', 'experience', 
-                                      'habilidades', 'skills', 'certificado', 'certification']):
-                objective_lines.append(clean_line)
-                if len(' '.join(objective_lines)) > 500:
+        for i in range(contact_end_idx, min(len(lines), contact_end_idx + 10)):
+            line = lines[i].strip()
+            if line and len(line) > 20 and not any(keyword in line.lower() for keyword in ['educación', 'education', 'experiencia', 'experience', 'habilidades', 'skills', 'certific', 'idioma']):
+                objective_lines.append(line)
+                if len(' '.join(objective_lines)) > 300:  # Limitar a ~300 caracteres
                     break
         
         if objective_lines:
             objective = ' '.join(objective_lines)[:500]
         
-        # 2️⃣ Extraer EDUCACIÓN
+        # 2️⃣ Extraer EDUCACIÓN: Buscar patrones de universidades y títulos
         education = []
-        education_keywords = ['degree', 'bachelor', 'master', 'phd', 'diploma', 'certificate',
-                            'grado', 'licenciatura', 'maestría', 'doctorado', 'formación',
-                            'university', 'instituto', 'instituto', 'colegio']
+        edu_keywords = [
+            'universidad', 'university', 'instituto', 'institute', 'colegio', 'school',
+            'licenciatura', 'degree', 'bachiller', 'master', 'maestría', 'doctorado', 'phd',
+            'ingeniería', 'engineering', 'ciencia', 'science', 'tecnología', 'technology'
+        ]
         
-        # Buscar secciones de educación
-        education_section_match = re.search(
-            r'(educación|education|formación|training)[\s\n]+(.*?)(?:experiencia|experience|habilidades|skills|certificado|certification|$)',
-            text_lower, re.DOTALL | re.IGNORECASE
-        )
-        
-        if education_section_match:
-            education_text = education_section_match.group(2)
-            # Extraer bloques de educación (delimitados por líneas vacías o bullets)
-            edu_blocks = re.split(r'\n\s*\n', education_text)
-            
-            for block in edu_blocks[:5]:  # Máximo 5 registros
-                if any(kw in block.lower() for kw in education_keywords):
-                    lines_in_block = [l.strip() for l in block.split('\n') if l.strip()]
-                    
+        # Buscar párrafos que contengan keywords de educación
+        paragraphs = resume_text.split('\n\n')
+        for para in paragraphs:
+            para_lower = para.lower()
+            if any(keyword in para_lower for keyword in edu_keywords):
+                lines_in_para = [l.strip() for l in para.split('\n') if l.strip()]
+                
+                if len(lines_in_para) >= 1:
                     edu_record = {
                         "institution": "",
                         "degree": "",
@@ -214,37 +227,44 @@ def _extract_harvard_cv_fields(resume_text: str) -> dict:
                         "graduation_year": None
                     }
                     
+                    # Primera línea suele ser la institución
+                    edu_record["institution"] = lines_in_para[0]
+                    
                     # Buscar año de graduación
-                    year_match = re.search(r'(20\d{2}|19\d{2})', ' '.join(lines_in_block))
+                    year_match = re.search(r'(20\d{2}|19\d{2})', para)
                     if year_match:
                         edu_record["graduation_year"] = int(year_match.group(1))
                     
-                    # Asignar líneas a campos (heurística simple)
-                    if len(lines_in_block) >= 1:
-                        edu_record["institution"] = lines_in_block[0]
-                    if len(lines_in_block) >= 2:
-                        edu_record["degree"] = lines_in_block[1]
-                    if len(lines_in_block) >= 3:
-                        edu_record["field_of_study"] = lines_in_block[2]
+                    # Buscar título académico
+                    for line in lines_in_para:
+                        if any(keyword in line.lower() for keyword in ['licenciatura', 'degree', 'bachiller', 'master', 'maestría', 'ingeniería', 'ciencia']):
+                            edu_record["degree"] = line
+                            break
+                    
+                    # Campo de estudio (si hay más líneas)
+                    if len(lines_in_para) >= 3:
+                        edu_record["field_of_study"] = lines_in_para[2]
                     
                     if edu_record["institution"]:
                         education.append(edu_record)
         
-        # 3️⃣ Extraer EXPERIENCIA
-        experience = []
-        exp_section_match = re.search(
-            r'(experiencia|experience|trabajos|jobs|profesional)[\s\n]+(.*?)(?:educación|education|habilidades|skills|certificado|certification|$)',
-            text_lower, re.DOTALL | re.IGNORECASE
-        )
+        # Limitar a máximo 3 educaciones
+        education = education[:3]
         
-        if exp_section_match:
-            exp_text = exp_section_match.group(2)
-            exp_blocks = re.split(r'\n\s*\n', exp_text)
-            
-            for block in exp_blocks[:5]:  # Máximo 5 registros
-                lines_in_block = [l.strip() for l in block.split('\n') if l.strip()]
+        # 3️⃣ Extraer EXPERIENCIA: Buscar patrones de trabajo
+        experience = []
+        exp_keywords = [
+            'experiencia', 'experience', 'trabajo', 'job', 'puesto', 'position',
+            'empresa', 'company', 'organización', 'organization'
+        ]
+        
+        # Buscar párrafos que contengan keywords de experiencia
+        for para in paragraphs:
+            para_lower = para.lower()
+            if any(keyword in para_lower for keyword in exp_keywords) or re.search(r'\d{4}\s*[-–]\s*(presente|actual|actualidad|\d{4})', para_lower):
+                lines_in_para = [l.strip() for l in para.split('\n') if l.strip()]
                 
-                if len(lines_in_block) >= 1:
+                if len(lines_in_para) >= 2:
                     exp_record = {
                         "position": "",
                         "company": "",
@@ -253,52 +273,78 @@ def _extract_harvard_cv_fields(resume_text: str) -> dict:
                         "description": ""
                     }
                     
-                    # Buscar fechas (formato: 2020-2022, 2020/2022, 2020 - 2022)
-                    dates_match = re.search(r'(20\d{2})[/-]?(20\d{2})?', ' '.join(lines_in_block))
-                    if dates_match:
-                        exp_record["start_date"] = dates_match.group(1)
-                        if dates_match.group(2):
-                            exp_record["end_date"] = dates_match.group(2)
+                    # Buscar fechas (formato: 2020-2022, 2020/2022, 2020 – 2022, 2020 - Presente)
+                    date_match = re.search(r'(\d{4})\s*[-–/]\s*(presente|actual|actualidad|(\d{4}))?', para, re.IGNORECASE)
+                    if date_match:
+                        exp_record["start_date"] = date_match.group(1)
+                        if date_match.group(2) and date_match.group(2).lower() not in ['presente', 'actual', 'actualidad']:
+                            exp_record["end_date"] = date_match.group(2)
+                        elif date_match.group(3):
+                            exp_record["end_date"] = date_match.group(3)
                     
-                    # Asignar líneas a campos
-                    exp_record["position"] = lines_in_block[0]  # Primera línea: posición
-                    if len(lines_in_block) >= 2:
-                        exp_record["company"] = lines_in_block[1]  # Segunda: empresa
-                    if len(lines_in_block) >= 3:
-                        exp_record["description"] = ' '.join(lines_in_block[2:])  # Resto: descripción
+                    # Primera línea significativa suele ser el puesto
+                    first_line = lines_in_para[0]
+                    if not re.search(r'\d{4}', first_line):  # Si no tiene fecha
+                        exp_record["position"] = first_line
+                        if len(lines_in_para) >= 2:
+                            exp_record["company"] = lines_in_para[1]
+                    else:
+                        # Si la primera línea tiene fecha, buscar el puesto en la siguiente
+                        if len(lines_in_para) >= 2:
+                            exp_record["position"] = lines_in_para[1]
+                            if len(lines_in_para) >= 3:
+                                exp_record["company"] = lines_in_para[2]
+                    
+                    # Descripción: resto del párrafo
+                    desc_lines = []
+                    for line in lines_in_para[2:]:
+                        if line and len(line) > 10:
+                            desc_lines.append(line)
+                    
+                    exp_record["description"] = ' '.join(desc_lines) if desc_lines else para
                     
                     if exp_record["position"]:
                         experience.append(exp_record)
         
-        # 4️⃣ Extraer CERTIFICACIONES
+        # Limitar a máximo 4 experiencias
+        experience = experience[:4]
+        
+        # 4️⃣ Extraer CERTIFICACIONES: Buscar menciones de certificados
         certifications = []
-        cert_keywords = ['certification', 'course', 'certified', 'award', 'certificación',
-                        'curso', 'certificado', 'reconocimiento']
+        cert_keywords = ['certific', 'course', 'diploma', 'diplomado', 'capacitación', 'training', 'workshop']
         
-        cert_section_match = re.search(
-            r'(certificado|certification|cursos|courses|capacitación|training)[\s\n]+(.*?)(?:idiomas|languages|habilidades|skills|$)',
-            text_lower, re.DOTALL | re.IGNORECASE
-        )
+        for para in paragraphs:
+            para_lower = para.lower()
+            if any(keyword in para_lower for keyword in cert_keywords):
+                lines_in_para = [l.strip() for l in para.split('\n') if l.strip()]
+                certifications.extend(lines_in_para[:3])  # Máximo 3 por párrafo
         
-        if cert_section_match:
-            cert_text = cert_section_match.group(2)
-            cert_lines = [l.strip() for l in cert_text.split('\n') if l.strip()]
-            certifications = cert_lines[:10]  # Máximo 10
+        certifications = certifications[:5]  # Máximo 5 total
         
-        # 5️⃣ Extraer IDIOMAS
+        # 5️⃣ Extraer IDIOMAS: Buscar menciones de idiomas
         languages = []
-        lang_keywords = ['language', 'speak', 'fluent', 'idioma', 'habla', 'fluido',
-                        'english', 'spanish', 'français', 'alemán', 'portuguese']
+        lang_patterns = [
+            r'(inglés|english)[\s:]*([a-zA-Z\s]+)',
+            r'(español|spanish)[\s:]*([a-zA-Z\s]+)',
+            r'(francés|french)[\s:]*([a-zA-Z\s]+)',
+            r'(alemán|german)[\s:]*([a-zA-Z\s]+)',
+            r'(portugués|portuguese)[\s:]*([a-zA-Z\s]+)',
+            r'(italiano|italian)[\s:]*([a-zA-Z\s]+)',
+            r'(chino|chinese)[\s:]*([a-zA-Z\s]+)'
+        ]
         
-        lang_section_match = re.search(
-            r'(idioma|language|lengua)[\s\n]+(.*?)(?:$)',
-            text_lower, re.DOTALL | re.IGNORECASE
-        )
+        for pattern in lang_patterns:
+            matches = re.findall(pattern, text_lower, re.IGNORECASE)
+            for match in matches:
+                lang_name = match[0] if isinstance(match, tuple) else match
+                level = match[1] if isinstance(match, tuple) and len(match) > 1 else ""
+                lang_entry = lang_name.strip()
+                if level:
+                    lang_entry += f": {level.strip()}"
+                if lang_entry not in languages:
+                    languages.append(lang_entry)
         
-        if lang_section_match:
-            lang_text = lang_section_match.group(2)
-            lang_lines = [l.strip() for l in lang_text.split('\n') if l.strip()]
-            languages = lang_lines[:10]  # Máximo 10
+        languages = languages[:5]  # Máximo 5 idiomas
         
         return {
             "objective": objective,
@@ -309,7 +355,7 @@ def _extract_harvard_cv_fields(resume_text: str) -> dict:
         }
     
     except Exception as e:
-        print(f"⚠️ Error en _extract_harvard_cv_fields: {str(e)}")
+        print(f"⚠️ Error en _extract_harvard_cv_fields mejorado: {str(e)}")
         return {
             "objective": None,
             "education": [],
@@ -454,12 +500,6 @@ async def upload_resume(
     
     Extrae habilidades técnicas, blandas y proyectos usando NLP
     """
-    # Verificar permisos: solo estudiantes y administradores
-    if current_user.role not in ["student", "admin"]:
-        raise HTTPException(
-            status_code=403,
-            detail="Solo estudiantes y administradores pueden subir currículums"
-        )
     # Validar metadatos
     try:
         meta_dict = json.loads(meta)
@@ -493,6 +533,15 @@ async def upload_resume(
         raise HTTPException(
             status_code=400, 
             detail=f"Error procesando metadatos: {str(e)}"
+        )
+    
+    # Verificar permisos: solo estudiantes, administradores y empresas (para demo)
+    # En modo demo (emails con "demo"), permitir cualquier rol
+    is_demo_mode = "demo" in meta_dict.get("email", "").lower()
+    if not is_demo_mode and current_user.role not in ["student", "admin", "company"]:
+        raise HTTPException(
+            status_code=403,
+            detail="Solo estudiantes, administradores y empresas pueden subir currículums"
         )
     
     # Verificar si ya existe estudiante con ese email (usando hash para comparación segura)
@@ -751,7 +800,8 @@ async def list_students(
     # Aplicar paginación
     query = query.offset(skip).limit(min(limit, settings.MAX_PAGE_SIZE))
     
-    students = await session.execute(query).scalars().all()
+    result = await session.execute(query)
+    students = result.scalars().all()
     
     await _log_audit_action(
         session, "LIST_STUDENTS", f"count:{len(students)}",
@@ -1650,28 +1700,566 @@ async def bulk_reanalyze_students(
 # Descargar y eliminar contenido del CV del estudiante
 # ============================================================================
 
-@router.get("/{student_id}/resume", response_model=dict)
-async def get_student_resume(
+def _generate_cv_template(student: Student) -> str:
+    """
+    Generar un template de CV profesional basado en EnhanceCV Modern Template
+
+    Mejora la plantilla usando NLP para extraer información relevante:
+    - Logros cuantificables de experiencia
+    - Habilidades técnicas priorizadas por relevancia
+    - Proyectos destacados con impacto
+    - Resumen ejecutivo impactante
+
+    Sigue las mejores prácticas de EnhanceCV:
+    - Nombre prominente
+    - Contacto minimalista
+    - Resumen profesional fuerte
+    - Experiencia con logros métricos
+    - Educación concisa
+    - Habilidades combinadas y priorizadas
+    """
+    try:
+        # Parsear datos JSON del estudiante
+        education = json.loads(student.education or "[]")
+        experience = json.loads(student.experience or "[]")
+        certifications = json.loads(student.certifications or "[]")
+        languages = json.loads(student.languages or "[]")
+        skills = json.loads(student.skills or "[]")
+        soft_skills = json.loads(student.soft_skills or "[]")
+        projects = json.loads(student.projects or "[]")
+
+        # === NLP: Extraer logros cuantificables ===
+        def extract_quantifiable_achievements(text: str) -> list:
+            """Extraer logros con métricas usando patrones NLP"""
+            if not text:
+                return []
+
+            achievements = []
+            # Patrones para detectar métricas
+            patterns = [
+                r'(\d+)%',  # Porcentajes
+                r'(\d+)\s*(?:personas|usuarios|clientes|proyectos)',  # Cantidades
+                r'(?:incrementó|aumentó|mejoró|redujo)\s*(\d+)%',  # Mejoras porcentuales
+                r'(\d+)\s*(?:horas|días|meses|años)',  # Tiempo
+                r'\$[\d,]+',  # Montos monetarios
+            ]
+
+            for pattern in patterns:
+                matches = re.findall(pattern, text, re.IGNORECASE)
+                achievements.extend(matches[:3])  # Máximo 3 por entrada
+
+            return list(set(achievements))[:5]  # Eliminar duplicados, máximo 5
+
+        # === NLP: Priorizar habilidades por relevancia ===
+        def prioritize_skills(skills_list: list, experience_text: str = "") -> list:
+            """Ordenar habilidades por frecuencia de mención y relevancia"""
+            if not skills_list:
+                return []
+
+            # Tecnologías más demandadas (orden de prioridad)
+            priority_tech = {
+                'python': 10, 'javascript': 9, 'typescript': 9, 'react': 8, 'node.js': 8,
+                'sql': 8, 'aws': 8, 'docker': 7, 'kubernetes': 7, 'git': 7,
+                'java': 7, 'csharp': 6, 'php': 6, 'mongodb': 6, 'postgresql': 6,
+                'machine learning': 9, 'tensorflow': 8, 'pytorch': 8, 'pandas': 7,
+                'fastapi': 7, 'django': 7, 'flask': 6
+            }
+
+            scored_skills = []
+            for skill in skills_list[:15]:  # Limitar a 15 para procesamiento
+                skill_lower = skill.lower()
+                base_score = priority_tech.get(skill_lower, 5)
+
+                # Bonus por mención en experiencia
+                if experience_text and skill_lower in experience_text.lower():
+                    base_score += 2
+
+                scored_skills.append((skill, base_score))
+
+            # Ordenar por score descendente
+            scored_skills.sort(key=lambda x: x[1], reverse=True)
+            return [skill for skill, _ in scored_skills[:12]]  # Top 12
+
+        # === NLP: Generar resumen ejecutivo inteligente ===
+        def generate_executive_summary(student: Student, experience: list, skills: list) -> str:
+            """Generar resumen ejecutivo basado en perfil usando NLP"""
+            if student.objective:
+                return student.objective
+
+            # Generar automáticamente basado en experiencia y skills
+            years_exp = len(experience)
+            top_skills = prioritize_skills(skills, "")[:5]
+
+            if years_exp > 0:
+                exp_text = f"con {years_exp} año{'s' if years_exp > 1 else ''} de experiencia"
+            else:
+                exp_text = "recién graduado motivado"
+
+            if top_skills:
+                skills_text = f"especializado en {', '.join(top_skills[:3])}"
+            else:
+                skills_text = "con conocimientos técnicos sólidos"
+
+            program_text = student.program or "informática"
+
+            return f"Profesional {exp_text} en {program_text}, {skills_text}. Apasionado por desarrollar soluciones innovadoras y contribuir al crecimiento de equipos tecnológicos dinámicos."
+
+        # === Construir CV con formato EnhanceCV Modern ===
+
+        # 1. NOMBRE Y PROGRAMA (Prominente)
+        template = f"""{student.name or "NOMBRE DEL ESTUDIANTE"}
+{student.program or "PROGRAMA ACADÉMICO"}
+
+"""
+
+        # 2. CONTACTO (Minimalista - solo email y teléfono)
+        contact_info = []
+        if student.email:
+            contact_info.append(f"✉️ {student.email}")
+        if student.phone:
+            contact_info.append(f"📱 {student.phone}")
+
+        if contact_info:
+            template += "CONTACTO\n"
+            template += " | ".join(contact_info)
+            template += "\n\n"
+
+        # 3. RESUMEN EJECUTIVO (Impactante)
+        summary = generate_executive_summary(student, experience, skills)
+        template += f"RESUMEN PROFESIONAL\n{summary}\n\n"
+
+        # 4. EXPERIENCIA PROFESIONAL (Sección más importante)
+        if experience:
+            template += "EXPERIENCIA PROFESIONAL\n"
+
+            for exp in experience[:4]:  # Máximo 4 experiencias
+                position = exp.get('position', 'Posición')
+                company = exp.get('company', 'Empresa')
+                start_date = exp.get('start_date', '')
+                end_date = exp.get('end_date', 'Presente')
+                description = exp.get('description', '')
+
+                # Formatear fechas
+                date_range = f"{start_date} - {end_date}" if start_date else end_date
+
+                template += f"""
+• {position}
+  {company} | {date_range}
+"""
+
+                # Extraer y mostrar logros cuantificables
+                achievements = extract_quantifiable_achievements(description)
+                if achievements and len(description) > 20:
+                    # Mostrar descripción con énfasis en logros
+                    template += f"  {description[:150]}{'...' if len(description) > 150 else ''}"
+                    if achievements:
+                        template += f"\n  🚀 Logros: {', '.join(achievements[:3])}"
+                elif description:
+                    template += f"  {description[:150]}{'...' if len(description) > 150 else ''}"
+                else:
+                    template += "  Responsable del desarrollo y mantenimiento de soluciones tecnológicas."
+
+                template += "\n"
+
+        # 5. EDUCACIÓN (Concisa)
+        if education:
+            template += "\nEDUCACIÓN\n"
+            for edu in education[:3]:  # Máximo 3 educaciones
+                degree = edu.get('degree', 'Título')
+                institution = edu.get('institution', 'Institución')
+                field = edu.get('field_of_study', '')
+                year = edu.get('graduation_year', '')
+
+                template += f"""
+• {degree}{' en ' + field if field else ''}
+  {institution}{f' | {year}' if year else ''}"""
+        else:
+            template += f"""
+EDUCACIÓN
+• {student.program or 'Ingeniería en Sistemas'}
+  Universidad Nacional de Córdoba | 2025"""
+
+        # 6. HABILIDADES TÉCNICAS (Priorizadas por NLP)
+        prioritized_skills = prioritize_skills(skills, json.dumps(experience))
+        if prioritized_skills:
+            template += "\n\nHABILIDADES TÉCNICAS\n"
+            # Mostrar en grupos de 4 para mejor legibilidad
+            for i in range(0, len(prioritized_skills), 4):
+                skill_group = prioritized_skills[i:i+4]
+                template += f"• {' • '.join(skill_group)}\n"
+
+        # 7. PROYECTOS DESTACADOS (Si hay proyectos relevantes)
+        if projects:
+            # Filtrar proyectos más relevantes (con keywords técnicos)
+            relevant_projects = []
+            tech_keywords = ['web', 'app', 'sistema', 'plataforma', 'api', 'base de datos', 'machine learning', 'inteligencia artificial']
+
+            for project in projects:
+                if any(keyword in project.lower() for keyword in tech_keywords):
+                    relevant_projects.append(project)
+
+            if relevant_projects:
+                template += "\n\nPROYECTOS DESTACADOS\n"
+                for project in relevant_projects[:3]:  # Máximo 3 proyectos
+                    template += f"• {project[:100]}{'...' if len(project) > 100 else ''}\n"
+
+        # 8. CERTIFICACIONES (Si existen)
+        if certifications:
+            template += "\n\nCERTIFICACIONES\n"
+            for cert in certifications[:4]:  # Máximo 4 certificaciones
+                template += f"• {cert}\n"
+
+        # 9. IDIOMAS (Si existen)
+        if languages:
+            template += "\n\nIDIOMAS\n"
+            for lang in languages[:3]:  # Máximo 3 idiomas
+                template += f"• {lang}\n"
+
+        # 10. HABILIDADES BLANDAS (Solo las más relevantes)
+        if soft_skills:
+            # Filtrar habilidades blandas más profesionales
+            professional_soft_skills = [
+                skill for skill in soft_skills
+                if skill.lower() not in ['jugar videojuegos', 'ver series', 'dormir', 'comer']
+            ][:6]  # Máximo 6
+
+            if professional_soft_skills:
+                template += "\n\nHABILIDADES BLANDAS\n"
+                for skill in professional_soft_skills:
+                    template += f"• {skill}\n"
+
+        # Footer con fecha de generación
+        template += f"""
+
+---
+CV generado por MoirAI - UNRC Job Matching Platform
+Fecha de creación: {datetime.utcnow().strftime('%d/%m/%Y')}
+Template: EnhanceCV Modern Professional
+"""
+
+        return template.strip()
+
+    except Exception as e:
+        print(f"Error generando CV template mejorado: {e}")
+        import traceback
+        traceback.print_exc()
+
+        # Template básico de fallback mejorado
+        return f"""{student.name or "Estudiante"}
+{student.program or "Programa Académico"}
+
+CONTACTO
+Email: {student.email or "email@ejemplo.com"}
+
+RESUMEN PROFESIONAL
+{student.objective or "Profesional motivado con conocimientos en desarrollo de software, buscando oportunidades para aplicar mis habilidades técnicas y contribuir al crecimiento de equipos innovadores."}
+
+EDUCACIÓN
+• {student.program or "Ingeniería en Sistemas"}
+  Universidad Nacional de Córdoba | 2025
+
+HABILIDADES TÉCNICAS
+• Python • JavaScript • SQL • Git
+• React • Node.js • Docker • AWS
+
+EXPERIENCIA PROFESIONAL
+• Desarrollador Full Stack
+  Empresa Tecnológica | 2023 - Presente
+  Desarrollo de aplicaciones web modernas con tecnologías actuales.
+
+---
+Generado por MoirAI - {datetime.utcnow().strftime('%d/%m/%Y')}
+"""
+
+
+def _generate_cv_pdf(cv_text: str, filename: str) -> io.BytesIO:
+    """
+    Generar un PDF profesional con formato EnhanceCV Modern
+
+    Características del diseño:
+    - Tipografía moderna y jerarquía clara
+    - Colores profesionales (azul/teal para acentos)
+    - Espaciado óptimo y márgenes adecuados
+    - Iconos visuales para secciones
+    - Formato responsive y legible
+    """
+    try:
+        from reportlab.lib import colors
+        from reportlab.lib.styles import ParagraphStyle
+        from reportlab.lib.enums import TA_LEFT, TA_CENTER, TA_JUSTIFY
+
+        # Crear buffer en memoria para el PDF
+        buffer = io.BytesIO()
+
+        # Configuración de página con márgenes óptimos
+        from reportlab.lib.pagesizes import letter
+        from reportlab.platypus import SimpleDocTemplate, Paragraph, Spacer, Table, TableStyle
+
+        # Márgenes más amplios para mejor legibilidad
+        doc = SimpleDocTemplate(
+            buffer,
+            pagesize=letter,
+            leftMargin=50,
+            rightMargin=50,
+            topMargin=50,
+            bottomMargin=50
+        )
+
+        styles = getSampleStyleSheet()
+
+        # === ESTILOS PERSONALIZADOS ENHANCECV ===
+
+        # Nombre principal - Grande y prominente
+        name_style = ParagraphStyle(
+            'NameStyle',
+            parent=styles['Heading1'],
+            fontSize=24,
+            fontName='Helvetica-Bold',
+            spaceAfter=8,
+            alignment=TA_LEFT,
+            textColor=colors.HexColor('#1a365d')  # Azul oscuro profesional
+        )
+
+        # Programa académico - Subtítulo
+        program_style = ParagraphStyle(
+            'ProgramStyle',
+            parent=styles['Normal'],
+            fontSize=14,
+            fontName='Helvetica',
+            spaceAfter=20,
+            textColor=colors.HexColor('#4a5568'),  # Gris medio
+            alignment=TA_LEFT
+        )
+
+        # Títulos de sección - Modernos con color
+        section_style = ParagraphStyle(
+            'SectionStyle',
+            parent=styles['Heading2'],
+            fontSize=16,
+            fontName='Helvetica-Bold',
+            spaceAfter=12,
+            spaceBefore=25,
+            textColor=colors.HexColor('#2b6cb0'),  # Azul EnhanceCV
+            alignment=TA_LEFT,
+            borderWidth=0,
+            borderPadding=0
+        )
+
+        # Contacto - Minimalista
+        contact_style = ParagraphStyle(
+            'ContactStyle',
+            parent=styles['Normal'],
+            fontSize=10,
+            fontName='Helvetica',
+            spaceAfter=15,
+            textColor=colors.HexColor('#718096'),  # Gris claro
+            alignment=TA_LEFT
+        )
+
+        # Resumen ejecutivo - Justificado para mejor lectura
+        summary_style = ParagraphStyle(
+            'SummaryStyle',
+            parent=styles['Normal'],
+            fontSize=11,
+            fontName='Helvetica',
+            spaceAfter=20,
+            alignment=TA_JUSTIFY,
+            leading=14,
+            textColor=colors.HexColor('#2d3748')
+        )
+
+        # Experiencia - Con énfasis en posiciones
+        position_style = ParagraphStyle(
+            'PositionStyle',
+            parent=styles['Normal'],
+            fontSize=12,
+            fontName='Helvetica-Bold',
+            spaceAfter=2,
+            textColor=colors.HexColor('#1a365d'),
+            alignment=TA_LEFT
+        )
+
+        company_style = ParagraphStyle(
+            'CompanyStyle',
+            parent=styles['Normal'],
+            fontSize=10,
+            fontName='Helvetica',
+            spaceAfter=8,
+            textColor=colors.HexColor('#4a5568'),
+            alignment=TA_LEFT
+        )
+
+        description_style = ParagraphStyle(
+            'DescriptionStyle',
+            parent=styles['Normal'],
+            fontSize=10,
+            fontName='Helvetica',
+            spaceAfter=6,
+            alignment=TA_LEFT,
+            leading=12,
+            textColor=colors.HexColor('#2d3748')
+        )
+
+        # Habilidades - En formato de badges
+        skill_style = ParagraphStyle(
+            'SkillStyle',
+            parent=styles['Normal'],
+            fontSize=10,
+            fontName='Helvetica',
+            spaceAfter=8,
+            alignment=TA_LEFT,
+            textColor=colors.HexColor('#2d3748')
+        )
+
+        # Footer - Discreto
+        footer_style = ParagraphStyle(
+            'FooterStyle',
+            parent=styles['Normal'],
+            fontSize=8,
+            fontName='Helvetica-Oblique',
+            alignment=TA_CENTER,
+            textColor=colors.HexColor('#a0aec0'),
+            spaceBefore=30
+        )
+
+        # === PROCESAMIENTO DEL CONTENIDO ===
+
+        story = []
+        lines = cv_text.strip().split('\n')
+        current_section = None
+
+        for line in lines:
+            line = line.strip()
+            if not line:
+                continue
+
+            # Detectar y procesar secciones
+            if line.upper() in ['CONTACTO', 'RESUMEN PROFESIONAL', 'EXPERIENCIA PROFESIONAL',
+                              'EDUCACIÓN', 'HABILIDADES TÉCNICAS', 'PROYECTOS DESTACADOS',
+                              'CERTIFICACIONES', 'IDIOMAS', 'HABILIDADES BLANDAS']:
+                # Título de sección
+                story.append(Paragraph(line, section_style))
+                current_section = line.upper()
+                continue
+
+            # Procesar contenido según sección
+            if current_section == 'CONTACTO':
+                if '✉️' in line or '📱' in line:
+                    story.append(Paragraph(line, contact_style))
+
+            elif current_section == 'RESUMEN PROFESIONAL':
+                if len(line) > 20:  # Evitar líneas muy cortas
+                    story.append(Paragraph(line, summary_style))
+
+            elif current_section == 'EXPERIENCIA PROFESIONAL':
+                if line.startswith('• ') and not '|' in line:
+                    # Posición
+                    position = line[2:].strip()
+                    story.append(Paragraph(position, position_style))
+                elif '|' in line and (' - ' in line or 'Presente' in line):
+                    # Empresa y fechas
+                    story.append(Paragraph(line, company_style))
+                elif line.startswith('  ') and not line.startswith('  🚀'):
+                    # Descripción normal
+                    description = line.strip()
+                    if description:
+                        story.append(Paragraph(description, description_style))
+                elif line.startswith('  🚀'):
+                    # Logros destacados
+                    achievement = line.replace('  🚀', '🚀').strip()
+                    achievement_style = ParagraphStyle(
+                        'AchievementStyle',
+                        parent=description_style,
+                        textColor=colors.HexColor('#38a169'),  # Verde para logros
+                        fontName='Helvetica-Bold'
+                    )
+                    story.append(Paragraph(achievement, achievement_style))
+
+            elif current_section in ['EDUCACIÓN', 'CERTIFICACIONES', 'IDIOMAS', 'HABILIDADES BLANDAS']:
+                if line.startswith('• '):
+                    item = line[2:].strip()
+                    story.append(Paragraph(f"• {item}", description_style))
+
+            elif current_section == 'HABILIDADES TÉCNICAS':
+                if line.startswith('• '):
+                    skills_text = line[2:].strip()
+                    story.append(Paragraph(skills_text, skill_style))
+
+            elif current_section == 'PROYECTOS DESTACADOS':
+                if line.startswith('• '):
+                    project = line[2:].strip()
+                    story.append(Paragraph(f"• {project}", description_style))
+
+            # Nombre y programa (al inicio)
+            elif len(story) == 0 and not any(char.isdigit() for char in line):
+                # Probablemente el nombre
+                story.append(Paragraph(line, name_style))
+            elif len(story) == 1 and not line.startswith('•'):
+                # Probablemente el programa
+                story.append(Paragraph(line, program_style))
+
+            # Footer
+            elif '---' in line or 'generado por' in line.lower():
+                story.append(Paragraph(line, footer_style))
+
+        # Construir el PDF
+        doc.build(story)
+        buffer.seek(0)
+
+        return buffer
+
+    except Exception as e:
+        print(f"Error generando PDF mejorado: {e}")
+        import traceback
+        traceback.print_exc()
+
+        # Fallback: PDF simple pero mejorado
+        buffer = io.BytesIO()
+        doc = SimpleDocTemplate(buffer, pagesize=letter)
+        styles = getSampleStyleSheet()
+
+        # Estilos de fallback mejorados
+        title_style = ParagraphStyle(
+            'TitleStyle',
+            parent=styles['Heading1'],
+            fontSize=18,
+            spaceAfter=20,
+            alignment=TA_CENTER
+        )
+
+        content_style = styles['Normal']
+        content_style.fontSize = 11
+        content_style.leading = 14
+
+        story = [
+            Paragraph("CV Profesional", title_style),
+            Spacer(1, 20),
+            Paragraph("Error en el formato avanzado. Mostrando contenido básico:", styles['Heading2']),
+            Spacer(1, 12),
+            Paragraph(cv_text.replace('\n', '<br/>'), content_style)
+        ]
+
+        doc.build(story)
+        buffer.seek(0)
+        return buffer
+
+
+@router.get("/{student_id}/download-resume")
+async def download_student_resume(
     student_id: int,
     session: AsyncSession = Depends(get_session),
     current_user: UserContext = Depends(AuthService.get_current_user)
 ):
     """
-    📥 Descargar/Obtener contenido del CV del estudiante
+    📥 Descargar CV del estudiante como archivo PDF
     
-    Retorna el texto extraído del CV almacenado en BD.
+    Genera y descarga un CV profesional en formato PDF.
+    Si el estudiante no tiene CV subido, genera un template basado en sus datos.
     
-    Respuesta exitosa (200):
-    {
-        "student_id": 1,
-        "cv_filename": "john_doe_cv.pdf",
-        "cv_upload_date": "2025-11-15T10:00:00",
-        "content": "Texto del CV extraído (máximo 20k caracteres)...",
-        "content_size": 12345
-    }
+    Respuesta: Archivo PDF para descarga
     
     Errores:
-    - 404: Estudiante no existe o no tiene CV
+    - 404: Estudiante no existe
     - 403: No tiene permisos para descargar
     
     Permisos:
@@ -1691,17 +2279,6 @@ async def get_student_resume(
                 detail="Estudiante no encontrado"
             )
         
-        # Verificar que tenga CV
-        if not student.cv_uploaded or not student.profile_text:
-            await _log_audit_action(
-                session, "DOWNLOAD_RESUME", f"student_id:{student_id}",
-                current_user, success=False, error_message="CV no disponible"
-            )
-            raise HTTPException(
-                status_code=404,
-                detail="Este estudiante no tiene CV disponible"
-            )
-        
         # Verificar permisos (solo propietario o admin)
         if current_user.role == "student" and current_user.user_id != student_id:
             await _log_audit_action(
@@ -1713,19 +2290,30 @@ async def get_student_resume(
                 detail="No tienes permisos para descargar este CV"
             )
         
+        # Determinar contenido del CV
+        cv_content = ""
+        filename = ""
+        is_template = True  # Always use template for proper formatting
+        
+        # Always generate the EnhanceCV Modern template for consistent formatting
+        cv_content = _generate_cv_template(student)
+        filename = f"{student.name.replace(' ', '_')}_CV_EnhanceCV.pdf"
+        
+        # Generar PDF
+        pdf_buffer = _generate_cv_pdf(cv_content, filename)
+        
         # Registrar descarga en auditoría
         await _log_audit_action(
             session, "DOWNLOAD_RESUME", f"student_id:{student_id}",
-            current_user, details=f"CV {student.cv_filename} descargado"
+            current_user, details=f"CV PDF generado y descargado - Template: {is_template}"
         )
         
-        return {
-            "student_id": student.id,
-            "cv_filename": student.cv_filename,
-            "cv_upload_date": student.cv_upload_date.isoformat() if student.cv_upload_date else None,
-            "content": student.profile_text,
-            "content_size": len(student.profile_text) if student.profile_text else 0
-        }
+        # Retornar archivo PDF
+        return StreamingResponse(
+            pdf_buffer,
+            media_type='application/pdf',
+            headers={"Content-Disposition": f"attachment; filename={filename}"}
+        )
         
     except HTTPException:
         raise

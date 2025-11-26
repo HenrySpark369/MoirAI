@@ -190,7 +190,7 @@ class DistributionTracker:
 distribution_tracker = DistributionTracker(TARGET_DISTRIBUTION)
 
 # Configuración global
-OBJETIVO = 100
+OBJETIVO = 400
 
 def generate_dynamic_prompt():
     """Generar prompt dinámico basado en distribución actual con COHERENCIA TOTAL"""
