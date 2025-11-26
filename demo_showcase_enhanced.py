@@ -48,8 +48,8 @@ class MoirAIDemoShowcase:
             # 2. Mostrar información del rol
             self.display_role_info(role)
 
-            # 3. Demostrar funcionalidades específicas del MVP
-            self.demonstrate_mvp_features(role)
+            # Demostrar funcionalidades del dashboard inicial
+            self.demonstrate_dashboard_features(role)
 
             # 4. Demostrar navegación completa del navbar
             self.showcase_navbar_navigation(role)
@@ -64,9 +64,9 @@ class MoirAIDemoShowcase:
             return {"success": False, "error": str(e)}
 
     def navigate_to_role_profile(self, role):
-        """Navegar al perfil del rol en modo demo"""
-        url = f"{self.base_url}/profile?demo=true&role={role}"
-        print(f"🌐 Navegando a perfil de {role}: {url}")
+        """Navegar al DASHBOARD del rol en modo demo para flujo más lineal"""
+        url = f"{self.base_url}/dashboard?demo=true&role={role}"
+        print(f"🌐 Navegando a dashboard de {role}: {url}")
 
         self.driver.get(url)
         time.sleep(5)  # Tiempo para carga completa
@@ -88,21 +88,21 @@ class MoirAIDemoShowcase:
                 'description': 'Usuario principal - Gestiona su perfil académico y busca oportunidades',
                 'permissions': ['Ver/editar perfil', 'Subir CV', 'Ver ofertas laborales', 'Aplicar a vacantes'],
                 'mvp_features': ['CV Harvard', 'Habilidades inferidas', 'Sistema de matching'],
-                'navbar_sections': ['Dashboard', 'Oportunidades', 'Mi Perfil', 'Mis Aplicaciones']
+                'navbar_sections': ['Dashboard → Oportunidades → Mis Aplicaciones']
             },
             'company': {
                 'title': '🏢 Empresa Colaboradora',
                 'description': 'Reclutador - Busca talento y publica ofertas de trabajo',
                 'permissions': ['Buscar candidatos', 'Ver perfiles anónimos', 'Publicar vacantes', 'Ver métricas'],
                 'mvp_features': ['Búsqueda por habilidades', 'Dashboard KPIs', 'Sistema de matching'],
-                'navbar_sections': ['Dashboard', 'Buscar Candidatos', 'Mi Empresa', 'Mis Vacantes']
+                'navbar_sections': ['Dashboard → Buscar Candidatos → Mis Vacantes']
             },
             'admin': {
                 'title': '👨‍💼 Administrador UNRC',
                 'description': 'Supervisor - Gestiona la plataforma y supervisa métricas',
                 'permissions': ['Ver todos los usuarios', 'Gestionar roles', 'Ver analytics', 'Configurar sistema'],
                 'mvp_features': ['Dashboard analytics', 'Gestión de usuarios', 'Métricas de colocación'],
-                'navbar_sections': ['Dashboard', 'Usuarios', 'Analítica', 'Configuración']
+                'navbar_sections': ['Dashboard → Usuarios → Analítica → Configuración']
             }
         }
 
@@ -113,96 +113,101 @@ class MoirAIDemoShowcase:
         print(f"   Funcionalidades MVP: {', '.join(info.get('mvp_features', []))}")
         print(f"   Secciones del Navbar: {', '.join(info.get('navbar_sections', []))}")
 
-    def demonstrate_mvp_features(self, role):
-        """Demostrar las funcionalidades clave del MVP para cada rol"""
-        print(f"\n🚀 Demostrando funcionalidades MVP para {role}:")
+    def demonstrate_dashboard_features(self, role):
+        """Demostrar las funcionalidades del dashboard inicial para cada rol"""
+        print(f"\n🚀 Demostrando funcionalidades del Dashboard para {role}:")
 
         if role == 'student':
-            self.demonstrate_student_features()
+            self.demonstrate_student_dashboard()
         elif role == 'company':
-            self.demonstrate_company_features()
+            self.demonstrate_company_dashboard()
         elif role == 'admin':
-            self.demonstrate_admin_features()
+            self.demonstrate_admin_dashboard()
 
-    def demonstrate_student_features(self):
-        """Demostrar funcionalidades clave para estudiantes"""
-        print("   📚 1. Perfil Académico Centralizado (Harvard CV)")
+    def demonstrate_student_dashboard(self):
+        """Demostrar funcionalidades del dashboard para estudiantes"""
+        print("   � 1. Dashboard Personalizado")
 
-        # Verificar secciones del CV Harvard
-        sections = {
-            'objective': 'Objetivo Profesional',
-            'education-list': 'Educación',
-            'experience-list': 'Experiencia',
-            'certifications-list': 'Certificaciones',
-            'languages-list': 'Idiomas'
-        }
-
-        present_sections = []
-        for section_id, section_name in sections.items():
-            if self.check_element_exists(By.ID, section_id):
-                present_sections.append(section_name)
-
-        print(f"      ✅ Secciones presentes: {', '.join(present_sections)}")
-
-        print("   🧠 2. Sistema de Habilidades Inferidas")
-        if self.check_element_exists(By.ID, "inferred-skills"):
-            print("      ✅ Contenedor de habilidades detectado")
+        # Verificar KPIs del estudiante
+        kpi_cards = self.driver.find_elements(By.CLASS_NAME, "kpi-card")
+        if kpi_cards:
+            print(f"      ✅ {len(kpi_cards)} métricas personales encontradas")
         else:
-            print("      ⚠️  Sistema de habilidades no visible")
+            print("      ⚠️  KPIs no visibles (puede ser normal en demo)")
 
-        print("   📄 3. Área de Upload de CV")
-        if self.check_element_exists(By.ID, "cv-upload-area"):
-            print("      ✅ Área de upload funcional")
+        print("   🎯 2. Acceso Rápido a Oportunidades")
+        # Verificar acceso rápido a funcionalidades
+        quick_actions = self.driver.find_elements(By.CSS_SELECTOR, "[class*='quick'], [class*='action'], button")
+        if quick_actions:
+            print(f"      ✅ {len(quick_actions)} acciones rápidas disponibles")
         else:
-            print("      ❌ Área de upload no encontrada")
+            print("      ⚠️  Acciones rápidas no encontradas")
 
-    def demonstrate_company_features(self):
-        """Demostrar funcionalidades clave para empresas"""
-        print("   🔍 1. Acceso Restringido a Información Sensible")
-
-        # Verificar que el CV está oculto para empresas
-        cv_card = self.driver.find_elements(By.ID, "cv-upload-card")
-        if cv_card:
-            display_style = cv_card[0].value_of_css_property("display")
-            if display_style == "none":
-                print("      ✅ CV correctamente oculto para empresas")
-            else:
-                print(f"      ❌ CV visible (display: {display_style})")
+        print("   � 3. Progreso de Aplicaciones")
+        # Verificar métricas de progreso
+        progress_elements = self.driver.find_elements(By.CSS_SELECTOR, "[class*='progress'], [class*='chart'], .metric")
+        if progress_elements:
+            print(f"      ✅ {len(progress_elements)} elementos de progreso")
         else:
-            print("      ✅ Sin acceso a área de CV")
+            print("      ⚠️  Elementos de progreso no visibles")
 
-        print("   📊 2. Dashboard con KPIs de Vinculación")
-        # Verificar elementos de métricas
-        kpi_elements = self.driver.find_elements(By.CLASS_NAME, "kpi-card")
+    def demonstrate_company_dashboard(self):
+        """Demostrar funcionalidades del dashboard para empresas"""
+        print("   � 1. KPIs de Vinculación Laboral")
+
+        # Verificar métricas de empresa
+        kpi_cards = self.driver.find_elements(By.CLASS_NAME, "kpi-card")
         metric_elements = self.driver.find_elements(By.CLASS_NAME, "metric")
 
-        if kpi_elements or metric_elements:
-            print(f"      ✅ {len(kpi_elements)} KPIs y {len(metric_elements)} métricas encontradas")
+        if kpi_cards or metric_elements:
+            print(f"      ✅ {len(kpi_cards)} KPIs y {len(metric_elements)} métricas de empresa")
         else:
-            print("      ⚠️  Dashboard de métricas no visible (esperado en demo)")
+            print("      ⚠️  KPIs no visibles (puede ser normal en demo)")
 
-        print("   🎯 3. Sistema de Matching")
-        # En demo, mostrar que el sistema está preparado
-        print("      ✅ Sistema de matching integrado en la plataforma")
-
-    def demonstrate_admin_features(self):
-        """Demostrar funcionalidades clave para administradores"""
-        print("   📈 1. Dashboard de Analytics y KPIs")
-
-        # Verificar elementos de administración
-        profile_form = self.check_element_exists(By.ID, "profile-form")
-        if profile_form:
-            print("      ✅ Panel de administración básico presente")
+        print("   🎯 2. Candidatos Potenciales")
+        # Verificar candidatos destacados
+        candidate_elements = self.driver.find_elements(By.CSS_SELECTOR, "[class*='candidate'], [class*='match']")
+        if candidate_elements:
+            print(f"      ✅ {len(candidate_elements)} candidatos potenciales mostrados")
         else:
-            print("      ⚠️  Panel de administración no encontrado")
+            print("      ⚠️  Candidatos no visibles en dashboard")
 
-        print("   👥 2. Gestión de Usuarios y Roles")
-        # Verificar capacidades de gestión
-        print("      ✅ Sistema de roles implementado")
+        print("   💼 3. Gestión de Vacantes Activas")
+        # Verificar gestión de vacantes
+        vacancy_elements = self.driver.find_elements(By.CSS_SELECTOR, "[class*='vacancy'], [class*='job']")
+        if vacancy_elements:
+            print(f"      ✅ {len(vacancy_elements)} vacantes activas")
+        else:
+            print("      ⚠️  Vacantes no visibles en dashboard")
 
-        print("   📊 3. Métricas de Colocación y Vinculación")
-        # Verificar métricas del sistema
-        print("      ✅ Métricas de sistema disponibles")
+    def demonstrate_admin_dashboard(self):
+        """Demostrar funcionalidades del dashboard para administradores"""
+        print("   📈 1. Métricas Globales del Sistema")
+
+        # Verificar métricas administrativas
+        kpi_cards = self.driver.find_elements(By.CLASS_NAME, "kpi-card")
+        system_metrics = self.driver.find_elements(By.CSS_SELECTOR, "[class*='system'], [class*='metric']")
+
+        if kpi_cards or system_metrics:
+            print(f"      ✅ {len(kpi_cards)} KPIs administrativos y {len(system_metrics)} métricas del sistema")
+        else:
+            print("      ⚠️  Métricas del sistema no visibles")
+
+        print("   👥 2. Resumen de Usuarios Activos")
+        # Verificar información de usuarios
+        user_elements = self.driver.find_elements(By.CSS_SELECTOR, "[class*='user'], [class*='active']")
+        if user_elements:
+            print(f"      ✅ {len(user_elements)} indicadores de usuarios activos")
+        else:
+            print("      ⚠️  Información de usuarios no visible")
+
+        print("   ⚙️  3. Estado de Configuración del Sistema")
+        # Verificar estado del sistema
+        status_elements = self.driver.find_elements(By.CSS_SELECTOR, "[class*='status'], [class*='health'], [class*='config']")
+        if status_elements:
+            print(f"      ✅ {len(status_elements)} indicadores de estado del sistema")
+        else:
+            print("      ⚠️  Estado del sistema no visible")
 
     def showcase_navbar_navigation(self, role):
         """Demostrar navegación completa del navbar para cada rol"""
@@ -232,22 +237,21 @@ class MoirAIDemoShowcase:
             print(f"   ❌ Error en navegación del navbar: {str(e)}")
 
     def get_navigation_paths_by_role(self, role):
-        """Definir rutas de navegación específicas por rol"""
+        """Definir rutas de navegación lineal específicas por rol (excluyendo dashboard donde empezamos)"""
         base_paths = {
             'student': {
-                'Dashboard': {'href_contains': 'dashboard', 'expected_elements': ['kpi-card', 'metric']},
+                # Empezamos en Dashboard, navegamos linealmente: Oportunidades → Mi Perfil → Mis Aplicaciones
                 'Oportunidades': {'href_contains': 'oportunidades', 'expected_elements': ['job-listing', 'filter-section']},
                 'Mi Perfil': {'href_contains': 'profile', 'expected_elements': ['harvard-cv-container', 'cv-upload-area']},
                 'Mis Aplicaciones': {'href_contains': 'applications', 'expected_elements': ['application-list', 'application-status']}
             },
             'company': {
-                'Dashboard': {'href_contains': 'dashboard', 'expected_elements': ['kpi-card', 'metric', 'company-stats']},
+                # Empezamos en Dashboard, navegamos linealmente: Buscar Candidatos → Mis Vacantes
                 'Buscar Candidatos': {'href_contains': 'buscar-candidatos', 'expected_elements': ['search-filters', 'candidate-list']},
-                'Mi Empresa': {'href_contains': 'profile', 'expected_elements': ['company-profile', 'company-info']},
                 'Mis Vacantes': {'href_contains': 'mis-vacantes', 'expected_elements': ['vacancy-list', 'create-vacancy-btn']}
             },
             'admin': {
-                'Dashboard': {'href_contains': 'dashboard', 'expected_elements': ['admin-kpis', 'system-metrics']},
+                # Empezamos en Dashboard, navegamos linealmente: Usuarios → Analítica → Configuración
                 'Usuarios': {'href_contains': 'admin/users', 'expected_elements': ['user-table', 'user-management']},
                 'Analítica': {'href_contains': 'admin/analytics', 'expected_elements': ['analytics-charts', 'reports']},
                 'Configuración': {'href_contains': 'admin/settings', 'expected_elements': ['system-settings', 'config-options']}
@@ -257,7 +261,7 @@ class MoirAIDemoShowcase:
         return base_paths.get(role, {})
 
     def navigate_to_navbar_section(self, path_config, role):
-        """Navegar a una sección específica del navbar y demostrar funcionalidades"""
+        """Navegar a una sección específica del navbar SIN volver atrás (flujo lineal)"""
         try:
             href_contains = path_config['href_contains']
             expected_elements = path_config['expected_elements']
@@ -291,10 +295,7 @@ class MoirAIDemoShowcase:
             # Demostrar funcionalidades específicas de la página
             self.demonstrate_page_functionality(role, href_contains, expected_elements)
 
-            # Volver al perfil para continuar la demo
-            profile_url = f"{self.base_url}/profile?demo=true&role={role}"
-            self.driver.get(profile_url)
-            time.sleep(3)
+            # NO volver al perfil - mantener flujo lineal
 
         except Exception as e:
             print(f"      ❌ Error navegando a sección: {str(e)}")
@@ -324,7 +325,17 @@ class MoirAIDemoShowcase:
 
     def demonstrate_student_functionality(self, section):
         """Demostrar funcionalidades específicas para estudiantes"""
-        if 'oportunidades' in section:
+        if 'profile' in section:
+            print("         📄 Gestionando perfil y CV...")
+            # Verificar elementos de CV
+            cv_elements = self.driver.find_elements(By.CSS_SELECTOR, "[class*='cv'], [class*='upload'], #cv-upload-area")
+            if cv_elements:
+                print(f"         📎 {len(cv_elements)} elementos de CV disponibles")
+            # Verificar Harvard CV container
+            harvard_elements = self.driver.find_elements(By.ID, "harvard-cv-container")
+            if harvard_elements:
+                print(f"         🎓 Harvard CV container encontrado")
+        elif 'oportunidades' in section:
             print("         🎯 Probando filtros de oportunidades...")
             # Intentar interactuar con filtros si existen
             filter_buttons = self.driver.find_elements(By.CLASS_NAME, "filter-btn")
@@ -405,8 +416,8 @@ class MoirAIDemoShowcase:
         """Ejecutar demostración completa de todos los roles"""
         print("🎬 === MOIRAI MVP DEMO SHOWCASE ===")
         print("=" * 60)
-        print("🚀 Demostrando navegación completa del navbar y funcionalidades")
-        print("📱 Navegación visual - Modo Demo Interactivo")
+        print("🚀 Demostrando navegación LINEAL del navbar y funcionalidades")
+        print("📱 Navegación visual - Flujo continuo sin repeticiones")
         print("=" * 60)
 
         results = {}
@@ -460,8 +471,8 @@ def main():
 
     try:
         print("🎬 Iniciando Demo Showcase de MoirAI MVP...")
-        print("💡 Esta demostración mostrará navegación completa del navbar")
-        print("   y funcionalidades específicas para cada rol")
+        print("💡 Esta demostración mostrará navegación LINEAL del navbar")
+        print("   desde Dashboard hasta la última sección sin repeticiones")
         print("⏳ Asegúrate de que el servidor esté corriendo en localhost:8000")
         input("\n🔥 Presiona ENTER para comenzar la demostración...")
 
@@ -478,9 +489,9 @@ def main():
         print("\n💾 Resultados guardados en: demo_showcase_results.json")
 
         print("\n🎯 RESUMEN DE FUNCIONALIDADES DEMOSTRADAS:")
-        print("👨‍🎓 ESTUDIANTES: CV Harvard, habilidades, oportunidades, aplicaciones")
-        print("🏢 EMPRESAS: Dashboard KPIs, búsqueda candidatos, gestión vacantes")
-        print("👨‍💼 ADMINS: Analytics, gestión usuarios, configuración sistema")
+        print("👨‍🎓 ESTUDIANTES: Dashboard personal → Oportunidades → Mi Perfil (CV) → Aplicaciones")
+        print("🏢 EMPRESAS: Dashboard KPIs → Búsqueda candidatos → Gestión vacantes")
+        print("👨‍💼 ADMINS: Dashboard sistema → Gestión usuarios → Analytics → Configuración")
 
     except KeyboardInterrupt:
         print("\n⏹️  Demostración interrumpida por el usuario")
