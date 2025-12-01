@@ -430,8 +430,7 @@ async function viewStudentProfile(studentId) {
     try {
         notificationManager.loading('Cargando perfil...');
 
-        const response = await apiClient.get(`/students/${studentId}`);
-        const student = response.student || response.data;
+        const student = await apiClient.get(`/students/${studentId}`);
 
         notificationManager.hideLoading();
         openStudentProfileModal(student);

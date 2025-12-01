@@ -364,12 +364,27 @@ function renderApplications() {
  */
 async function viewStudentProfile(studentId) {
     try {
-        notificationManager.info('Funcionalidad de ver perfil próximamente disponible');
-        // TODO: Implementar vista de perfil de estudiante
-        console.log('Ver perfil de estudiante:', studentId);
+        notificationManager.loading('Cargando perfil del estudiante...');
+
+        // Obtener datos del estudiante
+        const student = await apiClient.get(`/students/${studentId}`);
+
+        notificationManager.hideLoading();
+
+        // Crear modal con el CV del estudiante
+        openStudentProfileModal(student);
+
     } catch (error) {
-        console.error('Error al ver perfil:', error);
-        notificationManager.error('Error al cargar perfil del estudiante');
+        notificationManager.hideLoading();
+        console.error('Error al cargar perfil:', error);
+
+        if (error.status === 404) {
+            notificationManager.error('Estudiante no encontrado');
+        } else if (error.status === 403) {
+            notificationManager.error('No tienes permisos para ver este perfil');
+        } else {
+            notificationManager.error('Error al cargar perfil del estudiante');
+        }
     }
 }
 
@@ -736,6 +751,320 @@ function getStatusConfig(status) {
     };
 
     return statusMap[status?.toLowerCase()] || statusMap['pending'];
+}
+
+/**
+ * Abrir modal con el perfil/CV del estudiante
+ */
+function openStudentProfileModal(student) {
+    const modal = document.createElement('div');
+    modal.className = 'modal modal-student-profile';
+    modal.id = 'studentProfileModal';
+
+    // Función helper para renderizar educación
+    const renderEducation = (education) => {
+        if (!education || !Array.isArray(education) || education.length === 0) {
+            return '<p style="color: var(--text-secondary); font-style: italic;">No especificado</p>';
+        }
+
+        return education.map(edu => {
+            const institution = edu.institution || '';
+            const degree = edu.degree || '';
+            const field = edu.field_of_study || '';
+            const year = edu.graduation_year || '';
+
+            let html = '<div class="cv-education-item">';
+            if (degree) html += `<div class="cv-item-title">${escapeHtml(degree)}</div>`;
+            if (institution) html += `<div class="cv-item-subtitle">${escapeHtml(institution)}</div>`;
+            if (field) html += `<div class="cv-item-detail">Campo: ${escapeHtml(field)}</div>`;
+            if (year) html += `<div class="cv-item-detail">Año de graduación: ${escapeHtml(String(year))}</div>`;
+            html += '</div>';
+
+            return html;
+        }).join('');
+    };
+
+    // Función helper para renderizar experiencia
+    const renderExperience = (experience) => {
+        if (!experience || !Array.isArray(experience) || experience.length === 0) {
+            return '<p style="color: var(--text-secondary); font-style: italic;">No especificado</p>';
+        }
+
+        return experience.map(exp => {
+            const position = exp.position || '';
+            const company = exp.company || '';
+            const startDate = exp.start_date || '';
+            const endDate = exp.end_date || '';
+            const description = exp.description || '';
+
+            let html = '<div class="cv-experience-item">';
+            if (position) html += `<div class="cv-item-title">${escapeHtml(position)}</div>`;
+            if (company) html += `<div class="cv-item-subtitle">${escapeHtml(company)}</div>`;
+
+            let period = '';
+            if (startDate) period += startDate;
+            if (endDate) period += ` - ${endDate}`;
+            else if (startDate) period += ' - Presente';
+            if (period) html += `<div class="cv-item-period">${escapeHtml(period)}</div>`;
+
+            if (description) html += `<div class="cv-item-description">${escapeHtml(description)}</div>`;
+            html += '</div>';
+
+            return html;
+        }).join('');
+    };
+
+    // Función helper para renderizar items simples
+    const renderSimpleList = (items) => {
+        if (!items || !Array.isArray(items) || items.length === 0) {
+            return '<p style="color: var(--text-secondary); font-style: italic;">No especificado</p>';
+        }
+        return items.map(item => `<li>${escapeHtml(item)}</li>`).join('');
+    };
+
+    modal.innerHTML = `
+        <div class="modal-content modal-profile-content">
+            <span class="close-modal" onclick="document.getElementById('studentProfileModal')?.remove()">&times;</span>
+
+            <div class="modal-header-job">
+                <div class="job-title-section">
+                    <h1><i class="fas fa-user-graduate"></i> ${escapeHtml(student.name || 'Estudiante')}</h1>
+                    <div class="student-profile-meta">
+                        <div class="meta-item">
+                            <i class="fas fa-envelope"></i>
+                            <span>${escapeHtml(student.email || 'No disponible')}</span>
+                        </div>
+                        ${student.phone ? `
+                            <div class="meta-item">
+                                <i class="fas fa-phone"></i>
+                                <span>${escapeHtml(student.phone)}</span>
+                            </div>
+                        ` : ''}
+                        ${student.program ? `
+                            <div class="meta-item">
+                                <i class="fas fa-graduation-cap"></i>
+                                <span>${escapeHtml(student.program)}</span>
+                            </div>
+                        ` : ''}
+                        ${student.semester ? `
+                            <div class="meta-item">
+                                <i class="fas fa-calendar-alt"></i>
+                                <span>Semestre ${student.semester}</span>
+                            </div>
+                        ` : ''}
+                        ${student.industry ? `
+                            <div class="meta-item">
+                                <i class="fas fa-industry"></i>
+                                <span>${escapeHtml(student.industry)}</span>
+                            </div>
+                        ` : ''}
+                        ${student.seniority_level ? `
+                            <div class="meta-item">
+                                <i class="fas fa-level-up-alt"></i>
+                                <span>${escapeHtml(student.seniority_level)}</span>
+                            </div>
+                        ` : ''}
+                    </div>
+                </div>
+            </div>
+
+            <div class="modal-body-job">
+                <div class="profile-cv-sections">
+
+                    <!-- Objetivo Profesional -->
+                    ${student.objective ? `
+                        <div class="profile-card cv-section-card">
+                            <div class="cv-section-header-styled">
+                                <div class="cv-header-icon">
+                                    <i class="fas fa-bullseye"></i>
+                                </div>
+                                <div>
+                                    <h3>Objetivo Profesional</h3>
+                                    <p class="cv-section-subtitle">Declaración profesional</p>
+                                </div>
+                            </div>
+                            <div class="cv-section-content">
+                                <p class="cv-objective-text">${escapeHtml(student.objective)}</p>
+                            </div>
+                        </div>
+                    ` : ''}
+
+                    <!-- Educación -->
+                    ${student.education && student.education.length > 0 ? `
+                        <div class="profile-card cv-section-card">
+                            <div class="cv-section-header-styled">
+                                <div class="cv-header-icon" style="background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);">
+                                    <i class="fas fa-graduation-cap"></i>
+                                </div>
+                                <div>
+                                    <h3>Educación</h3>
+                                    <p class="cv-section-subtitle">Formación académica</p>
+                                </div>
+                            </div>
+                            <div class="cv-section-content">
+                                <div class="cv-education-list">
+                                    ${renderEducation(student.education)}
+                                </div>
+                            </div>
+                        </div>
+                    ` : ''}
+
+                    <!-- Experiencia -->
+                    ${student.experience && student.experience.length > 0 ? `
+                        <div class="profile-card cv-section-card">
+                            <div class="cv-section-header-styled">
+                                <div class="cv-header-icon" style="background: linear-gradient(135deg, #f093fb 0%, #f5576c 100%);">
+                                    <i class="fas fa-briefcase"></i>
+                                </div>
+                                <div>
+                                    <h3>Experiencia Profesional</h3>
+                                    <p class="cv-section-subtitle">Trayectoria laboral</p>
+                                </div>
+                            </div>
+                            <div class="cv-section-content">
+                                <div class="cv-experience-list">
+                                    ${renderExperience(student.experience)}
+                                </div>
+                            </div>
+                        </div>
+                    ` : ''}
+
+                    <!-- Habilidades Técnicas -->
+                    ${student.skills && student.skills.length > 0 ? `
+                        <div class="profile-card cv-section-card">
+                            <div class="cv-section-header-styled">
+                                <div class="cv-header-icon" style="background: linear-gradient(135deg, #4facfe 0%, #00f2fe 100%);">
+                                    <i class="fas fa-code"></i>
+                                </div>
+                                <div>
+                                    <h3>Habilidades Técnicas</h3>
+                                    <p class="cv-section-subtitle">Competencias técnicas</p>
+                                </div>
+                            </div>
+                            <div class="cv-section-content">
+                                <div class="cv-skills-grid">
+                                    ${student.skills.map(skill => `<span class="skill-tag">${escapeHtml(skill)}</span>`).join('')}
+                                </div>
+                            </div>
+                        </div>
+                    ` : ''}
+
+                    <!-- Habilidades Blandas -->
+                    ${student.soft_skills && student.soft_skills.length > 0 ? `
+                        <div class="profile-card cv-section-card">
+                            <div class="cv-section-header-styled">
+                                <div class="cv-header-icon" style="background: linear-gradient(135deg, #fa709a 0%, #fee140 100%);">
+                                    <i class="fas fa-users"></i>
+                                </div>
+                                <div>
+                                    <h3>Habilidades Blandas</h3>
+                                    <p class="cv-section-subtitle">Competencias interpersonales</p>
+                                </div>
+                            </div>
+                            <div class="cv-section-content">
+                                <div class="cv-skills-grid">
+                                    ${student.soft_skills.map(skill => `<span class="skill-tag">${escapeHtml(skill)}</span>`).join('')}
+                                </div>
+                            </div>
+                        </div>
+                    ` : ''}
+
+                    <!-- Certificaciones -->
+                    ${student.certifications && student.certifications.length > 0 ? `
+                        <div class="profile-card cv-section-card">
+                            <div class="cv-section-header-styled">
+                                <div class="cv-header-icon" style="background: linear-gradient(135deg, #fa709a 0%, #fee140 100%);">
+                                    <i class="fas fa-award"></i>
+                                </div>
+                                <div>
+                                    <h3>Certificaciones</h3>
+                                    <p class="cv-section-subtitle">Acreditaciones profesionales</p>
+                                </div>
+                            </div>
+                            <div class="cv-section-content">
+                                <ul class="cv-items-container cv-simple-list">
+                                    ${renderSimpleList(student.certifications)}
+                                </ul>
+                            </div>
+                        </div>
+                    ` : ''}
+
+                    <!-- Idiomas -->
+                    ${student.languages && student.languages.length > 0 ? `
+                        <div class="profile-card cv-section-card">
+                            <div class="cv-section-header-styled">
+                                <div class="cv-header-icon" style="background: linear-gradient(135deg, #a8edea 0%, #fed6e3 100%);">
+                                    <i class="fas fa-globe"></i>
+                                </div>
+                                <div>
+                                    <h3>Idiomas</h3>
+                                    <p class="cv-section-subtitle">Competencias lingüísticas</p>
+                                </div>
+                            </div>
+                            <div class="cv-section-content">
+                                <ul class="cv-items-container cv-simple-list">
+                                    ${renderSimpleList(student.languages)}
+                                </ul>
+                            </div>
+                        </div>
+                    ` : ''}
+
+                    <!-- Proyectos -->
+                    ${student.projects && student.projects.length > 0 ? `
+                        <div class="profile-card cv-section-card">
+                            <div class="cv-section-header-styled">
+                                <div class="cv-header-icon" style="background: linear-gradient(135deg, #ff9a9e 0%, #fecfef 100%);">
+                                    <i class="fas fa-project-diagram"></i>
+                                </div>
+                                <div>
+                                    <h3>Proyectos</h3>
+                                    <p class="cv-section-subtitle">Trabajos realizados</p>
+                                </div>
+                            </div>
+                            <div class="cv-section-content">
+                                <ul class="cv-items-container cv-simple-list">
+                                    ${renderSimpleList(student.projects)}
+                                </ul>
+                            </div>
+                        </div>
+                    ` : ''}
+
+                    <!-- Biografía -->
+                    ${student.bio ? `
+                        <div class="profile-card cv-section-card">
+                            <div class="cv-section-header-styled">
+                                <div class="cv-header-icon" style="background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);">
+                                    <i class="fas fa-info-circle"></i>
+                                </div>
+                                <div>
+                                    <h3>Biografía</h3>
+                                    <p class="cv-section-subtitle">Acerca de mí</p>
+                                </div>
+                            </div>
+                            <div class="cv-section-content">
+                                <p class="cv-objective-text">${escapeHtml(student.bio)}</p>
+                            </div>
+                        </div>
+                    ` : ''}
+
+                </div>
+            </div>
+
+            <div class="modal-footer">
+                <button class="btn btn-secondary" onclick="document.getElementById('studentProfileModal')?.remove()">
+                    <i class="fas fa-times"></i> Cerrar
+                </button>
+            </div>
+        </div>
+    `;
+
+    document.body.appendChild(modal);
+    modal.style.display = 'flex';
+    modal.addEventListener('click', (e) => {
+        if (e.target === modal) {
+            modal.remove();
+        }
+    });
 }
 
 /**

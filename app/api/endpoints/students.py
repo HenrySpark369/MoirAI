@@ -4,7 +4,7 @@ Incluye operaciones para crear, leer, actualizar y eliminar estudiantes
 considerando historias de usuario y flujos de trabajo académicos
 """
 from typing import List, Optional
-from fastapi import APIRouter, Depends, HTTPException, UploadFile, File, Form, Query, BackgroundTasks, status
+from fastapi import APIRouter, Depends, HTTPException, UploadFile, File, Form, Query, BackgroundTasks, status, Request
 from fastapi.responses import FileResponse, StreamingResponse
 from sqlmodel import select, func
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -1356,9 +1356,156 @@ async def get_my_profile(
         raise HTTPException(status_code=500, detail=str(e))
 
 
+def get_synthetic_student_profile(student_id: int) -> StudentProfile:
+    """Obtiene un perfil de estudiante desde la base de datos de CVs sintéticos"""
+    import sqlite3
+    import json
+    import random
+    from datetime import datetime
+    
+    try:
+        # Conectar a la base de datos de CVs sintéticos
+        db_path = "cv_simulator/training_data_cvs.db"
+        conn = sqlite3.connect(db_path)
+        cursor = conn.cursor()
+        
+        # Buscar CV por ID (para casos donde el ID coincida)
+        cursor.execute("SELECT id, industry, seniority, cv_text, annotations FROM cv_dataset WHERE id = ?", (str(student_id),))
+        row = cursor.fetchone()
+        
+        if not row:
+            # Si no existe, buscar uno aleatorio para demo (esto es normal en demo mode)
+            cursor.execute("SELECT id, industry, seniority, cv_text, annotations FROM cv_dataset ORDER BY RANDOM() LIMIT 1")
+            row = cursor.fetchone()
+            
+            if not row:
+                # Si no hay CVs sintéticos, crear un perfil básico
+                conn.close()
+                return StudentProfile(
+                    id=student_id,
+                    name=f"Estudiante Demo {student_id}",
+                    role="student",
+                    first_name=f"Demo {student_id}",
+                    last_name="Student",
+                    email=f"demo{student_id}@unrc.edu.ar",
+                    phone="+54 351 123 4567",
+                    bio="Estudiante demo generado sintéticamente.",
+                    program="Ingeniería en Sistemas",
+                    career="Ingeniería en Sistemas",
+                    semester="6",
+                    skills=["Python", "JavaScript", "SQL"],
+                    soft_skills=["Trabajo en equipo", "Comunicación"],
+                    projects=["Proyecto de desarrollo web"],
+                    objective="Desarrollarme profesionalmente en tecnología.",
+                    education=[{
+                        "institution": "Universidad Nacional de Córdoba",
+                        "degree": "Ingeniería en Sistemas",
+                        "field_of_study": "Ingeniería en Sistemas",
+                        "graduation_year": 2026
+                    }],
+                    experience=[],
+                    certifications=[],
+                    languages=["Español (Nativo)", "Inglés (Básico)"],
+                    industry="Tecnología",
+                    seniority_level="Junior",
+                    cv_uploaded=True,
+                    cv_filename=f"cv_demo_{student_id}.pdf",
+                    cv_upload_date=datetime.now().isoformat(),
+                    created_at=datetime.now().isoformat(),
+                    last_active=datetime.now().isoformat(),
+                    is_active=True
+                )
+        
+        profile_id, industry, seniority, cv_text, annotations_json = row
+        
+        # Parsear annotations
+        annotations = json.loads(annotations_json) if annotations_json else {}
+        
+        # Extraer información del CV usando el extractor Harvard como fallback
+        harvard_fields = _extract_harvard_cv_fields(cv_text)
+        
+        # Usar annotations como fuente principal, harvard_fields como fallback
+        profile_data = {
+            "id": student_id,  # Usar el ID solicitado, no el del CV sintético
+            "name": annotations.get("name") or harvard_fields.get("name", f"Estudiante {student_id}"),
+            "role": "student",
+            "first_name": annotations.get("first_name") or (annotations.get("name", "").split()[0] if annotations.get("name") else f"Demo {student_id}"),
+            "last_name": annotations.get("last_name") or (" ".join(annotations.get("name", "").split()[1:]) if annotations.get("name") and len(annotations.get("name", "").split()) > 1 else "Student"),
+            "email": annotations.get("email", f"demo{student_id}@unrc.edu.ar"),
+            "phone": annotations.get("phone", "+54 351 123 4567"),
+            "bio": harvard_fields.get("objective", "Estudiante generado sintéticamente para demo."),
+            "program": annotations.get("program", "Ingeniería en Sistemas"),
+            "career": annotations.get("career", "Ingeniería en Sistemas"),
+            "semester": annotations.get("semester", "6"),
+            "skills": annotations.get("skills", ["Python", "JavaScript", "SQL"]),
+            "soft_skills": annotations.get("soft_skills", ["Trabajo en equipo", "Comunicación"]),
+            "projects": annotations.get("projects", ["Proyecto de desarrollo web"]),
+            "objective": harvard_fields.get("objective", "Desarrollarme profesionalmente."),
+            "education": harvard_fields.get("education", [{
+                "institution": "Universidad Nacional de Córdoba",
+                "degree": "Ingeniería en Sistemas",
+                "field_of_study": "Ingeniería en Sistemas",
+                "graduation_year": 2026
+            }]),
+            "experience": harvard_fields.get("experience", []),
+            "certifications": harvard_fields.get("certifications", []),
+            "languages": annotations.get("languages", ["Español (Nativo)", "Inglés (Básico)"]),
+            "industry": industry,
+            "seniority_level": seniority,
+            "cv_uploaded": True,
+            "cv_filename": f"cv_synthetic_{profile_id}.pdf",
+            "cv_upload_date": datetime.now().isoformat(),
+            "created_at": datetime.now().isoformat(),
+            "last_active": datetime.now().isoformat(),
+            "is_active": True
+        }
+        
+        conn.close()
+        return StudentProfile(**profile_data)
+        
+    except Exception as e:
+        print(f"Error obteniendo perfil sintético para student_id {student_id}: {e}")
+        # Retornar perfil básico en caso de error
+        return StudentProfile(
+            id=student_id,
+            name=f"Estudiante Demo {student_id}",
+            role="student",
+            first_name=f"Demo {student_id}",
+            last_name="Student",
+            email=f"demo{student_id}@unrc.edu.ar",
+            phone="+54 351 123 4567",
+            bio="Estudiante demo generado sintéticamente.",
+            program="Ingeniería en Sistemas",
+            career="Ingeniería en Sistemas",
+            semester="6",
+            skills=["Python", "JavaScript", "SQL"],
+            soft_skills=["Trabajo en equipo", "Comunicación"],
+            projects=["Proyecto de desarrollo web"],
+            objective="Desarrollarme profesionalmente en tecnología.",
+            education=[{
+                "institution": "Universidad Nacional de Córdoba",
+                "degree": "Ingeniería en Sistemas",
+                "field_of_study": "Ingeniería en Sistemas",
+                "graduation_year": 2026
+            }],
+            experience=[],
+            certifications=[],
+            languages=["Español (Nativo)", "Inglés (Básico)"],
+            industry="Tecnología",
+            seniority_level="Junior",
+            cv_uploaded=True,
+            cv_filename=f"cv_demo_{student_id}.pdf",
+            cv_upload_date=datetime.now().isoformat(),
+            created_at=datetime.now().isoformat(),
+            last_active=datetime.now().isoformat(),
+            is_active=True
+        )
+
+
 @router.get("/{student_id}", response_model=StudentProfile)
 async def get_student(
     student_id: int,
+    request: Request,
     session: AsyncSession = Depends(get_session),
     current_user: UserContext = Depends(AuthService.get_current_user)
 ):
@@ -1368,6 +1515,15 @@ async def get_student(
     Historia de usuario: Como administrador o estudiante, quiero ver los detalles
     completos de un perfil estudiantil para revisar información y hacer seguimiento.
     """
+    # Handle demo mode
+    demo_header = request.headers.get("X-Demo-Mode")
+    if demo_header == "true" and current_user and current_user.role == "anonymous":
+        current_user = UserContext(
+            role="company",
+            user_id=999,
+            email="demo@company.com"
+        )
+    
     # Verificar permisos básicos
     if current_user.role not in ["student", "admin", "company"]:
         raise HTTPException(
@@ -1376,6 +1532,16 @@ async def get_student(
         )
     student = await session.get(Student, student_id)
     if not student:
+        # Check if demo mode and return synthetic profile
+        demo_header = request.headers.get("X-Demo-Mode")
+        if demo_header == "true":
+            synthetic_student = get_synthetic_student_profile(student_id)
+            await _log_audit_action(
+                session, "GET_STUDENT", f"student_id:{student_id}",
+                current_user, details="Perfil sintético demo retornado"
+            )
+            return synthetic_student
+        
         await _log_audit_action(
             session, "GET_STUDENT", f"student_id:{student_id}",
             current_user, success=False, error_message="Estudiante no encontrado"
@@ -2860,12 +3026,235 @@ async def search_demo_students(
         
         conn.close()
         return results
-        
+    
     except Exception as e:
         print(f"Error searching demo students: {e}")
         raise HTTPException(status_code=500, detail="Error loading demo students")
 
 
+def get_mock_student_profile(student_id: int) -> StudentProfile:
+    """Retorna un perfil de estudiante mock para demo mode"""
+    mock_profiles = {
+        1001: {
+            "id": 1001,
+            "name": "Ana García López",
+            "role": "student",
+            "first_name": "Ana",
+            "last_name": "García López",
+            "email": "ana.garcia@unrc.edu.ar",
+            "phone": "+54 351 123 4567",
+            "bio": "Estudiante de Ingeniería en Sistemas apasionada por el desarrollo web y la inteligencia artificial.",
+            "program": "Ingeniería en Sistemas",
+            "career": "Ingeniería en Sistemas",
+            "semester": "8",
+            "skills": ["Python", "JavaScript", "React", "Node.js", "SQL", "Git"],
+            "soft_skills": ["Trabajo en equipo", "Comunicación", "Resolución de problemas", "Aprendizaje continuo"],
+            "projects": ["Sistema de gestión universitaria", "Aplicación móvil de delivery", "Chatbot de atención al cliente"],
+            "objective": "Desarrollar soluciones tecnológicas innovadoras que impacten positivamente en la sociedad, especializándome en inteligencia artificial y desarrollo web.",
+            "education": [
+                {
+                    "institution": "Universidad Nacional de Córdoba",
+                    "degree": "Ingeniería en Sistemas",
+                    "field_of_study": "Ingeniería en Sistemas de Información",
+                    "graduation_year": 2026
+                }
+            ],
+            "experience": [
+                {
+                    "position": "Desarrollador Frontend",
+                    "company": "TechSolutions SA",
+                    "start_date": "2024-03",
+                    "end_date": "2024-08",
+                    "description": "Desarrollo de interfaces de usuario responsivas utilizando React y TypeScript. Colaboración en equipo ágil."
+                }
+            ],
+            "certifications": ["Certificación en React", "Certificación en Python"],
+            "languages": ["Español (Nativo)", "Inglés (Intermedio)", "Portugués (Básico)"],
+            "industry": "Tecnología",
+            "seniority_level": "Junior",
+            "cv_uploaded": True,
+            "cv_filename": "cv_ana_garcia.pdf",
+            "cv_upload_date": "2025-11-15T10:00:00",
+            "created_at": "2025-09-01T00:00:00",
+            "last_active": "2025-11-30T00:00:00",
+            "is_active": True
+        },
+        1004: {
+            "id": 1004,
+            "name": "Carlos Rodríguez",
+            "role": "student",
+            "first_name": "Carlos",
+            "last_name": "Rodríguez",
+            "email": "carlos.rodriguez@unrc.edu.ar",
+            "phone": "+54 351 987 6543",
+            "bio": "Estudiante de Ingeniería Eléctrica con interés en energías renovables y automatización industrial.",
+            "program": "Ingeniería Eléctrica",
+            "career": "Ingeniería Eléctrica",
+            "semester": "7",
+            "skills": ["MATLAB", "C++", "Arduino", "PLC", "Autocad", "Electrónica"],
+            "soft_skills": ["Análisis crítico", "Trabajo bajo presión", "Adaptabilidad", "Liderazgo"],
+            "projects": ["Sistema de monitoreo solar", "Robot autónomo", "Instalación eléctrica residencial"],
+            "objective": "Contribuir al desarrollo de soluciones energéticas sostenibles mediante la aplicación de tecnologías avanzadas en el campo de la ingeniería eléctrica.",
+            "education": [
+                {
+                    "institution": "Universidad Nacional de Córdoba",
+                    "degree": "Ingeniería Eléctrica",
+                    "field_of_study": "Ingeniería Eléctrica",
+                    "graduation_year": 2026
+                }
+            ],
+            "experience": [
+                {
+                    "position": "Técnico en Electrónica",
+                    "company": "ElectroTech SRL",
+                    "start_date": "2024-01",
+                    "end_date": "2024-06",
+                    "description": "Mantenimiento y reparación de equipos electrónicos industriales. Diseño de circuitos básicos."
+                }
+            ],
+            "certifications": ["Certificación en PLC", "Certificación en Energías Renovables"],
+            "languages": ["Español (Nativo)", "Inglés (Avanzado)"],
+            "industry": "Energía",
+            "seniority_level": "Junior",
+            "cv_uploaded": True,
+            "cv_filename": "cv_carlos_rodriguez.pdf",
+            "cv_upload_date": "2025-11-10T14:00:00",
+            "created_at": "2025-08-15T00:00:00",
+            "last_active": "2025-11-29T00:00:00",
+            "is_active": True
+        },
+        1006: {
+            "id": 1006,
+            "name": "María Fernández",
+            "role": "student",
+            "first_name": "María",
+            "last_name": "Fernández",
+            "email": "maria.fernandez@unrc.edu.ar",
+            "phone": "+54 351 555 1234",
+            "bio": "Estudiante de Administración con pasión por la gestión empresarial y el emprendimiento.",
+            "program": "Licenciatura en Administración",
+            "career": "Administración",
+            "semester": "6",
+            "skills": ["Excel", "Power BI", "SAP", "Gestión de proyectos", "Análisis financiero"],
+            "soft_skills": ["Negociación", "Liderazgo", "Empatía", "Toma de decisiones"],
+            "projects": ["Plan de negocio para startup", "Análisis de mercado", "Sistema de gestión administrativa"],
+            "objective": "Desarrollar una carrera en gestión empresarial, contribuyendo al crecimiento sostenible de organizaciones mediante estrategias innovadoras y eficientes.",
+            "education": [
+                {
+                    "institution": "Universidad Nacional de Córdoba",
+                    "degree": "Licenciatura en Administración",
+                    "field_of_study": "Administración de Empresas",
+                    "graduation_year": 2027
+                }
+            ],
+            "experience": [
+                {
+                    "position": "Asistente Administrativo",
+                    "company": "Consultora ABC",
+                    "start_date": "2024-02",
+                    "end_date": "2024-07",
+                    "description": "Apoyo en gestión administrativa, elaboración de reportes y coordinación de proyectos."
+                }
+            ],
+            "certifications": ["Certificación en Gestión de Proyectos", "Certificación en Excel Avanzado"],
+            "languages": ["Español (Nativo)", "Inglés (Intermedio)", "Francés (Básico)"],
+            "industry": "Consultoría",
+            "seniority_level": "Junior",
+            "cv_uploaded": True,
+            "cv_filename": "cv_maria_fernandez.pdf",
+            "cv_upload_date": "2025-11-12T16:00:00",
+            "created_at": "2025-09-10T00:00:00",
+            "last_active": "2025-11-28T00:00:00",
+            "is_active": True
+        },
+        1007: {
+            "id": 1007,
+            "name": "Juan Pérez Martínez",
+            "role": "student",
+            "first_name": "Juan",
+            "last_name": "Pérez Martínez",
+            "email": "juan.perez@unrc.edu.ar",
+            "phone": "+54 351 444 5678",
+            "bio": "Estudiante de Ingeniería Civil con enfoque en construcción sostenible y gestión de proyectos.",
+            "program": "Ingeniería Civil",
+            "career": "Ingeniería Civil",
+            "semester": "9",
+            "skills": ["AutoCAD", "Revit", "SAP2000", "Gestión de proyectos", "Normativas de construcción"],
+            "soft_skills": ["Planificación", "Organización", "Trabajo en equipo", "Responsabilidad"],
+            "projects": ["Diseño de estructura residencial", "Proyecto de urbanización", "Análisis estructural"],
+            "objective": "Contribuir al desarrollo de infraestructuras sostenibles que mejoren la calidad de vida de las comunidades, aplicando conocimientos técnicos y principios de gestión eficiente.",
+            "education": [
+                {
+                    "institution": "Universidad Nacional de Córdoba",
+                    "degree": "Ingeniería Civil",
+                    "field_of_study": "Ingeniería Civil",
+                    "graduation_year": 2025
+                }
+            ],
+            "experience": [
+                {
+                    "position": "Pasante en Construcción",
+                    "company": "Constructora del Sur",
+                    "start_date": "2024-01",
+                    "end_date": "2024-06",
+                    "description": "Apoyo en diseño de planos, supervisión de obras y elaboración de presupuestos."
+                }
+            ],
+            "certifications": ["Certificación en AutoCAD", "Certificación en Gestión de Proyectos"],
+            "languages": ["Español (Nativo)", "Inglés (Intermedio)"],
+            "industry": "Construcción",
+            "seniority_level": "Junior",
+            "cv_uploaded": True,
+            "cv_filename": "cv_juan_perez.pdf",
+            "cv_upload_date": "2025-11-08T12:00:00",
+            "created_at": "2025-07-01T00:00:00",
+            "last_active": "2025-11-27T00:00:00",
+            "is_active": True
+        }
+    }
+    
+    profile_data = mock_profiles.get(student_id)
+    if not profile_data:
+        # Default mock profile
+        profile_data = {
+            "id": student_id,
+            "name": f"Estudiante Demo {student_id}",
+            "role": "student",
+            "first_name": f"Demo {student_id}",
+            "last_name": "Student",
+            "email": f"demo{student_id}@unrc.edu.ar",
+            "phone": "+54 351 123 4567",
+            "bio": "Estudiante demo para pruebas del sistema MoirAI.",
+            "program": "Ingeniería en Sistemas",
+            "career": "Ingeniería en Sistemas",
+            "semester": "6",
+            "skills": ["Python", "JavaScript", "SQL"],
+            "soft_skills": ["Trabajo en equipo", "Comunicación"],
+            "projects": ["Proyecto demo"],
+            "objective": "Aprender y desarrollarme profesionalmente en el campo de la tecnología.",
+            "education": [
+                {
+                    "institution": "Universidad Nacional de Córdoba",
+                    "degree": "Ingeniería en Sistemas",
+                    "field_of_study": "Ingeniería en Sistemas",
+                    "graduation_year": 2026
+                }
+            ],
+            "experience": [],
+            "certifications": [],
+            "languages": ["Español (Nativo)", "Inglés (Básico)"],
+            "industry": "Tecnología",
+            "seniority_level": "Junior",
+            "cv_uploaded": True,
+            "cv_filename": f"cv_demo_{student_id}.pdf",
+            "cv_upload_date": "2025-11-01T00:00:00",
+            "created_at": "2025-09-01T00:00:00",
+            "last_active": "2025-11-30T00:00:00",
+            "is_active": True
+        }
+    
+    return StudentProfile(**profile_data)
+        
 # ============================================================================
 # END OF STUDENTS ENDPOINTS
 # ============================================================================

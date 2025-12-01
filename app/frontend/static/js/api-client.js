@@ -68,6 +68,13 @@ class ApiClient {
       headers['X-API-Key'] = this.token
     }
 
+    // Check for demo mode
+    const urlParams = new URLSearchParams(window.location.search);
+    const isDemoMode = urlParams.get('demo') === 'true';
+    if (isDemoMode) {
+      headers['X-Demo-Mode'] = 'true';
+    }
+
     return headers
   }
 
@@ -189,6 +196,13 @@ class ApiClient {
     if (this.token) {
       // ✅ Usar X-API-Key header en file uploads también
       headers['X-API-Key'] = this.token
+    }
+
+    // Check for demo mode
+    const urlParams = new URLSearchParams(window.location.search);
+    const isDemoMode = urlParams.get('demo') === 'true';
+    if (isDemoMode) {
+      headers['X-Demo-Mode'] = 'true';
     }
 
     try {
