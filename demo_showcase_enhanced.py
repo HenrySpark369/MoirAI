@@ -7,35 +7,93 @@ y funcionalidades específicas para cada rol en modo demo.
 
 import time
 import json
+import requests
+import subprocess
+import shutil
 from selenium import webdriver
 from selenium.webdriver.chrome.options import Options
 from selenium.webdriver.common.by import By
 from selenium.webdriver.support.ui import WebDriverWait
 from selenium.webdriver.support import expected_conditions as EC
 from selenium.webdriver.chrome.service import Service
-from webdriver_manager.chrome import ChromeDriverManager
 from selenium.common.exceptions import TimeoutException, NoSuchElementException
 
 
 class MoirAIDemoShowcase:
     def __init__(self):
-        self.base_url = "http://localhost:8000"
+        self.base_url = "http://127.0.0.1:8000"
         self.roles = ['student', 'company', 'admin']
         self.demo_data = {}
+        self.driver = None
+        self.wait = None
+        
+        # Verificar conectividad al backend primero
+        self._verify_backend_connectivity()
+        
+        # Luego inicializar ChromeDriver
+        self._initialize_chromedriver()
 
-        # Configurar Chrome en modo visual (no headless para demostración)
-        chrome_options = Options()
-        chrome_options.add_argument("--no-sandbox")
-        chrome_options.add_argument("--disable-dev-shm-usage")
-        chrome_options.add_argument("--window-size=1920,1080")
-
-        # Inicializar el driver
-        self.driver = webdriver.Chrome(
-            service=Service(ChromeDriverManager().install()),
-            options=chrome_options
+    def _verify_backend_connectivity(self):
+        """Verificar que el backend esté disponible antes de inicializar Selenium"""
+        print("🔍 Verificando conectividad al backend...")
+        max_retries = 5
+        retry_delay = 2
+        
+        for attempt in range(max_retries):
+            try:
+                response = requests.get(f"{self.base_url}/", timeout=5)
+                if response.status_code == 200:
+                    print("✅ Backend disponible en http://127.0.0.1:8000")
+                    return
+            except requests.exceptions.RequestException as e:
+                if attempt < max_retries - 1:
+                    print(f"   ⏳ Intento {attempt + 1}/{max_retries} fallido. Reintentando en {retry_delay}s...")
+                    time.sleep(retry_delay)
+        
+        raise ConnectionError(
+            "❌ No se puede conectar al backend en http://127.0.0.1:8000\n"
+            "   Por favor, asegúrate de ejecutar: uvicorn app.main:app --reload"
         )
 
-        self.wait = WebDriverWait(self.driver, 15)
+    def _initialize_chromedriver(self):
+        """Inicializar ChromeDriver usando solo el del sistema (sin descargas de internet)"""
+        print("🚀 Inicializando ChromeDriver...")
+        
+        try:
+            # Configurar Chrome en modo visual (no headless para demostración)
+            chrome_options = Options()
+            chrome_options.add_argument("--no-sandbox")
+            chrome_options.add_argument("--disable-dev-shm-usage")
+            chrome_options.add_argument("--window-size=1920,1080")
+            chrome_options.add_argument("--enable-automation")
+            
+            print("   🔗 Buscando ChromeDriver en el sistema...")
+            
+            # Buscar chromedriver en el PATH del sistema
+            chromedriver_path = shutil.which('chromedriver')
+            
+            if chromedriver_path:
+                print(f"   ✅ ChromeDriver encontrado: {chromedriver_path}")
+                service = Service(chromedriver_path)
+                self.driver = webdriver.Chrome(
+                    service=service,
+                    options=chrome_options
+                )
+            else:
+                print("   ⚠️  ChromeDriver no encontrado en PATH, intentando con webdriver automático...")
+                # Fallback: dejar que Selenium lo busque en el PATH
+                self.driver = webdriver.Chrome(options=chrome_options)
+            
+            self.wait = WebDriverWait(self.driver, 15)
+            print("✅ ChromeDriver inicializado correctamente")
+            
+        except Exception as e:
+            raise RuntimeError(
+                f"❌ Error inicializando ChromeDriver: {str(e)}\n"
+                f"   Asegúrate de tener ChromeDriver instalado:\n"
+                f"   - brew install --cask chromedriver\n"
+                f"   - O instala Chrome: brew install --cask google-chrome"
+            )
 
     def showcase_role(self, role):
         """Demostración visual completa de un rol específico"""
@@ -1162,16 +1220,17 @@ def main():
             print(f"\n🔄 === CICLO #{cycle_count} ===")
             print(f"⏰ Iniciado: {time.strftime('%H:%M:%S')}")
 
-            # Crear nueva instancia para cada ciclo
-            showcase = MoirAIDemoShowcase()
-
+            showcase = None
             try:
+                # Crear nueva instancia para cada ciclo (con manejo de errores)
+                print("🔧 Inicializando demostración...")
+                showcase = MoirAIDemoShowcase()
+                
                 print("🎬 Iniciando Demo Showcase de MoirAI MVP...")
                 print("💡 Esta demostración mostrará EXPLORACIÓN COMPLETA:")
                 print("   🏠 2.5 minutos explorando la raíz por secciones principales")
                 print("   🧭 Navegación LINEAL del navbar desde Dashboard hasta la última sección")
                 print("   👥 Demostración de funcionalidades para todos los roles")
-                print("⏳ Asegúrate de que el servidor esté corriendo en localhost:8000")
 
                 results = showcase.run_complete_showcase()
 
@@ -1201,8 +1260,27 @@ def main():
                 else:
                     print(f"\n⚠️  Ciclo #{cycle_count} completado con algunos problemas")
 
+            except ConnectionError as e:
+                print(f"\n❌ Error de conectividad: {str(e)}")
+                print("\n📋 INSTRUCCIONES:")
+                print("   1. Abre una nueva terminal")
+                print("   2. Ejecuta: uvicorn app.main:app --reload")
+                print("   3. Espera hasta que veas: 'Application startup complete.'")
+                print("   4. Vuelve aquí y reinicia este script")
+                raise
+                
+            except Exception as e:
+                print(f"\n❌ Error inicializando demostración: {str(e)}")
+                import traceback
+                traceback.print_exc()
+                print("\n📋 AYUDA DE DIAGNÓSTICO:")
+                print("   - ¿El backend está corriendo? (uvicorn app.main:app --reload)")
+                print("   - ¿Chrome está instalado? (brew install --cask google-chrome)")
+                print("   - ¿Puedes acceder a http://127.0.0.1:8000?")
+                
             finally:
-                showcase.cleanup()
+                if showcase:
+                    showcase.cleanup()
 
             # Pausa entre ciclos
             print(f"\n⏳ Esperando 10 segundos antes del siguiente ciclo...")
@@ -1213,7 +1291,7 @@ def main():
         print("\n⏹️  Demostración detenida por el usuario")
         print(f"✅ Total de ciclos completados: {cycle_count}")
     except Exception as e:
-        print(f"❌ Error general en la demostración: {str(e)}")
+        print(f"\n❌ Error fatal: {str(e)}")
         print(f"✅ Ciclos completados antes del error: {cycle_count}")
 
 
