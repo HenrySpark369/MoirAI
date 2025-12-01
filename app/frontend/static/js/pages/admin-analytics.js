@@ -455,34 +455,42 @@ class AdminAnalyticsPage {
                 return null;
             }
 
+            // Limpiar cualquier dimensión previa del canvas
+            canvas.removeAttribute('height');
+            canvas.removeAttribute('width');
+            canvas.style.removeProperty('height');
+            canvas.style.removeProperty('width');
+
             // Forzar dimensiones del contenedor padre
             const wrapper = canvas.parentElement;
             if (wrapper) {
-                wrapper.style.height = '300px !important';
-                wrapper.style.width = '100% !important';
-                wrapper.style.overflow = 'visible !important';
+                wrapper.style.height = '300px';
+                wrapper.style.width = '100%';
+                wrapper.style.overflow = 'visible';
+                wrapper.style.position = 'relative';
             }
 
-            // Forzar dimensiones del canvas - consistentes
-            canvas.style.height = '300px !important';
-            canvas.style.width = '100% !important';
-            canvas.style.maxHeight = '300px !important';
-            canvas.style.maxWidth = '100% !important';
-            canvas.height = 300;
-            canvas.width = 400; // Ancho fijo para consistencia
-
-            // Usar requestAnimationFrame para asegurar que el DOM esté actualizado
+            // Esperar a que el DOM esté completamente listo antes de crear el gráfico
             return new Promise((resolve) => {
-                requestAnimationFrame(() => {
+                setTimeout(() => {
                     try {
-                        // Crear gráfico con configuración restrictiva
+                        // Verificar que el canvas esté realmente en el DOM y visible
+                        if (!canvas.isConnected) {
+                            console.warn(`Canvas ${canvasId} is not connected to DOM`);
+                            resolve(null);
+                            return;
+                        }
+
+                        // Crear gráfico con configuración optimizada para renderizado inmediato
                         const chart = new Chart(canvas, {
                             ...config,
                             options: {
                                 ...config.options,
-                                responsive: false, // Deshabilitar responsive para control total
+                                responsive: true,
                                 maintainAspectRatio: false,
-                                animation: false, // Deshabilitar animaciones que pueden causar problemas
+                                animation: {
+                                    duration: 0 // Sin animaciones para renderizado inmediato
+                                },
                                 plugins: {
                                     ...config.options.plugins,
                                     legend: { display: false }
@@ -490,22 +498,28 @@ class AdminAnalyticsPage {
                             }
                         });
 
-                        // Re-afirmar dimensiones finales después de crear el gráfico
+                        // Forzar múltiples actualizaciones para asegurar renderizado
                         setTimeout(() => {
-                            canvas.style.height = '300px !important';
-                            canvas.style.width = '100% !important';
-                            canvas.height = 300;
-                            canvas.width = 400;
-                            // Forzar un update del gráfico para asegurar que se renderice
-                            chart.update();
-                        }, 50);
+                            chart.resize();
+                            chart.update('none');
+                            // Segunda actualización después de un breve delay
+                            setTimeout(() => {
+                                chart.resize();
+                                chart.update('none');
+                                // Tercera actualización para asegurar renderizado completo
+                                setTimeout(() => {
+                                    chart.resize();
+                                    chart.update('none');
+                                }, 100);
+                            }, 50);
+                        }, 10);
 
                         resolve(chart);
                     } catch (error) {
                         console.error(`Error creating chart ${canvasId}:`, error);
                         resolve(null);
                     }
-                });
+                }, 100); // Delay mayor para asegurar que el DOM esté listo
             });
         };
 
@@ -603,6 +617,15 @@ class AdminAnalyticsPage {
 
         // Ejecutar la creación de gráficos de manera asíncrona
         await createChartsAsync();
+
+        // Forzar renderizado final después de crear todos los gráficos
+        setTimeout(() => {
+            this.forceChartDimensions();
+            // Segunda verificación después de un delay adicional
+            setTimeout(() => {
+                this.forceChartDimensions();
+            }, 200);
+        }, 150);
     }
 
     /**
@@ -637,13 +660,29 @@ class AdminAnalyticsPage {
      */
     ensureChartDimensions() {
         const chartIds = ['students-chart', 'jobs-chart', 'applications-chart', 'success-rate-chart'];
-        chartIds.forEach(id => {
+        chartIds.forEach((id, index) => {
             const canvas = document.getElementById(id);
             if (canvas) {
-                canvas.style.height = '300px';
-                canvas.style.width = '100%';
-                canvas.height = 300;
-                canvas.width = 400;
+                // Limpiar dimensiones previas
+                canvas.removeAttribute('height');
+                canvas.removeAttribute('width');
+                canvas.style.removeProperty('height');
+                canvas.style.removeProperty('width');
+
+                // Asegurar que el contenedor tenga dimensiones correctas
+                const wrapper = canvas.parentElement;
+                if (wrapper) {
+                    wrapper.style.height = '300px';
+                    wrapper.style.width = '100%';
+                    wrapper.style.overflow = 'visible';
+                }
+            }
+            // Actualizar el gráfico correspondiente si existe
+            const chartKeys = ['students', 'jobs', 'applications', 'successRate'];
+            const chart = this.charts[chartKeys[index]];
+            if (chart && typeof chart.resize === 'function') {
+                chart.resize();
+                chart.update('none');
             }
         });
     }
@@ -653,24 +692,30 @@ class AdminAnalyticsPage {
      */
     forceChartDimensions() {
         const chartIds = ['students-chart', 'jobs-chart', 'applications-chart', 'success-rate-chart'];
-        chartIds.forEach(id => {
+        chartIds.forEach((id, index) => {
             const canvas = document.getElementById(id);
             if (canvas) {
-                // Forzar dimensiones del canvas - consistentes
-                canvas.style.height = '300px !important';
-                canvas.style.width = '100% !important';
-                canvas.style.maxHeight = '300px !important';
-                canvas.style.maxWidth = '100% !important';
-                canvas.height = 300;
-                canvas.width = 400;
+                // Limpiar cualquier dimensión previa del canvas
+                canvas.removeAttribute('height');
+                canvas.removeAttribute('width');
+                canvas.style.removeProperty('height');
+                canvas.style.removeProperty('width');
 
                 // Forzar dimensiones del wrapper
                 const wrapper = canvas.parentElement;
                 if (wrapper) {
-                    wrapper.style.height = '300px !important';
-                    wrapper.style.width = '100% !important';
-                    wrapper.style.overflow = 'visible !important';
+                    wrapper.style.height = '300px';
+                    wrapper.style.width = '100%';
+                    wrapper.style.overflow = 'visible';
+                    wrapper.style.position = 'relative';
                 }
+            }
+            // Actualizar el gráfico correspondiente si existe
+            const chartKeys = ['students', 'jobs', 'applications', 'successRate'];
+            const chart = this.charts[chartKeys[index]];
+            if (chart && typeof chart.resize === 'function') {
+                chart.resize();
+                chart.update('none');
             }
         });
     }
