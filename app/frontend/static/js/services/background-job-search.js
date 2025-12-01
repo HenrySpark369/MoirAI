@@ -281,7 +281,16 @@ class BackgroundJobSearchService {
 
             if (data && data.jobs && Array.isArray(data.jobs)) {
                 console.log(`📦 Cache cargado: ${data.jobs.length} de ${data.total} empleos disponibles`);
-                return data.jobs;
+
+                // ✨ Mapear IDs para consistencia con getDemoJobs()
+                const mappedJobs = data.jobs.map(job => ({
+                    ...job,
+                    id: job.external_job_id || job.id,  // Use external_job_id as id for compatibility
+                    job_id: job.external_job_id || job.id,
+                    skills: Array.isArray(job.skills) ? job.skills : (job.skills ? JSON.parse(job.skills) : [])
+                }));
+
+                return mappedJobs;
             }
 
             console.log('📦 Cache vacío o sin datos');
