@@ -383,6 +383,6 @@ class JobPosting(SQLModel, table=True):
             "salary_min": self.salary_min,
             "salary_max": self.salary_max,
             "currency": self.currency,
-            "published_at": self.published_at.isoformat() if self.published_at else None,
+            "published_at": self.published_at,
             "source": self.source,
         }

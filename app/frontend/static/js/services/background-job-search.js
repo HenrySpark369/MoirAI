@@ -149,19 +149,19 @@ class BackgroundJobSearchService {
         this.isSearching = true;
 
         try {
-            // ✨ MEJORADO: Enviar más parámetros para mejor relevancia
+            // ✨ Usar el endpoint de scraping que retorna JobOffer con job_id
+            const params = new URLSearchParams({
+                keyword: keyword,
+                detailed: 'true',
+                full_details: 'false',
+                limit: this.maxResultsPerBatch.toString()
+            });
+
             const response = await apiClient.post('/job-scraping/search', {
                 keyword: keyword,
-                detailed: true,           // Datos básicos (más rápido)
-                sort_by: 'relevance',      // Ordenar por relevancia
-                page: 1,
-                // Parámetros opcionales para enriquecer búsquedas
-                location: null,            // Se puede parametrizar después
-                category: null,            // Categoría de trabajo
-                experience_level: null,    // Nivel de experiencia
-                work_mode: null,           // Modalidad (remoto, híbrido, presencial)
-                job_type: null,            // Tipo de contrato
-                company_verified: false    // Solo empresas verificadas
+                location: null,
+                category: null,
+                limit: this.maxResultsPerBatch
             });
 
             if (response.jobs && Array.isArray(response.jobs)) {
@@ -260,68 +260,83 @@ class BackgroundJobSearchService {
     }
 
     /**
-     * ✨ NUEVO: Cargar empleos del cache persistente (BD)
+     * ✨ Cargar empleos del cache persistente (BD)
      */
     async loadFromCache() {
         try {
-            const response = await apiClient.get('/job-scraping/cache/list', {
-                params: {
-                    limit: 500,
-                    offset: 0
+            console.log('📦 Cargando empleos desde cache API...');
+
+            const response = await fetch(`${window.API_BASE_URL}/job-scraping/cache/list?limit=200&offset=0`, {
+                method: 'GET',
+                headers: {
+                    'Content-Type': 'application/json'
                 }
             });
 
-            if (response && response.jobs && Array.isArray(response.jobs)) {
-                console.log(`📦 Cache cargado: ${response.jobs.length} de ${response.total} empleos disponibles`);
-                return response.jobs;
+            if (!response.ok) {
+                throw new Error(`HTTP ${response.status}: ${response.statusText}`);
             }
+
+            const data = await response.json();
+
+            if (data && data.jobs && Array.isArray(data.jobs)) {
+                console.log(`📦 Cache cargado: ${data.jobs.length} de ${data.total} empleos disponibles`);
+                return data.jobs;
+            }
+
+            console.log('📦 Cache vacío o sin datos');
             return [];
 
         } catch (error) {
-            console.warn('⚠️ No hay cache disponible:', error.message);
+            console.warn('⚠️ Error cargando cache:', error.message);
             return [];
         }
     }
 
     /**
-     * ✨ NUEVO: Guardar empleos en cache persistente (BD) después de cada búsqueda
+     * ✨ Guardar empleos en cache persistente (BD) después de cada búsqueda
      */
     async saveToCache(jobs, keyword) {
         try {
-            // ✅ Validación de entrada
+            // Validación de entrada
             if (!jobs || jobs.length === 0) {
-                console.warn('⚠️  Sin empleos para guardar en cache');
+                console.warn('Sin empleos para guardar en cache');
                 return 0;
             }
 
-            console.log(`💾 Guardando ${jobs.length} empleos en cache (keyword: "${keyword}")`);
+            console.log(`Guardando ${jobs.length} empleos en cache (keyword: "${keyword}")`);
 
-            const response = await apiClient.post('/job-scraping/cache/store', {
-                jobs: jobs,
-                keyword: keyword,
-                source: 'occ'
+            const response = await fetch(`${window.API_BASE_URL}/job-scraping/cache/store`, {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json'
+                },
+                body: JSON.stringify({
+                    jobs: jobs,
+                    keyword: keyword,
+                    source: 'occ'
+                })
             });
 
-            // ✅ Validación completa de respuesta
-            if (!response) {
-                console.error('❌ Respuesta vacía del endpoint cache/store');
-                return 0;
+            if (!response.ok) {
+                throw new Error(`HTTP ${response.status}: ${response.statusText}`);
             }
 
-            if (response.saved_count && response.saved_count > 0) {
-                console.log(`✅ Cache: ${response.saved_count} empleos guardados`);
-                if (response.total_cached) {
-                    console.log(`📊 Total en cache: ${response.total_cached}`);
+            const data = await response.json();
+
+            if (data.saved_count && data.saved_count > 0) {
+                console.log(`Cache: ${data.saved_count} empleos guardados`);
+                if (data.total_cached) {
+                    console.log(`Total en cache: ${data.total_cached} empleos`);
                 }
-                return response.saved_count;
-            } else {
-                console.warn(`⚠️  Cache: 0 empleos guardados (posiblemente duplicados o existentes)`);
-                return 0;
+                return data.saved_count;
             }
+
+            console.log('No se guardaron empleos en cache');
+            return 0;
 
         } catch (error) {
-            console.error('❌ Error guardando cache:', error.message || error);
-            // No lanzar error, solo loguear. El flujo debe continuar sin cache.
+            console.warn('Error guardando en cache:', error.message);
             return 0;
         }
     }
@@ -329,3 +344,6 @@ class BackgroundJobSearchService {
 
 // Instancia global
 const backgroundJobSearch = new BackgroundJobSearchService();
+
+// Exponer globalmente para acceso desde otros módulos
+window.backgroundJobSearch = backgroundJobSearch;

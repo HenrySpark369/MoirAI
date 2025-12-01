@@ -121,6 +121,72 @@ async def search_jobs(
     }
     ```
     """
+    try:
+        # Build query
+        query = select(JobPosting)
+        
+        # Filter by keyword (searches multiple fields)
+        if keyword:
+            query = query.where(
+                or_(
+                    JobPosting.title.ilike(f"%{keyword}%"),
+                    JobPosting.description.ilike(f"%{keyword}%"),
+                    JobPosting.skills.ilike(f"%{keyword}%"),
+                )
+            )
+        
+        # Filter by location
+        if location:
+            query = query.where(JobPosting.location.ilike(f"%{location}%"))
+        
+        # Get total count
+        from sqlalchemy import func
+        count_query = select(func.count()).select_from(JobPosting)
+        if keyword:
+            count_query = count_query.where(
+                or_(
+                    JobPosting.title.ilike(f"%{keyword}%"),
+                    JobPosting.description.ilike(f"%{keyword}%"),
+                    JobPosting.skills.ilike(f"%{keyword}%"),
+                )
+            )
+        if location:
+            count_query = count_query.where(JobPosting.location.ilike(f"%{location}%"))
+        
+        total_result = await db.execute(count_query)
+        total = total_result.scalar()
+        
+        # Apply pagination
+        query = query.offset(skip).limit(limit)
+        
+        result = await db.execute(query)
+        jobs = result.scalars().all()
+        
+        # Convert to response
+        items = []
+        for job in jobs:
+            try:
+                public_dict = job.to_dict_public()
+                items.append(JobDetailResponse(**public_dict))
+            except Exception as e:
+                logger.error(f"Error converting job {job.id} to dict: {e}")
+                continue
+        
+        logger.info(f"🔍 Search: keyword='{keyword}', location='{location}', results={len(items)}")
+        
+        return JobSearchResponse(
+            total=total,
+            items=items,
+            limit=limit,
+            skip=skip,
+        )
+        
+    except Exception as e:
+        logger.error(f"❌ Error searching jobs: {e}", exc_info=True)
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="Failed to search jobs"
+        )
 
 
 @router.get(

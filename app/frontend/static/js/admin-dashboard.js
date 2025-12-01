@@ -183,10 +183,11 @@ async function loadJobs() {
         if (emptyState) emptyState.style.display = 'none';
         
         if (isDemoMode) {
-            // Use demo jobs data
-            console.log('🎭 Modo demo - usando datos de empleos simulados');
-            const demoJobs = generateDemoJobs();
-            renderJobsTable(demoJobs);
+            // Use real jobs data from background-job-search cache instead of demo data
+            console.log('🎭 Modo demo - usando datos reales del cache de empleos');
+            const realJobs = await loadJobsFromCache();
+            const transformedJobs = transformCacheJobsToTableFormat(realJobs);
+            renderJobsTable(transformedJobs);
         } else {
             // Get API key
             const apiKey = getApiKey();
@@ -276,6 +277,111 @@ function generateDemoJobs() {
 }
 
 /**
+ * Load jobs from background-job-search cache or API directly
+ */
+async function loadJobsFromCache() {
+    try {
+        console.log('🔄 Loading jobs from cache...');
+        
+        // First try to get data from background job search service if available
+        if (window.backgroundJobSearch && window.backgroundJobSearch.getResults) {
+            const cachedJobs = window.backgroundJobSearch.getResults();
+            if (cachedJobs && cachedJobs.length > 0) {
+                console.log(`📦 Using background service cache: ${cachedJobs.length} jobs`);
+                return cachedJobs;
+            }
+        }
+
+        // If no data from service, try direct API search
+        console.log('📡 No cache data, trying direct API search...');
+        return await loadJobsFromAPISearch();
+
+    } catch (error) {
+        console.warn('⚠️ Error loading jobs from cache:', error.message);
+        return [];
+    }
+}
+
+/**
+ * Load jobs directly from API search endpoint
+ */
+async function loadJobsFromAPISearch() {
+    try {
+        // For demo mode, try without API key first
+        const urlParams = new URLSearchParams(window.location.search);
+        const isDemoMode = urlParams.get('demo') === 'true';
+        
+        let headers = {
+            'Content-Type': 'application/json'
+        };
+        
+        if (!isDemoMode) {
+            const apiKey = getApiKey();
+            if (!apiKey) {
+                console.warn('⚠️ No API key available for direct search');
+                return [];
+            }
+            headers['X-API-Key'] = apiKey;
+        }
+
+        // Try some common keywords to get initial data
+        const keywords = ['python', 'javascript', 'desarrollador', 'ingeniero'];
+        let allJobs = [];
+
+        for (const keyword of keywords) {
+            try {
+                console.log(`🔍 Searching jobs with keyword: ${keyword}`);
+                const response = await fetch(`${window.API_BASE_URL}/jobs/search?keyword=${encodeURIComponent(keyword)}&limit=10`, {
+                    method: 'GET',
+                    headers: headers
+                });
+
+                if (response.ok) {
+                    const data = await response.json();
+                    if (data.items && Array.isArray(data.items)) {
+                        allJobs = allJobs.concat(data.items);
+                        console.log(`✅ ${keyword}: ${data.items.length} jobs found`);
+                    }
+                } else {
+                    console.warn(`⚠️ Error searching ${keyword}: ${response.status}`);
+                }
+            } catch (error) {
+                console.warn(`⚠️ Error in search ${keyword}:`, error.message);
+            }
+        }
+
+        // Remove duplicates based on external_job_id or id
+        const uniqueJobs = allJobs.filter((job, index, self) => 
+            index === self.findIndex(j => j.external_job_id === job.external_job_id || j.id === job.id)
+        );
+
+        console.log(`� Total unique jobs found: ${uniqueJobs.length}`);
+        return uniqueJobs;
+
+    } catch (error) {
+        console.warn('⚠️ Error in direct API search:', error.message);
+        return [];
+    }
+}/**
+ * Transform cache jobs data to table format expected by renderJobsTable
+ */
+function transformCacheJobsToTableFormat(cacheJobs) {
+    if (!cacheJobs || !Array.isArray(cacheJobs)) {
+        return [];
+    }
+
+    return cacheJobs.slice(0, 50).map(job => ({
+        id: job.external_job_id || job.id || `cache-job-${Math.random().toString(36).substr(2, 9)}`,
+        title: job.title || 'Sin título',
+        company: job.company || 'Empresa no especificada',
+        location: job.location || 'Ubicación no especificada',
+        status: job.is_active ? 'Publicado' : 'Pendiente',
+        created_at: job.scraped_at || job.created_at || new Date().toISOString(),
+        applications_count: job.applications_count || Math.floor(Math.random() * 20) // Random count for demo
+    }));
+}
+
+/**
  * Render jobs table with data
  */
 function renderJobsTable(jobs) {
@@ -283,30 +389,23 @@ function renderJobsTable(jobs) {
     const loadingState = document.getElementById('jobs-loading-state');
     const tableContainer = document.getElementById('jobs-table-container');
     const emptyState = document.getElementById('jobs-empty-state');
-    
-    // Update KPIs
-    document.getElementById('total-jobs').textContent = jobs.length;
-    document.getElementById('active-jobs').textContent = jobs.filter(j => j.status === 'Publicado').length;
-    document.getElementById('total-applications').textContent = jobs.reduce((sum, j) => sum + (j.applications_count || 0), 0);
-    
-    const activeJobs = jobs.filter(j => j.status === 'Publicado').length;
-    const totalApplications = jobs.reduce((sum, j) => sum + (j.applications_count || 0), 0);
-    const successRate = totalApplications > 0 ? ((activeJobs / totalApplications) * 100).toFixed(1) : '0.0';
-    document.getElementById('success-rate').textContent = `${successRate}%`;
-    
+
+    // Update KPIs using centralized service
+    updateJobsKPIs(jobs);
+
     // Hide loading state
     if (loadingState) loadingState.style.display = 'none';
-    
+
     if (jobs.length === 0) {
         if (emptyState) emptyState.style.display = 'block';
         if (tableContainer) tableContainer.style.display = 'none';
         return;
     }
-    
+
     // Show table
     if (tableContainer) tableContainer.style.display = 'block';
     if (emptyState) emptyState.style.display = 'none';
-    
+
     tbody.innerHTML = jobs.map(job => `
         <tr>
             <td><strong>${job.title || 'N/A'}</strong></td>
@@ -321,6 +420,34 @@ function renderJobsTable(jobs) {
             </div></td>
         </tr>
     `).join('');
+}
+
+/**
+ * Update jobs KPIs using centralized service
+ */
+async function updateJobsKPIs(jobs) {
+    try {
+        // Get centralized KPIs
+        const kpis = await window.kpiService.getAllKPIs();
+
+        // Update job-specific KPIs
+        document.getElementById('total-jobs').textContent = kpis.total_jobs;
+        document.getElementById('active-jobs').textContent = kpis.active_jobs;
+        document.getElementById('total-applications').textContent = kpis.total_applications;
+        document.getElementById('success-rate').textContent = `${kpis.matching_rate}%`;
+
+    } catch (error) {
+        console.warn('⚠️ Error updating jobs KPIs:', error);
+        // Fallback to local calculation
+        document.getElementById('total-jobs').textContent = jobs.length;
+        document.getElementById('active-jobs').textContent = jobs.filter(j => j.status === 'Publicado').length;
+        document.getElementById('total-applications').textContent = jobs.reduce((sum, j) => sum + (j.applications_count || 0), 0);
+
+        const activeJobs = jobs.filter(j => j.status === 'Publicado').length;
+        const totalApplications = jobs.reduce((sum, j) => sum + (j.applications_count || 0), 0);
+        const successRate = totalApplications > 0 ? ((activeJobs / totalApplications) * 100).toFixed(1) : '0.0';
+        document.getElementById('success-rate').textContent = `${successRate}%`;
+    }
 }
 
 /**

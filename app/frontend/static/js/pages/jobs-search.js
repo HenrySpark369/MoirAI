@@ -57,15 +57,16 @@ async function getDemoJobs(keyword = null, limit = 50) {
             page: 1
         };
 
-        const response = await apiClient.post('/job-scraping/search?detailed=false&full_details=true', searchParams);
+        // Load jobs from cache instead of doing live scraping
+        const response = await apiClient.get('/job-scraping/cache/list?limit=50&offset=0');
 
-        if (response.data && response.data.jobs) {
-            console.log(`✅ Loaded ${response.data.jobs.length} real jobs for demo mode`);
-            return response.data.jobs.slice(0, limit).map(job => ({
+        if (response && response.jobs) {
+            console.log(`✅ Loaded ${response.jobs.length} cached jobs for demo mode`);
+            return response.jobs.slice(0, limit).map(job => ({
                 ...job,
-                id: job.job_id,  // Asignar id para compatibilidad con el botón
-                job_id: job.job_id,
-                skills: Array.isArray(job.skills) ? job.skills : []
+                id: job.external_job_id || job.id,  // Use external_job_id as id for compatibility
+                job_id: job.external_job_id || job.id,
+                skills: Array.isArray(job.skills) ? job.skills : (job.skills ? JSON.parse(job.skills) : [])
             }));
         }
 
@@ -186,6 +187,26 @@ async function initJobsSearchPage() {
         onInit: async () => {
             setupEventListeners();
             setupBackgroundSearchListeners();
+            
+            // Verificar si ya tenemos datos del background-job-search (cache)
+            if (window.backgroundJobSearch && window.backgroundJobSearch.getResults) {
+                const existingJobs = window.backgroundJobSearch.getResults();
+                if (existingJobs && existingJobs.length > 0) {
+                    console.log('✅ Usando datos existentes del background-job-search');
+                    allJobsData = normalizeJobData(existingJobs);
+                    currentJobs = allJobsData;
+                    totalJobs = existingJobs.length;
+                    
+                    renderJobs();
+                    updateJobCount(totalJobs);
+                    
+                    // Iniciar búsqueda en segundo plano para datos frescos
+                    startBackgroundSearch();
+                    return;
+                }
+            }
+            
+            // Si no hay datos existentes, cargar iniciales
             await loadInitialJobs();
             // Iniciar búsqueda en segundo plano después de cargar inicial
             startBackgroundSearch();
@@ -275,7 +296,40 @@ function setupBackgroundSearchListeners() {
     window.addEventListener('backgroundJobsReady', (e) => {
         const { jobs, count } = e.detail;
         console.log(`🎉 Búsqueda en segundo plano completada: ${count} empleos`);
+        
+        // Actualizar datos si tenemos empleos del background search
+        if (jobs && jobs.length > 0) {
+            allJobsData = normalizeJobData(jobs);
+            currentJobs = allJobsData;
+            totalJobs = jobs.length;
+            
+            // Re-renderizar con los nuevos datos
+            renderJobs();
+            updateJobCount(totalJobs);
+            
+            console.log(`✅ Datos actualizados desde background search: ${jobs.length} empleos`);
+        }
+        
         notificationManager.success(`Se encontraron ${count} empleos en total`);
+    });
+
+    // Escuchar cuando se carga el cache inicial
+    window.addEventListener('cacheLoaded', (e) => {
+        const { jobs, count } = e.detail;
+        console.log(`📦 Cache inicial cargado: ${count} empleos`);
+        
+        // Solo actualizar si no tenemos datos o si el cache tiene más datos
+        if (jobs && jobs.length > 0 && (currentJobs.length === 0 || jobs.length > currentJobs.length)) {
+            allJobsData = normalizeJobData(jobs);
+            currentJobs = allJobsData;
+            totalJobs = jobs.length;
+            
+            // Re-renderizar con los datos del cache
+            renderJobs();
+            updateJobCount(totalJobs);
+            
+            console.log(`✅ Vista actualizada con datos del cache: ${jobs.length} empleos`);
+        }
     });
 }
 
@@ -375,9 +429,33 @@ async function loadInitialJobs() {
     } catch (error) {
         notificationManager.hideLoading();
         
-        // Si falla todo, mostrar mensaje de error
-        console.error('Error al cargar empleos:', error);
-        notificationManager.error('Error al cargar empleos. Intenta más tarde.');
+        // Si falla la carga inicial, intentar usar datos del background-job-search
+        console.error('Error al cargar empleos iniciales:', error);
+        
+        // Verificar si el background-job-search ya tiene datos
+        if (window.backgroundJobSearch && window.backgroundJobSearch.getResults) {
+            const backgroundJobs = window.backgroundJobSearch.getResults();
+            if (backgroundJobs && backgroundJobs.length > 0) {
+                console.log('✅ Usando datos del background-job-search como fallback');
+                allJobsData = normalizeJobData(backgroundJobs);
+                currentJobs = allJobsData;
+                totalJobs = backgroundJobs.length;
+                
+                renderJobs();
+                updateJobCount(totalJobs);
+                return;
+            }
+        }
+        
+        // Si no hay datos disponibles, mostrar mensaje de carga
+        console.warn('No hay datos disponibles, mostrando mensaje de carga');
+        notificationManager.warning('Los empleos se están cargando. Por favor, espera unos momentos.');
+        
+        // Mostrar card de carga temporal
+        currentJobs = getFallbackDemoJobs();
+        allJobsData = currentJobs;
+        totalJobs = currentJobs.length;
+        renderJobs();
     }
 }
 

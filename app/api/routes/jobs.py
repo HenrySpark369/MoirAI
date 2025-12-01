@@ -21,6 +21,7 @@ from typing import List, Optional
 
 from fastapi import APIRouter, Depends, Query, HTTPException, status, Security
 from sqlmodel import select
+from sqlalchemy import func
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.database import get_session
@@ -118,7 +119,7 @@ async def trigger_occ_scraping(
 
 @router.get(
     "/search",
-    response_model=JobSearchResponse,
+    response_model=dict,
     summary="Search job postings",
     description="Public search endpoint - returns jobs without PII",
 )
@@ -215,27 +216,22 @@ async def search_jobs(
             query = query.where(JobPosting.location.ilike(f"%{location}%"))
         
         # Apply pagination
-        result = await db.execute(select(JobPosting))
-        total = result.scalars().all().__len__() if skip == 0 else None
+        # Get total count (simplified for now)
+        total_result = await db.execute(select(func.count()).select_from(JobPosting))
+        total = total_result.scalar()
+        
         query = query.offset(skip).limit(limit)
         
         result = await db.execute(query)
         jobs = result.scalars().all()
         
-        # Convert to response using to_dict_public() (excludes PII)
-        items = [
-            JobDetailResponse(**job.to_dict_public())
-            for job in jobs
-        ]
-        
-        logger.info(f"🔍 Search: keyword='{keyword}', location='{location}', results={len(items)}")
-        
-        return JobSearchResponse(
-            total=total,
-            items=items,
-            limit=limit,
-            skip=skip,
-        )
+        # TEMP: Return plain dict to test
+        return {
+            "total": None,
+            "items": [],
+            "limit": limit,
+            "skip": skip,
+        }
         
     except Exception as e:
         logger.error(f"❌ Error searching jobs: {e}", exc_info=True)
@@ -245,12 +241,9 @@ async def search_jobs(
         )
 
 
-@router.get(
-    "/{job_id}",
-    response_model=JobDetailResponse,
-    summary="Get job posting detail",
-    description="Get detailed information about a job (no PII exposed)",
-)
+@router.get("/test")
+async def test_endpoint():
+    return {"message": "test works"}
 async def get_job_detail(
     job_id: int,
     db: AsyncSession = Depends(get_session),
