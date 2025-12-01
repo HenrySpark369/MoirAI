@@ -80,7 +80,7 @@ function setupEventListeners() {
 
     // Filtros
     const filterElements = document.querySelectorAll(
-        '.skill-filter, .soft-skill-filter, .availability-filter, .experience-filter, ' +
+        '.skill-filter, .soft-skill-filter, .experience-filter, ' +
         '#universityFilter, #majorFilter, #sortFilter'
     );
 
@@ -232,11 +232,7 @@ async function applyFilters() {
             document.querySelectorAll('.soft-skill-filter:checked')
         ).map(el => el.value);
 
-        const availabilities = Array.from(
-            document.querySelectorAll('.availability-filter:checked')
-        ).map(el => el.value);
-
-        const experience = document.getElementById('experienceFilter')?.value || '';
+        const experience = document.querySelector('input[name="experience"]:checked')?.value || '';
         const university = document.getElementById('universityFilter')?.value || '';
         const sortBy = document.getElementById('sortFilter')?.value || 'match';
 
@@ -262,17 +258,10 @@ async function applyFilters() {
             });
         }
 
-        // Filtro por disponibilidad
-        if (availabilities.length > 0) {
-            filtered = filtered.filter(student =>
-                availabilities.includes(student.availability?.toLowerCase())
-            );
-        }
-
-        // Filtro por experiencia
+        // Filtro por experiencia (basado en cantidad de proyectos)
         if (experience) {
             filtered = filtered.filter(student => {
-                const projects = (student.projects_count || 0);
+                const projects = (student.projects || []).length;
                 if (experience === 'sin-experiencia') return projects === 0;
                 if (experience === '1-proyecto') return projects === 1;
                 if (experience === '2-proyectos') return projects >= 2;
@@ -280,10 +269,10 @@ async function applyFilters() {
             });
         }
 
-        // Filtro por universidad
+        // Filtro por programa académico
         if (university) {
             filtered = filtered.filter(student =>
-                student.university?.toLowerCase().includes(university.toLowerCase())
+                student.program?.toLowerCase().includes(university.toLowerCase())
             );
         }
 
@@ -293,7 +282,7 @@ async function applyFilters() {
                 filtered.sort((a, b) => (b.match_score || 0) - (a.match_score || 0));
                 break;
             case 'experience':
-                filtered.sort((a, b) => (b.projects_count || 0) - (a.projects_count || 0));
+                filtered.sort((a, b) => ((b.projects || []).length) - ((a.projects || []).length));
                 break;
             case 'recent':
             default:
@@ -581,9 +570,14 @@ function clearAllFilters() {
     document.getElementById('sortFilter').value = 'match';
 
     document.querySelectorAll(
-        '.skill-filter, .soft-skill-filter, .availability-filter, .experience-filter'
+        '.skill-filter, .soft-skill-filter, .experience-filter'
     ).forEach(checkbox => {
         checkbox.checked = false;
+    });
+
+    // También desmarcar radio buttons de experiencia
+    document.querySelectorAll('input[name="experience"]').forEach(radio => {
+        radio.checked = false;
     });
 
     filteredStudents = allStudents;

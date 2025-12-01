@@ -226,7 +226,7 @@ function setupEventListeners() {
 
     // Filtros - Mapeados a campos del modelo JobPosition
     const filterElements = document.querySelectorAll(
-        '.modality-filter, .level-filter, .skill-filter, ' +
+        '.modality-filter, .skill-filter, ' +
         '#locationFilter, #jobTypeFilter, #sortFilter'
     );
 
@@ -518,10 +518,6 @@ async function handleSearch() {
         const workModes = Array.from(
             document.querySelectorAll('.modality-filter:checked')
         ).map(el => el.value).join(',') || null;
-        
-        const experienceLevels = Array.from(
-            document.querySelectorAll('.level-filter:checked')
-        ).map(el => el.value).join(',') || null;
 
         // ✅ MEJORADO: POST /job-scraping/search con TODOS los parámetros disponibles
         const response = await apiClient.post('/job-scraping/search', {
@@ -529,7 +525,6 @@ async function handleSearch() {
             location: location || null,
             job_type: jobType || null,
             work_mode: workModes ? workModes.split(',')[0] : null,  // Primer modo seleccionado
-            experience_level: experienceLevels ? experienceLevels.split(',')[0] : null,  // Primer nivel
             sort_by: 'relevance',      // Ordenar por relevancia
             detailed: true,           // Datos básicos (rápido)
             page: 1,
@@ -582,10 +577,6 @@ async function applyFilters() {
             document.querySelectorAll('.modality-filter:checked')
         ).map(el => el.value);
 
-        const experienceLevels = Array.from(
-            document.querySelectorAll('.level-filter:checked')
-        ).map(el => el.value);
-
         const selectedSkills = Array.from(
             document.querySelectorAll('.skill-filter:checked')
         ).map(el => el.value);
@@ -602,14 +593,6 @@ async function applyFilters() {
             filtered = filtered.filter(job => {
                 const jobWorkMode = job.work_mode?.toLowerCase() || '';
                 return workModes.some(mode => jobWorkMode.includes(mode.toLowerCase()));
-            });
-        }
-
-        // Filtro por nivel de experiencia (experience_level)
-        if (experienceLevels.length > 0) {
-            filtered = filtered.filter(job => {
-                const jobLevel = job.experience_level?.toLowerCase() || '';
-                return experienceLevels.some(level => jobLevel.includes(level.toLowerCase()));
             });
         }
 
@@ -1043,7 +1026,7 @@ function clearAllFilters() {
 
     // Desmarcar todos los checkboxes
     document.querySelectorAll(
-        '.modality-filter, .level-filter, .skill-filter'
+        '.modality-filter, .skill-filter'
     ).forEach(checkbox => {
         checkbox.checked = false;
     });
