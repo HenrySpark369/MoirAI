@@ -3,7 +3,7 @@ Endpoints para administración del sistema (ASYNC)
 Incluye gestión de usuarios, analítica, y configuración del sistema
 """
 from typing import List, Optional
-from fastapi import APIRouter, Depends, HTTPException, Query, Header
+from fastapi import APIRouter, Depends, HTTPException, Query, Header, Request
 from sqlmodel import select, func
 from sqlalchemy.ext.asyncio import AsyncSession
 from datetime import datetime, timedelta, date
@@ -287,6 +287,7 @@ async def delete_user(
 
 @router.get("/analytics/kpis", response_model=dict)
 async def get_analytics_kpis(
+    request: Request,
     start_date: Optional[date] = Query(None, description="Fecha inicio (YYYY-MM-DD)"),
     end_date: Optional[date] = Query(None, description="Fecha fin (YYYY-MM-DD)"),
     current_user: UserContext = Depends(AuthService.get_current_user),
@@ -306,7 +307,13 @@ async def get_analytics_kpis(
     - Tasa de colocación (placements)
     """
     try:
-        _require_admin(current_user)
+        # Handle demo mode
+        demo_header = request.headers.get("X-Demo-Mode")
+        if demo_header == "true" and current_user and current_user.role == "anonymous":
+            # Allow demo access for anonymous users
+            pass
+        else:
+            _require_admin(current_user)
         
         # ========== FILTROS DE FECHA ==========
         date_filters = []

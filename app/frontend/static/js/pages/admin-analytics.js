@@ -120,6 +120,14 @@ class AdminAnalyticsPage {
      * Obtener API key desde localStorage
      */
     getApiKey() {
+        // Check for demo mode
+        const urlParams = new URLSearchParams(window.location.search);
+        const isDemoMode = urlParams.get('demo') === 'true';
+        
+        if (isDemoMode) {
+            return 'demo-key'; // Dummy key for demo mode
+        }
+
         const key = localStorage.getItem('api_key');
         if (!key) {
             this.showError('Sin sesión activa');
@@ -260,12 +268,22 @@ class AdminAnalyticsPage {
 
             const url = `${this.API_BASE}/admin/analytics/kpis${params.toString() ? '?' + params.toString() : ''}`;
 
+            // Check for demo mode
+            const urlParams = new URLSearchParams(window.location.search);
+            const isDemoMode = urlParams.get('demo') === 'true';
+
+            const headers = {
+                'X-API-Key': this.getApiKey(),
+                'Content-Type': 'application/json'
+            };
+
+            if (isDemoMode) {
+                headers['X-Demo-Mode'] = 'true';
+            }
+
             const response = await fetch(url, {
                 method: 'GET',
-                headers: {
-                    'X-API-Key': this.getApiKey(),
-                    'Content-Type': 'application/json'
-                }
+                headers: headers
             });
 
             if (!response.ok) {
