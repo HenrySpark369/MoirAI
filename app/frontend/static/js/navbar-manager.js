@@ -157,7 +157,7 @@ class NavbarManager {
         navbarContainer.innerHTML = `
             <div class="nav-container">
                 <div class="nav-logo">
-                    <a href="/dashboard">
+                    <a href="/">
                         <i class="fas fa-brain"></i>
                         <span>MoirAI</span>
                     </a>
