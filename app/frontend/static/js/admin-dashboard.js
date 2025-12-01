@@ -56,6 +56,16 @@ function initializeNavigation() {
  * Extract section name from admin URL
  */
 function getSectionFromUrl(url) {
+    // Check for role=admin parameter in dashboard-like URLs to auto-switch to analytics
+    const urlObj = new URL(url, window.location.origin);
+    const role = urlObj.searchParams.get('role');
+    const path = urlObj.pathname;
+
+    // Auto-switch to analytics for admin role in dashboard URLs
+    if (role === 'admin' && (path === '/dashboard' || path === '/admin' || path === '/admin/' || path.includes('/admin/dashboard'))) {
+        return 'analytics';
+    }
+
     if (url.includes('/admin/users')) return 'students';
     if (url.includes('/admin/analytics')) return 'analytics';
     if (url.includes('/admin/settings')) return 'settings';
