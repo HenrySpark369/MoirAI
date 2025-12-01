@@ -619,7 +619,7 @@ async function withdrawApplication(appId) {
     try {
         notificationManager.loading('Retirando solicitud...');
 
-        await apiClient.delete(`/applications/${appId}`);
+        await apiClient.delete(`/students/applications/${appId}`);
 
         applications = applications.filter(a => a.id !== appId);
         filteredApplications = filteredApplications.filter(a => a.id !== appId);

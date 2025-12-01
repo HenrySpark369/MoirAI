@@ -121,3 +121,63 @@ async def search_jobs(
     }
     ```
     """
+
+
+@router.get(
+    "/{job_id}",
+    response_model=JobDetailResponse,
+    summary="Get job posting details",
+    description="Retrieve detailed information for a specific job posting",
+)
+async def get_job_detail(
+    job_id: str,
+    session: AsyncSession = Depends(get_session),
+) -> JobDetailResponse:
+    """
+    Get detailed job posting information by ID.
+
+    Parameters:
+    - job_id: Job posting ID (string, can be numeric or external ID)
+
+    Returns:
+    - Complete job details (no PII exposed)
+
+    Security:
+    - Public endpoint (no authentication required)
+    - Encrypted fields automatically excluded
+    - Rate limiting enforced
+    """
+    try:
+        # Try to find job in database first (by id or external_job_id)
+        try:
+            job_id_int = int(job_id)
+            result = await session.execute(
+                select(JobPosting).where(JobPosting.id == job_id_int)
+            )
+        except ValueError:
+            # If job_id is not numeric, try searching by external_job_id
+            result = await session.execute(
+                select(JobPosting).where(JobPosting.external_job_id == job_id)
+            )
+
+        job = result.scalars().first()
+
+        if job:
+            logger.info(f"📄 Job detail retrieved from DB: {job.title}")
+            return JobDetailResponse.from_orm(job)
+
+        # If not found in DB, return 404 (jobs are either in DB or not available)
+        logger.warning(f"Job {job_id} not found")
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=f"Job {job_id} not found"
+        )
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"❌ Error retrieving job {job_id}: {e}", exc_info=True)
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="Failed to retrieve job details"
+        )

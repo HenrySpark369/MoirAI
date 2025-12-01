@@ -4,7 +4,7 @@ Incluye operaciones para crear, leer, actualizar y eliminar estudiantes
 considerando historias de usuario y flujos de trabajo académicos
 """
 from typing import List, Optional
-from fastapi import APIRouter, Depends, HTTPException, UploadFile, File, Form, Query, BackgroundTasks
+from fastapi import APIRouter, Depends, HTTPException, UploadFile, File, Form, Query, BackgroundTasks, status
 from fastapi.responses import FileResponse, StreamingResponse
 from sqlmodel import select, func
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -22,7 +22,7 @@ from reportlab.platypus import SimpleDocTemplate, Paragraph, Spacer
 from reportlab.lib.units import inch
 
 from app.core.database import get_session
-from app.models import Student, AuditLog, Company
+from app.models import Student, AuditLog, Company, JobApplicationDB
 from app.schemas import (
     StudentProfile, StudentCreate, StudentUpdate, StudentSkillsUpdate, ResumeUploadRequest,
     ResumeAnalysisResponse, UserContext, BaseResponse, PaginatedResponse,
@@ -1035,13 +1035,13 @@ async def get_demo_applications(
     - Lista de aplicaciones mock con detalles de empleos
     """
     try:
-        # Mock applications data
+        # Mock applications data - using real scraped job IDs
         mock_applications = [
             {
                 "id": "demo_app_1",
-                "job_id": 1,
-                "job_title": "Desarrollador Full Stack",
-                "company": "TechCorp",
+                "job_id": "20862184",  # Real scraped job ID
+                "job_title": "Desarrollador Python (Híbrida)",
+                "company": "CORUS E3 CONSULTING SERVICES",
                 "location": "Ciudad de México",
                 "status": "pending",
                 "applied_date": "2025-11-25T10:30:00",
@@ -1049,10 +1049,10 @@ async def get_demo_applications(
                 "match_score": 85
             },
             {
-                "id": "demo_app_2", 
-                "job_id": 2,
-                "job_title": "Científico de Datos",
-                "company": "DataInc",
+                "id": "demo_app_2",
+                "job_id": "20856168",  # Real scraped job ID
+                "job_title": "Desarrollador Python CCTV",
+                "company": "SYGNO",
                 "location": "Remoto",
                 "status": "accepted",
                 "applied_date": "2025-11-20T14:15:00",
@@ -1061,9 +1061,9 @@ async def get_demo_applications(
             },
             {
                 "id": "demo_app_3",
-                "job_id": 3,
-                "job_title": "Ingeniero de Software",
-                "company": "InnovateLab",
+                "job_id": "20857647",  # Real scraped job ID
+                "job_title": "Tester pruebas Automatizadas Python-Selenium",
+                "company": "Empresa Confidencial",
                 "location": "Córdoba",
                 "status": "rejected",
                 "applied_date": "2025-11-15T16:45:00",
@@ -1072,9 +1072,9 @@ async def get_demo_applications(
             },
             {
                 "id": "demo_app_4",
-                "job_id": 4,
-                "job_title": "Analista de Sistemas",
-                "company": "SysTech",
+                "job_id": "20862184",  # Another application to same job
+                "job_title": "Desarrollador Python (Híbrida)",
+                "company": "CORUS E3 CONSULTING SERVICES",
                 "location": "Buenos Aires",
                 "status": "pending",
                 "applied_date": "2025-11-28T08:20:00",
@@ -1108,7 +1108,82 @@ async def get_demo_applications(
         raise HTTPException(status_code=500, detail="Failed to get demo applications")
 
 
-@router.get("/recommendations", response_model=dict)
+@router.delete("/applications/{application_id}", response_model=dict)
+async def withdraw_application(
+    application_id: str,
+    current_user: UserContext = Depends(AuthService.get_current_user),
+    session: AsyncSession = Depends(get_session)
+):
+    """
+    Retirar una aplicación a un empleo (estudiante)
+
+    Parámetros:
+    - application_id: ID de la aplicación
+
+    Retorna:
+    - Confirmación de retiro exitoso
+    """
+    try:
+        # Check if this is a demo application
+        if application_id.startswith("demo_app_"):
+            logger.info(f"🎭 Demo application withdrawal: {application_id}")
+            return {
+                "success": True,
+                "message": "Application withdrawn successfully (demo mode)",
+                "application_id": application_id
+            }
+
+        # For real applications, check if it exists and belongs to current user
+        result = await session.execute(
+            select(JobApplicationDB).where(
+                JobApplicationDB.id == application_id,
+                JobApplicationDB.student_id == current_user.user_id
+            )
+        )
+        application = result.scalars().first()
+
+        if not application:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail="Application not found or does not belong to current user"
+            )
+
+        # Update application status to withdrawn
+        application.status = "withdrawn"
+        application.updated_at = datetime.utcnow()
+
+        # Create audit log
+        audit_log = AuditLog(
+            action="WITHDRAW_APPLICATION",
+            details=f"application_id:{application_id}",
+            actor_id=current_user.user_id,
+            actor_role=current_user.role,
+            target_type="application",
+            target_id=application_id,
+            ip_address=None,
+            user_agent=None
+        )
+        session.add(audit_log)
+
+        await session.commit()
+
+        logger.info(f"✅ Application withdrawn: {application_id} by student {current_user.user_id}")
+
+        return {
+            "success": True,
+            "message": "Application withdrawn successfully",
+            "application_id": application_id
+        }
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"❌ Error withdrawing application {application_id}: {e}", exc_info=True)
+        await session.rollback()
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="Failed to withdraw application"
+        )
 async def get_student_recommendations(
     limit: int = Query(10),
     current_user: UserContext = Depends(AuthService.get_current_user),
