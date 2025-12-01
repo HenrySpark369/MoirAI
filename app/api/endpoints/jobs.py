@@ -166,8 +166,44 @@ async def get_job_detail(
             logger.info(f"📄 Job detail retrieved from DB: {job.title}")
             return JobDetailResponse.from_orm(job)
 
-        # If not found in DB, return 404 (jobs are either in DB or not available)
-        logger.warning(f"Job {job_id} not found")
+        # If not found in JobPosting, try JobPosition (for cached/scraped jobs)
+        from app.services.job_application_service import JobCacheManager
+        cache_manager = JobCacheManager(session)
+        
+        # Search in cache by external_job_id
+        cached_jobs, _ = await cache_manager.get_cached_jobs(
+            filters={"external_job_id": job_id},
+            limit=1,
+            offset=0
+        )
+        
+        if cached_jobs:
+            job = cached_jobs[0]
+            logger.info(f"📄 Job detail retrieved from cache: {job.title}")
+            
+            # Convert JobPosition to JobDetailResponse format
+            import json
+            job_dict = {
+                "id": getattr(job, 'id', 0),
+                "external_job_id": getattr(job, 'external_job_id', job_id),
+                "title": getattr(job, 'title', 'N/A'),
+                "company": getattr(job, 'company', 'N/A'),
+                "location": getattr(job, 'location', 'N/A'),
+                "description": getattr(job, 'description', ''),
+                "skills": json.loads(getattr(job, 'skills', '[]')) if getattr(job, 'skills') else None,
+                "work_mode": getattr(job, 'work_mode', None),
+                "job_type": getattr(job, 'job_type', None),
+                "salary_min": None,  # JobPosition uses salary_range string
+                "salary_max": None,
+                "currency": getattr(job, 'currency', 'MXN'),
+                "published_at": None,  # JobPosition uses publication_date string
+                "source": getattr(job, 'source', 'unknown')
+            }
+            
+            return JobDetailResponse(**job_dict)
+
+        # If not found anywhere, return 404
+        logger.warning(f"Job {job_id} not found in DB or cache")
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
             detail=f"Job {job_id} not found"

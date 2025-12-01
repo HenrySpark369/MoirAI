@@ -91,6 +91,8 @@ function switchSection(sectionId) {
         initializeCompanies();
     } else if (sectionId === 'students') {
         initializeStudents();
+    } else if (sectionId === 'jobs') {
+        initializeJobs();
     }
 
     console.log(`📱 Switched to section: ${sectionId}`);
@@ -104,6 +106,7 @@ function updatePageTitle(sectionId) {
         'dashboard': 'Dashboard - MoirAI Admin',
         'students': 'Gestión de Estudiantes - MoirAI Admin',
         'companies': 'Gestión de Empresas - MoirAI Admin',
+        'jobs': 'Gestión de Empleos - MoirAI Admin',
         'api': 'API Endpoints - MoirAI Admin',
         'applications': 'Aplicaciones - MoirAI Admin',
         'cv-monitor': 'CV Monitor - MoirAI Admin',
@@ -139,6 +142,175 @@ function initializeCVMonitor() {
     // CV Monitor is initialized automatically by admin-cv-monitor.js
     // This function can be used for additional setup if needed
     console.log('🤖 CV Monitor section activated');
+}
+
+/**
+ * Initialize Jobs module on first load
+ */
+function initializeJobs() {
+    console.log('💼 Jobs section activated');
+    loadJobs();
+}
+
+/**
+ * Load jobs data from API
+ */
+async function loadJobs() {
+    const jobsSection = document.getElementById('jobs');
+    const tableBody = document.getElementById('jobs-tbody');
+    const loadingState = document.getElementById('jobs-loading-state');
+    const tableContainer = document.getElementById('jobs-table-container');
+    const emptyState = document.getElementById('jobs-empty-state');
+    
+    // Check if we're in demo mode
+    const urlParams = new URLSearchParams(window.location.search);
+    const isDemoMode = urlParams.get('demo') === 'true';
+    
+    try {
+        // Show loading state
+        if (loadingState) loadingState.style.display = 'block';
+        if (tableContainer) tableContainer.style.display = 'none';
+        if (emptyState) emptyState.style.display = 'none';
+        
+        if (isDemoMode) {
+            // Use demo jobs data
+            console.log('🎭 Modo demo - usando datos de empleos simulados');
+            const demoJobs = generateDemoJobs();
+            renderJobsTable(demoJobs);
+        } else {
+            // Get API key
+            const apiKey = getApiKey();
+            if (!apiKey) {
+                throw new Error('No API key available');
+            }
+            
+            // Fetch jobs data
+            const response = await fetch(`${window.API_BASE_URL}/admin/jobs`, {
+                headers: {
+                    'X-API-Key': apiKey,
+                    'Content-Type': 'application/json'
+                }
+            });
+            
+            if (!response.ok) {
+                throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+            }
+            
+            const data = await response.json();
+            const jobs = data.items || [];
+            renderJobsTable(jobs);
+        }
+    } catch (error) {
+        console.error('❌ Error loading jobs:', error);
+        if (notificationManager) {
+            notificationManager.show('Error al cargar empleos: ' + error.message, 'error');
+        }
+        
+        // Show empty state
+        if (loadingState) loadingState.style.display = 'none';
+        if (emptyState) emptyState.style.display = 'block';
+    }
+}
+
+/**
+ * Generate demo jobs data
+ */
+function generateDemoJobs() {
+    return [
+        {
+            id: 'demo-job-1',
+            title: 'Desarrollador Full Stack Senior',
+            company: 'TechCorp México',
+            location: 'Ciudad de México',
+            status: 'Publicado',
+            created_at: '2025-11-25T10:00:00Z',
+            applications_count: 12
+        },
+        {
+            id: 'demo-job-2',
+            title: 'Analista de Datos',
+            company: 'DataInsights SA',
+            location: 'Guadalajara',
+            status: 'Publicado',
+            created_at: '2025-11-24T15:30:00Z',
+            applications_count: 8
+        },
+        {
+            id: 'demo-job-3',
+            title: 'Ingeniero DevOps',
+            company: 'CloudTech Solutions',
+            location: 'Monterrey',
+            status: 'Publicado',
+            created_at: '2025-11-23T09:15:00Z',
+            applications_count: 15
+        },
+        {
+            id: 'demo-job-4',
+            title: 'Diseñador UX/UI',
+            company: 'CreativeStudio MX',
+            location: 'Ciudad de México',
+            status: 'Pendiente',
+            created_at: '2025-11-22T14:20:00Z',
+            applications_count: 5
+        },
+        {
+            id: 'demo-job-5',
+            title: 'Gerente de Producto',
+            company: 'InnovateCorp',
+            location: 'Querétaro',
+            status: 'Publicado',
+            created_at: '2025-11-21T11:45:00Z',
+            applications_count: 7
+        }
+    ];
+}
+
+/**
+ * Render jobs table with data
+ */
+function renderJobsTable(jobs) {
+    const tbody = document.getElementById('jobs-tbody');
+    const loadingState = document.getElementById('jobs-loading-state');
+    const tableContainer = document.getElementById('jobs-table-container');
+    const emptyState = document.getElementById('jobs-empty-state');
+    
+    // Update KPIs
+    document.getElementById('total-jobs').textContent = jobs.length;
+    document.getElementById('active-jobs').textContent = jobs.filter(j => j.status === 'Publicado').length;
+    document.getElementById('total-applications').textContent = jobs.reduce((sum, j) => sum + (j.applications_count || 0), 0);
+    
+    const activeJobs = jobs.filter(j => j.status === 'Publicado').length;
+    const totalApplications = jobs.reduce((sum, j) => sum + (j.applications_count || 0), 0);
+    const successRate = totalApplications > 0 ? ((activeJobs / totalApplications) * 100).toFixed(1) : '0.0';
+    document.getElementById('success-rate').textContent = `${successRate}%`;
+    
+    // Hide loading state
+    if (loadingState) loadingState.style.display = 'none';
+    
+    if (jobs.length === 0) {
+        if (emptyState) emptyState.style.display = 'block';
+        if (tableContainer) tableContainer.style.display = 'none';
+        return;
+    }
+    
+    // Show table
+    if (tableContainer) tableContainer.style.display = 'block';
+    if (emptyState) emptyState.style.display = 'none';
+    
+    tbody.innerHTML = jobs.map(job => `
+        <tr>
+            <td><strong>${job.title || 'N/A'}</strong></td>
+            <td>${job.company || 'N/A'}</td>
+            <td>${job.location || 'N/A'}</td>
+            <td><span class="badge ${job.status === 'Publicado' ? 'active' : 'inactive'}">${job.status || 'N/A'}</span></td>
+            <td><small>${job.created_at ? new Date(job.created_at).toLocaleDateString('es-ES') : 'N/A'}</small></td>
+            <td><div class="actions">
+                <button class="btn-sm btn-info" onclick="viewJob('${job.id}')"><i class="fas fa-eye"></i></button>
+                <button class="btn-sm btn-warning" onclick="editJob('${job.id}')"><i class="fas fa-edit"></i></button>
+                <button class="btn-sm btn-danger" onclick="deleteJob('${job.id}', '${job.title}')"><i class="fas fa-trash"></i></button>
+            </div></td>
+        </tr>
+    `).join('');
 }
 
 /**
@@ -259,6 +431,14 @@ function initializeSectionButtons() {
     if (addStudentBtn) {
         addStudentBtn.addEventListener('click', () => {
             notificationManager?.show('Función de agregar estudiante próximamente', 'info');
+        });
+    }
+
+    // Add Job button
+    const addJobBtn = document.getElementById('addJobBtn');
+    if (addJobBtn) {
+        addJobBtn.addEventListener('click', () => {
+            notificationManager?.show('Función de agregar empleo próximamente', 'info');
         });
     }
 

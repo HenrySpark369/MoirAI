@@ -594,6 +594,88 @@
             </div>
         </section>
 
+        <!-- Jobs Section -->
+        <section id="jobs" class="content-section">
+            <div class="section-header">
+                <h1><i class="fas fa-briefcase"></i> Gestión de Empleos</h1>
+                <div class="header-actions">
+                    <button class="btn btn-primary" id="addJobBtn">
+                        <i class="fas fa-plus"></i> Agregar Empleo
+                    </button>
+                </div>
+            </div>
+
+            <div class="filters-bar">
+                <input type="text" class="filter-input" placeholder="Buscar por título o empresa...">
+                <select class="filter-select">
+                    <option>Todos los estados</option>
+                    <option>Publicado</option>
+                    <option>Pendiente</option>
+                    <option>Rechazado</option>
+                </select>
+            </div>
+
+            <div class="kpi-grid">
+                <div class="kpi-card">
+                    <div class="kpi-header">
+                        <h3>Empleos Totales</h3>
+                        <div class="kpi-icon"><i class="fas fa-briefcase"></i></div>
+                    </div>
+                    <div class="kpi-value" id="total-jobs">0</div>
+                </div>
+                <div class="kpi-card">
+                    <div class="kpi-header">
+                        <h3>Empleos Activos</h3>
+                        <div class="kpi-icon"><i class="fas fa-check-circle"></i></div>
+                    </div>
+                    <div class="kpi-value" id="active-jobs">0</div>
+                </div>
+                <div class="kpi-card">
+                    <div class="kpi-header">
+                        <h3>Aplicaciones</h3>
+                        <div class="kpi-icon"><i class="fas fa-file-alt"></i></div>
+                    </div>
+                    <div class="kpi-value" id="total-applications">0</div>
+                </div>
+                <div class="kpi-card">
+                    <div class="kpi-header">
+                        <h3>Tasa de Éxito</h3>
+                        <div class="kpi-icon"><i class="fas fa-chart-line"></i></div>
+                    </div>
+                    <div class="kpi-value" id="success-rate">0%</div>
+                </div>
+            </div>
+
+            <div id="jobs-loading-state" class="loading" style="display: none;">
+                <i class="fas fa-spinner"></i> Cargando empleos...
+            </div>
+
+            <div id="jobs-table-container" class="table-section" style="display: none;">
+                <div class="table-wrapper">
+                    <table>
+                        <thead>
+                            <tr>
+                                <th>Título</th>
+                                <th>Empresa</th>
+                                <th>Ubicación</th>
+                                <th>Estado</th>
+                                <th>Fecha</th>
+                                <th>Acciones</th>
+                            </tr>
+                        </thead>
+                        <tbody id="jobs-tbody"></tbody>
+                    </table>
+                </div>
+                <div id="jobs-pagination" class="pagination"></div>
+            </div>
+
+            <div id="jobs-empty-state" class="empty-state" style="display: none;">
+                <i class="fas fa-inbox"></i>
+                <h2>No hay empleos</h2>
+                <p>No se encontraron empleos con los filtros aplicados</p>
+            </div>
+        </section>
+
         <!-- Students Section -->
         <section id="students" class="content-section">
             <div class="section-header">

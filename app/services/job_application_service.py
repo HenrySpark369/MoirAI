@@ -648,6 +648,11 @@ class JobCacheManager:
                     JobPosition.skills.ilike(f"%{filters['skills']}%")
                 )
             
+            if filters.get("external_job_id"):
+                query = query.where(
+                    JobPosition.external_job_id == filters["external_job_id"]
+                )
+            
             # Contar total sin paginación (ASYNC)
             count_query = select(func.count(JobPosition.id)).select_from(JobPosition).where(
                 JobPosition.source == "occ",
@@ -668,6 +673,10 @@ class JobCacheManager:
                 count_query = count_query.where(JobPosition.job_type == filters["job_type"])
             if filters.get("skills"):
                 count_query = count_query.where(JobPosition.skills.ilike(f"%{filters['skills']}%"))
+            if filters.get("external_job_id"):
+                count_query = count_query.where(
+                    JobPosition.external_job_id == filters["external_job_id"]
+                )
             
             result = await self.db_session.execute(count_query)
             total = result.scalar() or 0

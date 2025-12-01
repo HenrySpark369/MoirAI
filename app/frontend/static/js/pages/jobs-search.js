@@ -44,7 +44,7 @@ async function getDemoJobs(keyword = null, limit = 50) {
 
         // Use real job scraping service instead of mock demo data
         const searchParams = {
-            keyword: keyword || '',
+            keyword: keyword || 'desarrollador programador analista ingeniero',  // Default keywords for demo
             location: '',
             category: '',
             salary_min: 0,
@@ -63,7 +63,7 @@ async function getDemoJobs(keyword = null, limit = 50) {
             console.log(`✅ Loaded ${response.data.jobs.length} real jobs for demo mode`);
             return response.data.jobs.slice(0, limit).map(job => ({
                 ...job,
-                // Asegurar compatibilidad con el formato esperado
+                id: job.job_id,  // Asignar id para compatibilidad con el botón
                 job_id: job.job_id,
                 skills: Array.isArray(job.skills) ? job.skills : []
             }));
@@ -86,8 +86,8 @@ async function getDemoJobs(keyword = null, limit = 50) {
 function getFallbackDemoJobs() {
     return [
         {
-            id: 1,
-            job_id: 1,
+            id: '1',
+            job_id: '1',
             title: "Empleos no disponibles temporalmente",
             company: "Sistema MoirAI",
             location: "En proceso de carga",
@@ -247,6 +247,12 @@ function setupBackgroundSearchListeners() {
         
         // ✨ NORMALIZAR nuevos empleos antes de agregar
         const normalizedJobs = normalizeJobData(newJobs);
+        
+        // Asegurar que allJobsData sea un array
+        if (!Array.isArray(allJobsData)) {
+            allJobsData = [];
+        }
+        
         allJobsData.push(...normalizedJobs);
         
         // Actualizar UI si no hay filtros activos
@@ -313,7 +319,7 @@ async function loadInitialJobs() {
         if (isDemoMode) {
             // En modo demo, usar empleos demo con IDs conocidos
             console.log('🎭 Demo mode detected - loading demo jobs');
-            allJobsData = getDemoJobs();
+            allJobsData = await getDemoJobs();
             currentJobs = allJobsData;
             totalJobs = allJobsData.length;
 
@@ -607,6 +613,12 @@ function renderJobs() {
         return;
     }
 
+    // Asegurar que currentJobs sea un array
+    if (!Array.isArray(currentJobs)) {
+        console.warn('currentJobs no es un array, inicializando vacío');
+        currentJobs = [];
+    }
+
     // Actualizar contador
     const countElement = document.getElementById('resultsCount');
     if (countElement) {
@@ -706,30 +718,24 @@ function renderJobs() {
  */
 async function viewJobDetail(jobId) {
     try {
+        console.log('🔍 viewJobDetail called with jobId:', jobId, typeof jobId);
+        console.log('📊 allJobsData length:', allJobsData.length);
+        console.log('📋 allJobsData sample:', allJobsData.slice(0, 2).map(j => ({ id: j.id, job_id: j.job_id, title: j.title })));
+        
         // Buscar en datos locales primero
         let job = allJobsData.find(j => j.id === jobId || j.job_id === jobId);
 
+        console.log('🎯 Found job:', job ? { id: job.id, job_id: job.job_id, title: job.title } : 'NOT FOUND');
+
         if (!job) {
-            notificationManager.loading('Cargando detalles del empleo...');
-
-            // Obtener del API si no está en local
-            const response = await apiClient.get(`/jobs/${jobId}`);
-            job = response.job || response.data;
-            
-            // ✨ Normalizar job si viene del API
-            if (job) {
-                const normalized = normalizeJobData([job]);
-                job = normalized[0];
-            }
-
-            notificationManager.hideLoading();
+            notificationManager.error('No se encontraron detalles del empleo');
+            return;
         }
 
-        // Abrir modal con detalles
+        // Abrir modal con detalles locales
         openJobDetailsModal(job);
 
     } catch (error) {
-        notificationManager.hideLoading();
         notificationManager.error('Error al cargar los detalles del empleo');
         console.error(error);
     }
@@ -1044,7 +1050,8 @@ function debounce(func, delay) {
  * Utilidades
  */
 function escapeHtml(text) {
-    if (!text) return '';
+    if (text == null) return '';
+    if (typeof text !== 'string') text = String(text);
     const map = {
         '&': '&amp;',
         '<': '&lt;',

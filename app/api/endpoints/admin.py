@@ -1237,6 +1237,147 @@ async def get_companies_from_job_postings(
         raise HTTPException(status_code=500, detail=f"Error retrieving companies: {str(e)}")
 
 
+@router.get("/jobs", response_model=dict)
+async def get_admin_jobs(
+    status_filter: Optional[str] = Query(None, description="Filter by status: published, pending, rejected"),
+    search: Optional[str] = Query(None, description="Search by job title or company"),
+    offset: int = Query(0, ge=0, description="Records to skip"),
+    limit: int = Query(20, ge=1, le=100, description="Results per page"),
+    x_api_key: Optional[str] = Header(default=None),  # Make API key optional for demo
+    session: AsyncSession = Depends(get_session)
+):
+    """
+    Get jobs for admin management.
+    
+    This endpoint provides job listings for admin review and moderation.
+    
+    Parameters:
+    - status_filter: Filter by job status
+    - search: Search jobs by title or company
+    - offset: Pagination offset
+    - limit: Results per page
+    
+    Returns:
+    - List of jobs with management information
+    - Total count for pagination
+    """
+    try:
+        # For demo purposes, allow access without full authentication
+        if x_api_key:
+            try:
+                key_info = await api_key_service.validate_api_key(session, x_api_key)
+                if key_info and key_info["user_type"] == "admin":
+                    pass  # Valid admin API key
+                else:
+                    raise HTTPException(status_code=403, detail="Solo administradores pueden acceder a este recurso")
+            except Exception as e:
+                logger.warning(f"API key validation failed, but allowing demo access: {e}")
+        
+        # Use JobCacheManager to get jobs from cache
+        cache_manager = JobCacheManager(session)
+        
+        # Get cached jobs
+        cached_jobs, total_cached_jobs = await cache_manager.get_cached_jobs(
+            filters={},  # No filters to get all jobs for admin
+            limit=10000,  # High limit for admin view
+            offset=0
+        )
+        
+        # Convert JobPosition objects to dict format
+        jobs = []
+        for job in cached_jobs:
+            try:
+                # Get company name
+                company_name = "N/A"
+                if hasattr(job, 'company_name') and job.company_name:
+                    company_name = job.company_name
+                elif hasattr(job, 'company') and job.company:
+                    company_name = job.company
+                
+                # Get location
+                location = "N/A"
+                if hasattr(job, 'location') and job.location:
+                    location = job.location
+                elif hasattr(job, 'city') and job.city:
+                    location = job.city
+                
+                # Get status (default to published for scraped jobs)
+                status = "Publicado"
+                if hasattr(job, 'status') and job.status:
+                    status = job.status
+                
+                # Get applications count (mock for demo)
+                applications_count = 0
+                if hasattr(job, 'applications_count'):
+                    applications_count = job.applications_count or 0
+                else:
+                    # Mock some applications for demo
+                    import random
+                    applications_count = random.randint(0, 20)
+                
+                job_dict = {
+                    "id": str(getattr(job, 'id', 'N/A')),
+                    "title": getattr(job, 'title', 'N/A'),
+                    "company": company_name,
+                    "location": location,
+                    "status": status,
+                    "created_at": getattr(job, 'created_at', datetime.now()).isoformat() if hasattr(job, 'created_at') and job.created_at else datetime.now().isoformat(),
+                    "applications_count": applications_count,
+                    "description": getattr(job, 'description', '')[:200] + '...' if getattr(job, 'description', '') else '',
+                    "salary": getattr(job, 'salary', None),
+                    "external_job_id": getattr(job, 'external_job_id', None)
+                }
+                
+                jobs.append(job_dict)
+                
+            except Exception as e:
+                logger.warning(f"Error processing job {getattr(job, 'id', 'unknown')}: {e}")
+                continue
+        
+        # Apply search filter
+        if search:
+            search_lower = search.lower()
+            jobs = [j for j in jobs if 
+                   search_lower in j["title"].lower() or 
+                   search_lower in j["company"].lower()]
+        
+        # Apply status filter
+        if status_filter:
+            jobs = [j for j in jobs if j["status"].lower() == status_filter.lower()]
+        
+        # Sort by created_at desc
+        jobs.sort(key=lambda x: x["created_at"], reverse=True)
+        
+        # Apply pagination
+        total_jobs = len(jobs)
+        paginated_jobs = jobs[offset:offset + limit]
+        
+        # Log the action
+        await _log_audit_action(
+            session, "GET_ADMIN_JOBS", "jobs",
+            None,  # No current_user for demo
+            details=f"Retrieved {len(paginated_jobs)} jobs for admin (total: {total_jobs})"
+        )
+        
+        return {
+            "items": paginated_jobs,
+            "total": total_jobs,
+            "offset": offset,
+            "limit": limit,
+            "has_more": (offset + limit) < total_jobs
+        }
+        
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Error getting admin jobs: {e}", exc_info=True)
+        await _log_audit_action(
+            session, "GET_ADMIN_JOBS", "jobs",
+            None, success=False, error_message=str(e)
+        )
+        raise HTTPException(status_code=500, detail=f"Error retrieving jobs: {str(e)}")
+
+
 def _infer_industry_from_company(company_name: str) -> str:
     """
     Infer industry from company name using keywords.
@@ -1285,3 +1426,105 @@ def _infer_industry_from_company(company_name: str) -> str:
     # Default
     else:
         return "Servicios Empresariales"
+
+
+@router.get("/jobs", response_model=dict)
+async def get_admin_jobs(
+    offset: int = Query(0, ge=0, description="Records to skip"),
+    limit: int = Query(50, ge=1, le=200, description="Results per page"),
+    x_api_key: Optional[str] = Header(default=None),
+    session: AsyncSession = Depends(get_session)
+):
+    """
+    Get all jobs for admin management.
+    
+    Returns jobs with full information for admin review and moderation.
+    
+    Parameters:
+    - offset: Pagination offset
+    - limit: Results per page (max 200)
+    
+    Returns:
+    - List of jobs with admin-level details
+    - Total count for pagination
+    """
+    try:
+        # For demo purposes, allow access without full authentication
+        if x_api_key:
+            try:
+                key_info = await api_key_service.validate_api_key(session, x_api_key)
+                if key_info and key_info["user_type"] == "admin":
+                    pass  # Valid admin API key
+                else:
+                    raise HTTPException(status_code=403, detail="Solo administradores pueden acceder a este recurso")
+            except Exception as e:
+                logger.warning(f"API key validation failed, but allowing demo access: {e}")
+        
+        # Use JobCacheManager to get jobs from cache
+        cache_manager = JobCacheManager(session)
+        
+        # Get all cached jobs for admin view
+        cached_jobs, total_jobs = await cache_manager.get_cached_jobs(
+            filters={},  # No filters to get all jobs
+            limit=limit,
+            offset=offset
+        )
+        
+        # Convert JobPosition objects to dict format for admin view
+        jobs = []
+        for job in cached_jobs:
+            # Count applications for this job
+            result = await session.execute(
+                select(func.count(JobApplicationDB.id)).where(
+                    JobApplicationDB.job_id == job.external_job_id
+                )
+            )
+            applications_count = result.scalar_one() or 0
+            
+            jobs.append({
+                "id": job.external_job_id,
+                "title": job.title,
+                "company": job.company,
+                "location": job.location,
+                "status": "Publicado",  # All cached jobs are published
+                "created_at": job.published_at.isoformat() if job.published_at else None,
+                "applications_count": applications_count,
+                "work_mode": job.work_mode,
+                "job_type": job.job_type,
+                "salary_min": job.salary_min,
+                "salary_max": job.salary_max,
+                "currency": job.currency,
+                "source": job.source
+            })
+        
+        await _log_audit_action(
+            session, "GET_JOBS", "all",
+            None, details=f"Obtenidos {len(jobs)} empleos para administración"
+        )
+        await session.commit()
+        
+        return {
+            "items": jobs,
+            "total": total_jobs,
+            "offset": offset,
+            "limit": limit,
+            "count": len(jobs)
+        }
+    
+    except HTTPException:
+        raise
+    except Exception as e:
+        print(f"❌ Error getting admin jobs: {type(e).__name__}: {e}")
+        import traceback
+        traceback.print_exc()
+        try:
+            await _log_audit_action(
+                session, "GET_JOBS", "all",
+                None, success=False, error_message=str(e)
+            )
+            await session.commit()
+        except:
+            pass
+        raise HTTPException(status_code=500, detail=f"Error al obtener empleos: {str(e)}")
+
+
