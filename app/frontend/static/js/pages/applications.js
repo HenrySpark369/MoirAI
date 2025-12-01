@@ -17,9 +17,16 @@ document.addEventListener('DOMContentLoaded', () => {
  * Inicializar página de aplicaciones
  */
 async function initApplicationsPage() {
-    // Proteger ruta
+    // Detectar si estamos en modo demo
+    const urlParams = new URLSearchParams(window.location.search);
+    const isDemo = urlParams.get('demo') === 'true';
+    const userRole = urlParams.get('role') || storageManager.getUserRole();
+    
+    // Proteger ruta - permitir estudiantes y empresas en demo
+    const allowedRoles = isDemo ? ['student', 'company'] : ['student'];
+    
     await protectedPageManager.initProtectedPage({
-        requiredRoles: ['student'],
+        requiredRoles: allowedRoles,
         redirectOnUnauth: '/login?redirect=/applications',
         redirectOnUnauthorized: '/dashboard',
         loadingMessage: 'Cargando aplicaciones...',
@@ -35,9 +42,39 @@ async function initApplicationsPage() {
  */
 async function loadApplications() {
     try {
-        // ✅ CORRECCIÓN: Usar endpoint correcto /students/my-applications en lugar de /applications
-        const response = await apiClient.get('/students/my-applications');
-        applications = response.applications || response.data || [];
+        // Detectar modo demo y rol
+        const urlParams = new URLSearchParams(window.location.search);
+        const isDemo = urlParams.get('demo') === 'true';
+        const userRole = urlParams.get('role') || storageManager.getUserRole();
+        
+        let response;
+        
+        if (isDemo && userRole === 'company') {
+            // Cargar aplicaciones demo para empresas
+            response = await apiClient.get('/companies/demo/applications');
+            applications = response.applications || [];
+            
+            // Actualizar título de la página para empresas
+            const headerTitle = document.querySelector('.applications-header h1');
+            if (headerTitle) {
+                headerTitle.innerHTML = '<i class="fas fa-users"></i> Aplicaciones Recibidas';
+            }
+            const headerDesc = document.querySelector('.applications-header p');
+            if (headerDesc) {
+                headerDesc.textContent = 'Gestiona las aplicaciones de estudiantes a tus vacantes';
+            }
+            
+        } else {
+            // Cargar aplicaciones del estudiante
+            if (isDemo) {
+                // Usar endpoint demo para estudiantes
+                response = await apiClient.get('/students/demo/applications');
+            } else {
+                // Comportamiento original para estudiantes autenticados
+                response = await apiClient.get('/students/my-applications');
+            }
+            applications = response.applications || response.data || [];
+        }
 
         // Organizar por estado
         applications.forEach(app => {
@@ -166,6 +203,12 @@ function renderApplications() {
     const container = document.getElementById('applicationsContainer');
     if (!container) return;
 
+    // Detectar modo demo y rol
+    const urlParams = new URLSearchParams(window.location.search);
+    const isDemo = urlParams.get('demo') === 'true';
+    const userRole = urlParams.get('role') || storageManager.getUserRole();
+    const isCompanyView = isDemo && userRole === 'company';
+
     // Actualizar contador
     const countElement = document.getElementById('applicationsCount');
     if (countElement) {
@@ -177,11 +220,15 @@ function renderApplications() {
     const paginatedApps = filteredApplications.slice(start, start + itemsPerPage);
 
     if (paginatedApps.length === 0) {
+        const emptyMessage = isCompanyView 
+            ? 'Aún no has recibido aplicaciones. <a href="/buscar-candidatos">Busca candidatos aquí</a>'
+            : 'Aún no has enviado solicitudes. <a href="/oportunidades">Busca empleos aquí</a>';
+            
         container.innerHTML = `
             <div class="empty-state">
                 <i class="fas fa-inbox"></i>
                 <h3>Sin aplicaciones</h3>
-                <p>Aún no has enviado solicitudes. ${currentFilter !== 'all' ? 'Cambia los filtros para ver más.' : '<a href="/oportunidades">Busca empleos aquí</a>'}</p>
+                <p>${currentFilter !== 'all' ? 'Cambia los filtros para ver más.' : emptyMessage}</p>
             </div>
         `;
         updatePagination(0);
@@ -192,71 +239,168 @@ function renderApplications() {
         const statusConfig = getStatusConfig(app.status || 'pending');
         const isExpired = app.expires_at && new Date(app.expires_at) < new Date();
 
-        return `
-            <div class="application-card" data-app-id="${app.id}">
-                <div class="app-header">
-                    <div class="app-title-section">
-                        <h3>${escapeHtml(app.job_title || 'Empleo sin título')}</h3>
-                        <p class="app-company">${escapeHtml(app.company || 'Empresa no disponible')}</p>
+        if (isCompanyView) {
+            // Render para empresas: mostrar aplicaciones de estudiantes
+            return `
+                <div class="application-card" data-app-id="${app.application_id}">
+                    <div class="app-header">
+                        <div class="app-title-section">
+                            <h3>${escapeHtml(app.name || 'Candidato sin nombre')}</h3>
+                            <p class="app-company">${escapeHtml(app.program || 'Programa no disponible')} • ${escapeHtml(app.job_title || 'Vacante')}</p>
+                        </div>
+                        <span class="app-status status-${statusConfig.class}">
+                            <i class="${statusConfig.icon}"></i> ${statusConfig.label}
+                        </span>
                     </div>
-                    <span class="app-status status-${statusConfig.class}">
-                        <i class="${statusConfig.icon}"></i> ${statusConfig.label}
-                    </span>
-                </div>
 
-                <div class="app-meta">
-                    <div class="meta-item">
-                        <strong>Solicitado:</strong>
-                        <span>${app.created_date || 'N/A'}</span>
-                    </div>
-                    <div class="meta-item">
-                        <strong>Actualizado:</strong>
-                        <span>${app.updated_date || app.created_date || 'N/A'}</span>
-                    </div>
-                    ${app.location ? `
+                    <div class="app-meta">
                         <div class="meta-item">
-                            <i class="fas fa-map-marker-alt"></i>
-                            <span>${escapeHtml(app.location)}</span>
+                            <strong>Match Score:</strong>
+                            <span>${app.match_score || 0}%</span>
+                        </div>
+                        <div class="meta-item">
+                            <strong>Aplicado:</strong>
+                            <span>${new Date(app.applied_date).toLocaleDateString('es-MX')}</span>
+                        </div>
+                        <div class="meta-item">
+                            <strong>Email:</strong>
+                            <span>${escapeHtml(app.email || 'N/A')}</span>
+                        </div>
+                    </div>
+
+                    ${app.skills && app.skills.length > 0 ? `
+                        <div class="app-skills">
+                            <strong>Habilidades:</strong>
+                            <div class="skills-list">
+                                ${app.skills.slice(0, 5).map(skill => `<span class="skill-tag">${escapeHtml(skill)}</span>`).join('')}
+                                ${app.skills.length > 5 ? `<span class="skill-tag">+${app.skills.length - 5} más</span>` : ''}
+                            </div>
                         </div>
                     ` : ''}
-                </div>
 
-                ${isExpired ? `
-                    <div class="app-warning">
-                        <i class="fas fa-exclamation-triangle"></i>
-                        <span>Esta oferta ha expirado</span>
-                    </div>
-                ` : ''}
-
-                ${app.notes ? `
-                    <div class="app-notes">
-                        <strong>Notas:</strong>
-                        <p>${escapeHtml(app.notes)}</p>
-                    </div>
-                ` : ''}
-
-                ${app.feedback ? `
-                    <div class="app-feedback">
-                        <strong>Retroalimentación:</strong>
-                        <p>${escapeHtml(app.feedback)}</p>
-                    </div>
-                ` : ''}
-
-                <div class="app-actions">
-                    <button class="btn btn-secondary" onclick="viewApplicationDetail(${app.id})">
-                        <i class="fas fa-eye"></i> Ver Detalles
-                    </button>
-                    ${['pending', 'pending_review'].includes((app.status || 'pending').toLowerCase()) ? `
-                        <button class="btn btn-danger" onclick="withdrawApplication(${app.id})">
-                            <i class="fas fa-times"></i> Retirar
+                    <div class="app-actions">
+                        <button class="btn btn-secondary" onclick="viewStudentProfile(${app.student_id})">
+                            <i class="fas fa-user"></i> Ver Perfil
                         </button>
-                    ` : ''}
+                        <button class="btn btn-primary" onclick="updateApplicationStatus(${app.application_id}, 'accepted')">
+                            <i class="fas fa-check"></i> Aceptar
+                        </button>
+                        <button class="btn btn-danger" onclick="updateApplicationStatus(${app.application_id}, 'rejected')">
+                            <i class="fas fa-times"></i> Rechazar
+                        </button>
+                    </div>
                 </div>
-            </div>
-        `;
+            `;
+        } else {
+            // Render original para estudiantes: mostrar aplicaciones enviadas
+            return `
+                <div class="application-card" data-app-id="${app.id}">
+                    <div class="app-header">
+                        <div class="app-title-section">
+                            <h3>${escapeHtml(app.job_title || 'Empleo sin título')}</h3>
+                            <p class="app-company">${escapeHtml(app.company || 'Empresa no disponible')}</p>
+                        </div>
+                        <span class="app-status status-${statusConfig.class}">
+                            <i class="${statusConfig.icon}"></i> ${statusConfig.label}
+                        </span>
+                    </div>
+
+                    <div class="app-meta">
+                        <div class="meta-item">
+                            <strong>Solicitado:</strong>
+                            <span>${app.created_date || 'N/A'}</span>
+                        </div>
+                        <div class="meta-item">
+                            <strong>Actualizado:</strong>
+                            <span>${app.updated_date || app.created_date || 'N/A'}</span>
+                        </div>
+                        ${app.location ? `
+                            <div class="meta-item">
+                                <i class="fas fa-map-marker-alt"></i>
+                                <span>${escapeHtml(app.location)}</span>
+                            </div>
+                        ` : ''}
+                    </div>
+
+                    ${isExpired ? `
+                        <div class="app-warning">
+                            <i class="fas fa-exclamation-triangle"></i>
+                            <span>Esta oferta ha expirado</span>
+                        </div>
+                    ` : ''}
+
+                    ${app.notes ? `
+                        <div class="app-notes">
+                            <strong>Notas:</strong>
+                            <p>${escapeHtml(app.notes)}</p>
+                        </div>
+                    ` : ''}
+
+                    ${app.feedback ? `
+                        <div class="app-feedback">
+                            <strong>Retroalimentación:</strong>
+                            <p>${escapeHtml(app.feedback)}</p>
+                        </div>
+                    ` : ''}
+
+                    <div class="app-actions">
+                        <button class="btn btn-secondary" onclick="viewApplicationDetail('${app.id}')">
+                            <i class="fas fa-eye"></i> Ver Detalles
+                        </button>
+                        ${['pending', 'pending_review'].includes((app.status || 'pending').toLowerCase()) ? `
+                            <button class="btn btn-danger" onclick="withdrawApplication('${app.id}')">
+                                <i class="fas fa-times"></i> Retirar
+                            </button>
+                        ` : ''}
+                    </div>
+                </div>
+            `;
+        }
     }).join('');
 
     updatePagination(filteredApplications.length);
+}/**
+ * Ver perfil de estudiante (para empresas)
+ */
+async function viewStudentProfile(studentId) {
+    try {
+        notificationManager.info('Funcionalidad de ver perfil próximamente disponible');
+        // TODO: Implementar vista de perfil de estudiante
+        console.log('Ver perfil de estudiante:', studentId);
+    } catch (error) {
+        console.error('Error al ver perfil:', error);
+        notificationManager.error('Error al cargar perfil del estudiante');
+    }
+}
+
+/**
+ * Actualizar estado de aplicación (para empresas)
+ */
+async function updateApplicationStatus(applicationId, newStatus) {
+    try {
+        notificationManager.loading('Actualizando estado...');
+        
+        // TODO: Implementar endpoint para actualizar estado
+        // await apiClient.put(`/companies/applications/${applicationId}/status`, { status: newStatus });
+        
+        // Simular actualización por ahora
+        setTimeout(() => {
+            notificationManager.hideLoading();
+            notificationManager.success(`Aplicación ${newStatus === 'accepted' ? 'aceptada' : 'rechazada'} exitosamente`);
+            
+            // Actualizar estado localmente
+            const app = applications.find(a => a.application_id === applicationId);
+            if (app) {
+                app.status = newStatus;
+                filterApplicationsByStatus(); // Re-filtrar para actualizar vista
+            }
+        }, 1000);
+        
+    } catch (error) {
+        console.error('Error al actualizar estado:', error);
+        notificationManager.hideLoading();
+        notificationManager.error('Error al actualizar estado de la aplicación');
+    }
 }
 
 /**
@@ -270,12 +414,35 @@ async function viewApplicationDetail(appId) {
             return;
         }
 
-        // Obtener detalles completos del empleo si es necesario
+        // Obtener detalles completos del empleo
+        let jobDetails = null;
+        if (app.job_id) {
+            try {
+                const jobResponse = await apiClient.get(`/jobs/${app.job_id}`);
+                jobDetails = jobResponse;
+            } catch (error) {
+                console.warn('No se pudieron obtener detalles adicionales del empleo:', error);
+                // Continuar con la información básica disponible
+            }
+        }
+
         const statusConfig = getStatusConfig(app.status || 'pending');
 
         const modal = document.createElement('div');
         modal.className = 'modal modal-app-details';
         modal.id = `appDetailsModal-${appId}`;
+
+        // Usar detalles del empleo si están disponibles, sino usar datos básicos
+        const jobTitle = jobDetails?.title || app.job_title || 'Empleo sin título';
+        const jobCompany = jobDetails?.company || app.company || 'Empresa';
+        const jobLocation = jobDetails?.location || app.location || 'Ubicación no especificada';
+        const jobDescription = jobDetails?.description || 'Descripción no disponible';
+        const jobSkills = jobDetails?.skills || [];
+        const jobWorkMode = jobDetails?.work_mode || 'No especificado';
+        const jobType = jobDetails?.job_type || 'No especificado';
+        const jobSalaryMin = jobDetails?.salary_min || app.salary_min;
+        const jobSalaryMax = jobDetails?.salary_max || app.salary_max;
+        const jobCurrency = jobDetails?.currency || app.currency || 'MXN';
 
         modal.innerHTML = `
             <div class="modal-content">
@@ -283,8 +450,8 @@ async function viewApplicationDetail(appId) {
 
                 <div class="modal-header-app">
                     <div>
-                        <h1>${escapeHtml(app.job_title || 'Empleo sin título')}</h1>
-                        <p class="app-company-modal">${escapeHtml(app.company || 'Empresa')}</p>
+                        <h1>${escapeHtml(jobTitle)}</h1>
+                        <p class="app-company-modal">${escapeHtml(jobCompany)}</p>
                     </div>
                     <span class="app-status status-${statusConfig.class} status-large">
                         ${statusConfig.label}
@@ -301,50 +468,65 @@ async function viewApplicationDetail(appId) {
                             </div>
                             <div class="info-item">
                                 <strong>Fecha de Solicitud:</strong>
-                                <span>${app.created_date || 'N/A'}</span>
+                                <span>${app.applied_date ? new Date(app.applied_date).toLocaleDateString('es-MX') : 'N/A'}</span>
                             </div>
                             <div class="info-item">
                                 <strong>Última Actualización:</strong>
-                                <span>${app.updated_date || app.created_date || 'N/A'}</span>
+                                <span>${app.updated_date ? new Date(app.updated_date).toLocaleDateString('es-MX') : (app.applied_date ? new Date(app.applied_date).toLocaleDateString('es-MX') : 'N/A')}</span>
                             </div>
-                            ${app.expires_at ? `
+                            ${app.match_score ? `
                                 <div class="info-item">
-                                    <strong>Válida Hasta:</strong>
-                                    <span>${new Date(app.expires_at).toLocaleDateString('es-MX')}</span>
+                                    <strong>Compatibilidad:</strong>
+                                    <span class="match-score-display">${app.match_score}%</span>
                                 </div>
                             ` : ''}
                         </div>
 
                         <div class="info-section">
-                            <h3>Información del Empleo</h3>
-                            ${app.location ? `
+                            <h3>Detalles del Empleo</h3>
+                            <div class="info-item">
+                                <i class="fas fa-map-marker-alt"></i>
+                                <span>${escapeHtml(jobLocation)}</span>
+                            </div>
+                            <div class="info-item">
+                                <i class="fas fa-briefcase"></i>
+                                <span>${escapeHtml(jobType)}</span>
+                            </div>
+                            <div class="info-item">
+                                <i class="fas fa-building"></i>
+                                <span>${escapeHtml(jobWorkMode)}</span>
+                            </div>
+                            ${jobSalaryMin ? `
                                 <div class="info-item">
-                                    <strong>Ubicación:</strong>
-                                    <span>${escapeHtml(app.location)}</span>
-                                </div>
-                            ` : ''}
-                            ${app.work_mode ? `
-                                <div class="info-item">
-                                    <strong>Modalidad:</strong>
-                                    <span>${capitalizeFirst(app.work_mode)}</span>
-                                </div>
-                            ` : ''}
-                            ${app.salary_range ? `
-                                <div class="info-item">
-                                    <strong>Rango Salarial:</strong>
-                                    <span>${escapeHtml(app.salary_range)}</span>
+                                    <i class="fas fa-dollar-sign"></i>
+                                    <span>$${jobSalaryMin.toLocaleString()} - $${jobSalaryMax.toLocaleString()} ${jobCurrency}</span>
                                 </div>
                             ` : ''}
                         </div>
                     </div>
 
+                    ${jobDescription && jobDescription !== 'Descripción no disponible' ? `
+                        <div class="app-section">
+                            <h3>Descripción del Empleo</h3>
+                            <div class="job-description">
+                                ${jobDescription.split('\n').map(line => `<p>${escapeHtml(line)}</p>`).join('')}
+                            </div>
+                        </div>
+                    ` : ''}
+
+                    ${jobSkills && jobSkills.length > 0 ? `
+                        <div class="app-section">
+                            <h3>Habilidades Requeridas</h3>
+                            <div class="skills-list">
+                                ${jobSkills.map(skill => `<span class="skill-tag">${escapeHtml(skill)}</span>`).join('')}
+                            </div>
+                        </div>
+                    ` : ''}
+
                     ${app.notes ? `
                         <div class="app-section">
                             <h3>Mis Notas</h3>
                             <p>${escapeHtml(app.notes)}</p>
-                            <button class="btn btn-secondary btn-sm" onclick="editApplicationNotes(${appId})">
-                                <i class="fas fa-edit"></i> Editar Notas
-                            </button>
                         </div>
                     ` : ''}
 
@@ -370,6 +552,9 @@ async function viewApplicationDetail(appId) {
                         Cerrar
                     </button>
                     ${['pending', 'pending_review'].includes((app.status || 'pending').toLowerCase()) ? `
+                        <button class="btn btn-outline" onclick="editApplicationNotes(${appId})">
+                            <i class="fas fa-edit"></i> Editar Notas
+                        </button>
                         <button class="btn btn-danger" onclick="withdrawApplication(${appId})">
                             <i class="fas fa-times"></i> Retirar Solicitud
                         </button>

@@ -35,6 +35,76 @@ class SearchRateLimiter {
 const searchLimiter = new SearchRateLimiter(3, 5000);
 
 /**
+ * Obtener empleos reales desde el servicio de scraping para modo demo
+ * Usa datos scrapeados de OCC como empleos "auténticos" para stakeholders
+ */
+async function getDemoJobs(keyword = null, limit = 50) {
+    try {
+        console.log('🎭 Fetching real jobs from background scraping service for demo mode');
+
+        // Use real job scraping service instead of mock demo data
+        const searchParams = {
+            keyword: keyword || '',
+            location: '',
+            category: '',
+            salary_min: 0,
+            salary_range: '',
+            experience_level: '',
+            work_mode: '',
+            job_type: '',
+            company_verified: false,
+            sort_by: 'relevance',
+            page: 1
+        };
+
+        const response = await apiClient.post('/job-scraping/search?detailed=false&full_details=true', searchParams);
+
+        if (response.data && response.data.jobs) {
+            console.log(`✅ Loaded ${response.data.jobs.length} real jobs for demo mode`);
+            return response.data.jobs.slice(0, limit).map(job => ({
+                ...job,
+                // Asegurar compatibilidad con el formato esperado
+                job_id: job.job_id,
+                skills: Array.isArray(job.skills) ? job.skills : []
+            }));
+        }
+
+        console.warn('⚠️ No real jobs returned from API, using fallback');
+        return getFallbackDemoJobs();
+
+    } catch (error) {
+        console.error('❌ Error loading real jobs for demo:', error);
+        notificationManager.error('Error cargando empleos, usando datos de respaldo');
+        return getFallbackDemoJobs();
+    }
+}
+
+/**
+ * Empleos demo de respaldo cuando falla la API
+ * Ahora usa datos mínimos ya que dependemos del scraping real
+ */
+function getFallbackDemoJobs() {
+    return [
+        {
+            id: 1,
+            job_id: 1,
+            title: "Empleos no disponibles temporalmente",
+            company: "Sistema MoirAI",
+            location: "En proceso de carga",
+            description: "Los empleos se están cargando desde fuentes externas. Por favor, intenta nuevamente en unos momentos.",
+            skills: ["Temporarily unavailable"],
+            work_mode: "N/A",
+            job_type: "N/A",
+            salary_min: 0,
+            salary_max: 0,
+            currency: "MXN",
+            published_at: new Date().toISOString(),
+            source: "demo-fallback"
+        }
+    ];
+}
+
+/**
  * ✨ NUEVO: Normalizar datos de jobs desde diferentes fuentes del API
  * Asegura que los campos están en el formato correcto (arrays, strings, etc)
  */
@@ -233,9 +303,25 @@ function updateJobCount(count) {
  * ✨ MEJORADO: Usa parámetros para búsqueda inicial más relevante
  */
 async function loadInitialJobs() {
+    // Verificar si estamos en modo demo
+    const urlParams = new URLSearchParams(window.location.search);
+    const isDemoMode = urlParams.get('demo') === 'true';
+
     notificationManager.loading('Cargando empleos disponibles...');
 
     try {
+        if (isDemoMode) {
+            // En modo demo, usar empleos demo con IDs conocidos
+            console.log('🎭 Demo mode detected - loading demo jobs');
+            allJobsData = getDemoJobs();
+            currentJobs = allJobsData;
+            totalJobs = allJobsData.length;
+
+            notificationManager.hideLoading();
+            renderJobs();
+            return;
+        }
+
         // ✨ NUEVO: Intentar cargar del cache persistente (BD) primero
         // GET /job-scraping/cache/list - Mucho más rápido que scraping
         const response = await apiClient.get('/job-scraping/cache/list', {
@@ -293,6 +379,10 @@ async function loadInitialJobs() {
  * Realizar búsqueda - ✨ MEJORADO: Usa todos los parámetros disponibles del endpoint
  */
 async function handleSearch() {
+    // Verificar si estamos en modo demo
+    const urlParams = new URLSearchParams(window.location.search);
+    const isDemoMode = urlParams.get('demo') === 'true';
+
     // Rate limiting
     if (!searchLimiter.isAllowed()) {
         notificationManager.warning('Por favor espera antes de hacer otra búsqueda');
@@ -304,6 +394,39 @@ async function handleSearch() {
 
     try {
         const keyword = document.getElementById('searchJobs')?.value || '';
+
+        if (!keyword.trim()) {
+            notificationManager.warning('Por favor ingresa un término de búsqueda');
+            isSearchInProgress = false;
+            return;
+        }
+
+        notificationManager.loading('Buscando empleos...');
+
+        if (isDemoMode) {
+            // En modo demo, filtrar empleos demo por keyword
+            console.log('🎭 Demo mode search - filtering demo jobs');
+            const demoJobs = getDemoJobs();
+            const filteredJobs = demoJobs.filter(job => 
+                job.title.toLowerCase().includes(keyword.toLowerCase()) ||
+                job.company.toLowerCase().includes(keyword.toLowerCase()) ||
+                job.description.toLowerCase().includes(keyword.toLowerCase()) ||
+                (job.skills && job.skills.some(skill => skill.toLowerCase().includes(keyword.toLowerCase())))
+            );
+
+            allJobsData = normalizeJobData(filteredJobs);
+            currentJobs = allJobsData;
+            totalJobs = allJobsData.length;
+            currentPage = 1;
+
+            notificationManager.hideLoading();
+            renderJobs();
+            notificationManager.success(`Encontrados ${totalJobs} empleos (modo demo)`);
+            isSearchInProgress = false;
+            return;
+        }
+
+        // Búsqueda normal para modo producción
         const location = document.getElementById('locationFilter')?.value || '';
         const jobType = document.getElementById('jobTypeFilter')?.value || '';
         
@@ -315,14 +438,6 @@ async function handleSearch() {
         const experienceLevels = Array.from(
             document.querySelectorAll('.level-filter:checked')
         ).map(el => el.value).join(',') || null;
-
-        if (!keyword.trim()) {
-            notificationManager.warning('Por favor ingresa un término de búsqueda');
-            isSearchInProgress = false;
-            return;
-        }
-
-        notificationManager.loading('Buscando empleos...');
 
         // ✅ MEJORADO: POST /job-scraping/search con TODOS los parámetros disponibles
         const response = await apiClient.post('/job-scraping/search', {
@@ -746,7 +861,31 @@ function openJobDetailsModal(job) {
  */
 async function applyForJob(jobId) {
     try {
-        // Verificar autenticación
+        // Verificar si está en modo demo
+        const urlParams = new URLSearchParams(window.location.search);
+        const isDemoMode = urlParams.get('demo') === 'true';
+        
+        if (isDemoMode) {
+            // En modo demo, simular aplicación exitosa
+            notificationManager.loading('Procesando solicitud...');
+            await new Promise(resolve => setTimeout(resolve, 1000)); // Simular delay
+            notificationManager.hideLoading();
+            notificationManager.success('¡Solicitud enviada exitosamente! (Modo Demo)');
+            
+            // Cerrar modal si está abierto
+            const modal = document.getElementById('jobDetailsModal');
+            if (modal) modal.remove();
+            
+            // Cambiar estado del botón
+            const applyBtn = document.querySelector(`button[onclick="applyForJob('${jobId}')"]`);
+            if (applyBtn) {
+                applyBtn.disabled = true;
+                applyBtn.textContent = '✓ Solicitado';
+            }
+            return;
+        }
+
+        // Verificar autenticación normal
         if (!authManager.isAuthenticated()) {
             window.location.href = '/login?redirect=/oportunidades';
             return;

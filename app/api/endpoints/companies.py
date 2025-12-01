@@ -1172,3 +1172,166 @@ async def update_application_status(
             current_user, success=False, error_message=str(e)
         )
         raise HTTPException(status_code=500, detail=str(e))
+
+
+# ============================================================================
+# DEMO ENDPOINTS - Using Mock Data for Company Applications
+# ============================================================================
+
+@router.get("/demo/applications", response_model=dict)
+async def get_demo_company_applications(
+    limit: int = Query(20, ge=1, le=100, description="Número máximo de aplicaciones"),
+    status: Optional[str] = Query(None, description="Filtrar por estado (pending, reviewed, accepted, rejected)"),
+    sort_by: str = Query("date", description="Ordenar por (date, name, score)")
+):
+    """
+    Get company applications for demo mode using mock student applications
+    
+    Returns mock applications from students to company jobs for demonstration
+    """
+    import random
+    from datetime import datetime, timedelta
+    
+    try:
+        # Mock student data for demo applications
+        mock_students = [
+            {
+                "id": 1001,
+                "name": "Ana García López",
+                "email": "ana.garcia@email.com",
+                "program": "Ingeniería en Sistemas",
+                "skills": ["Python", "JavaScript", "React", "Node.js", "SQL"],
+                "soft_skills": ["Liderazgo", "Trabajo en equipo", "Comunicación"],
+                "match_score": 92
+            },
+            {
+                "id": 1002,
+                "name": "Carlos Rodríguez",
+                "email": "carlos.rodriguez@email.com", 
+                "program": "Licenciatura en Informática",
+                "skills": ["Java", "Spring Boot", "PostgreSQL", "Docker", "AWS"],
+                "soft_skills": ["Resolución de problemas", "Adaptabilidad", "Aprendizaje continuo"],
+                "match_score": 88
+            },
+            {
+                "id": 1003,
+                "name": "María Fernández",
+                "email": "maria.fernandez@email.com",
+                "program": "Ingeniería Civil",
+                "skills": ["Python", "Machine Learning", "Pandas", "Scikit-learn", "Tableau"],
+                "soft_skills": ["Análisis crítico", "Creatividad", "Gestión del tiempo"],
+                "match_score": 85
+            },
+            {
+                "id": 1004,
+                "name": "José Martínez",
+                "email": "jose.martinez@email.com",
+                "program": "Licenciatura en Administración",
+                "skills": ["Excel", "Power BI", "SQL", "Python", "R"],
+                "soft_skills": ["Negociación", "Liderazgo", "Estrategia"],
+                "match_score": 78
+            },
+            {
+                "id": 1005,
+                "name": "Laura Sánchez",
+                "email": "laura.sanchez@email.com",
+                "program": "Ingeniería Industrial",
+                "skills": ["JavaScript", "React", "TypeScript", "MongoDB", "Express"],
+                "soft_skills": ["Empatía", "Colaboración", "Innovación"],
+                "match_score": 82
+            },
+            {
+                "id": 1006,
+                "name": "Diego López",
+                "email": "diego.lopez@email.com",
+                "program": "Licenciatura en Economía",
+                "skills": ["Python", "R", "Statistics", "Excel", "Tableau"],
+                "soft_skills": ["Pensamiento analítico", "Comunicación", "Resiliencia"],
+                "match_score": 79
+            },
+            {
+                "id": 1007,
+                "name": "Sofia Ramírez",
+                "email": "sofia.ramirez@email.com",
+                "program": "Ingeniería Electrónica",
+                "skills": ["C++", "Python", "MATLAB", "Arduino", "IoT"],
+                "soft_skills": ["Precisión", "Innovación", "Trabajo bajo presión"],
+                "match_score": 86
+            },
+            {
+                "id": 1008,
+                "name": "Miguel Torres",
+                "email": "miguel.torres@email.com",
+                "program": "Licenciatura en Marketing",
+                "skills": ["SEO", "SEM", "Google Analytics", "Social Media", "Content Marketing"],
+                "soft_skills": ["Creatividad", "Estrategia digital", "Networking"],
+                "match_score": 74
+            }
+        ]
+        
+        # Create mock applications with different statuses and dates
+        applications = []
+        base_date = datetime.utcnow()
+        
+        for i, student in enumerate(mock_students[:limit]):
+            # Random status
+            statuses = ["pending", "reviewed", "accepted", "rejected"]
+            status_weights = [0.4, 0.3, 0.15, 0.15]  # More pending and reviewed
+            
+            # Apply status filter if provided
+            if status and status not in statuses:
+                continue
+                
+            app_status = status if status else random.choices(statuses, weights=status_weights)[0]
+            
+            # Random application date (last 30 days)
+            days_ago = random.randint(0, 30)
+            applied_date = base_date - timedelta(days=days_ago)
+            
+            applications.append({
+                "application_id": 2000 + i,
+                "student_id": student["id"],
+                "name": student["name"],
+                "email": student["email"],
+                "program": student["program"],
+                "skills": student["skills"],
+                "soft_skills": student["soft_skills"],
+                "status": app_status,
+                "applied_date": applied_date.isoformat(),
+                "match_score": student["match_score"],
+                "job_title": random.choice([
+                    "Desarrollador Full Stack",
+                    "Científico de Datos", 
+                    "Ingeniero de Software",
+                    "Analista de Datos",
+                    "Desarrollador Frontend"
+                ])
+            })
+        
+        # Apply sorting
+        if sort_by == "date":
+            applications.sort(key=lambda x: x["applied_date"], reverse=True)
+        elif sort_by == "name":
+            applications.sort(key=lambda x: x["name"])
+        else:  # score
+            applications.sort(key=lambda x: x["match_score"], reverse=True)
+        
+        # Apply status filter
+        if status:
+            applications = [app for app in applications if app["status"] == status]
+        
+        return {
+            "success": True,
+            "applications": applications[:limit],
+            "total": len(applications),
+            "filtered_by": status,
+            "sorted_by": sort_by
+        }
+        
+    except Exception as e:
+        print(f"Error getting demo company applications: {e}")
+        raise HTTPException(status_code=500, detail="Error generating demo applications")
+
+# ============================================================================
+# END OF COMPANIES ENDPOINTS
+# ============================================================================

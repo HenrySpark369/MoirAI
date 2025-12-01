@@ -36,6 +36,8 @@ from app.core.config import settings
 
 router = APIRouter(prefix="/students", tags=["students"])
 
+logger = logging.getLogger(__name__)
+
 
 async def _log_audit_action(session: AsyncSession, action: str, resource: str, 
                      actor: UserContext, success: bool = True, 
@@ -1013,6 +1015,97 @@ async def get_my_applications(
             current_user, success=False, error_message=str(e)
         )
         raise HTTPException(status_code=500, detail=str(e))
+
+
+@router.get("/demo/applications", response_model=dict)
+async def get_demo_applications(
+    status: Optional[str] = Query(None),
+    limit: int = Query(20),
+    offset: int = Query(0),
+):
+    """
+    Obtener aplicaciones demo para estudiantes en modo demo
+    
+    Parámetros:
+    - status: Filtrar por estado (pending, accepted, rejected, withdrawn)
+    - limit: Número de resultados por página (default: 20)
+    - offset: Número de registros a saltar (default: 0)
+    
+    Retorna:
+    - Lista de aplicaciones mock con detalles de empleos
+    """
+    try:
+        # Mock applications data
+        mock_applications = [
+            {
+                "id": "demo_app_1",
+                "job_id": 1,
+                "job_title": "Desarrollador Full Stack",
+                "company": "TechCorp",
+                "location": "Ciudad de México",
+                "status": "pending",
+                "applied_date": "2025-11-25T10:30:00",
+                "updated_date": "2025-11-25T10:30:00",
+                "match_score": 85
+            },
+            {
+                "id": "demo_app_2", 
+                "job_id": 2,
+                "job_title": "Científico de Datos",
+                "company": "DataInc",
+                "location": "Remoto",
+                "status": "accepted",
+                "applied_date": "2025-11-20T14:15:00",
+                "updated_date": "2025-11-22T09:00:00",
+                "match_score": 92
+            },
+            {
+                "id": "demo_app_3",
+                "job_id": 3,
+                "job_title": "Ingeniero de Software",
+                "company": "InnovateLab",
+                "location": "Córdoba",
+                "status": "rejected",
+                "applied_date": "2025-11-15T16:45:00",
+                "updated_date": "2025-11-18T11:30:00",
+                "match_score": 78
+            },
+            {
+                "id": "demo_app_4",
+                "job_id": 4,
+                "job_title": "Analista de Sistemas",
+                "company": "SysTech",
+                "location": "Buenos Aires",
+                "status": "pending",
+                "applied_date": "2025-11-28T08:20:00",
+                "updated_date": "2025-11-28T08:20:00",
+                "match_score": 88
+            }
+        ]
+        
+        # Filter by status if provided
+        if status:
+            filtered_applications = [app for app in mock_applications if app["status"] == status]
+        else:
+            filtered_applications = mock_applications
+        
+        # Apply pagination
+        total = len(filtered_applications)
+        start = offset
+        end = start + limit
+        paginated_applications = filtered_applications[start:end]
+        
+        logger.info(f"🎭 Demo applications retrieved: {len(paginated_applications)} applications (total: {total})")
+        
+        return {
+            "applications": paginated_applications,
+            "total": total,
+            "success": True
+        }
+        
+    except Exception as e:
+        logger.error(f"❌ Error getting demo applications: {e}", exc_info=True)
+        raise HTTPException(status_code=500, detail="Failed to get demo applications")
 
 
 @router.get("/recommendations", response_model=dict)
@@ -2425,7 +2518,7 @@ async def delete_student_resume(
         raise
     except Exception as e:
         session.rollback()
-        print(f"Error deleting resume: {e}")
+        print(f"Error eliminando resume: {e}")
         await _log_audit_action(
             session, "DELETE_RESUME", f"student_id:{student_id}",
             current_user, success=False, error_message=str(e)
@@ -2502,7 +2595,7 @@ async def update_student_activity(
 
 @router.get("/search/skills", response_model=List[StudentPublic])
 async def search_students_by_skills(
-    skills: List[str] = Query(..., description="Lista de habilidades a buscar"),
+    skills: Optional[List[str]] = Query(None, description="Lista de habilidades a buscar"),
     min_matches: int = Query(1, ge=1, description="Mínimo de habilidades que deben coincidir"),
     limit: int = Query(20, ge=1, le=100),
     session: AsyncSession = Depends(get_session),
@@ -2542,6 +2635,36 @@ async def search_students_by_skills(
                 status_code=403,
                 detail="La empresa debe estar verificada para buscar candidatos"
             )
+    
+    # Handle demo mode - if no skills provided, return sample students
+    if not skills:
+        # For demo purposes, return some sample students when no skills are specified
+        students = (await session.execute(
+            select(Student).where(Student.is_active == True).limit(limit)
+        )).scalars().all()
+        
+        result = []
+        for student in students:
+            student_public = StudentPublic(
+                id=student.id,
+                name=student.name,
+                program=student.program,
+                skills=json.loads(student.skills or "[]"),
+                soft_skills=json.loads(student.soft_skills or "[]"),
+                projects=json.loads(student.projects or "[]"),
+                cv_uploaded=student.cv_uploaded or False,
+                cv_filename=student.cv_filename,
+                created_at=student.created_at,
+                last_active=student.last_active
+            )
+            result.append(student_public)
+        
+        await _log_audit_action(
+            session, "SEARCH_BY_SKILLS", "skills:none (demo)",
+            current_user, details=f"Encontrados {len(result)} estudiantes (modo demo)"
+        )
+        
+        return result
     
     students = (await session.execute(
         select(Student).where(Student.is_active == True)
@@ -2589,6 +2712,84 @@ async def search_students_by_skills(
     )
     
     return result
+
+
+# ============================================================================
+# DEMO ENDPOINTS - Using Synthetic CV Data
+# ============================================================================
+
+@router.get("/demo/search", response_model=List[dict])
+async def search_demo_students(
+    skills: Optional[List[str]] = Query(None, description="Lista de habilidades a buscar (opcional)"),
+    limit: int = Query(20, ge=1, le=100, description="Número máximo de resultados")
+):
+    """
+    Buscar estudiantes sintéticos para modo demo
+    
+    Returns synthetic student profiles from the CV simulator database
+    """
+    import sqlite3
+    import random
+    import json
+    
+    try:
+        # Connect to synthetic CV database
+        db_path = "cv_simulator/training_data_cvs.db"
+        conn = sqlite3.connect(db_path)
+        cursor = conn.cursor()
+        
+        # Build query
+        query = "SELECT id, industry, seniority, cv_text, annotations FROM cv_dataset"
+        params = []
+        
+        # Filter by skills if provided
+        if skills:
+            skill_conditions = []
+            for skill in skills:
+                skill_conditions.append("cv_text LIKE ?")
+                params.append(f"%{skill}%")
+            if skill_conditions:
+                query += " WHERE " + " OR ".join(skill_conditions)
+        
+        query += " ORDER BY RANDOM() LIMIT ?"
+        params.append(limit)
+        
+        cursor.execute(query, params)
+        rows = cursor.fetchall()
+        
+        results = []
+        for row in rows:
+            profile_id, industry, seniority, cv_text, annotations_json = row
+            
+            # Parse annotations
+            annotations = json.loads(annotations_json) if annotations_json else {}
+            
+            # Create student-like profile
+            profile = {
+                "id": f"demo_{profile_id}",
+                "name": annotations.get("name", f"Estudiante Demo {profile_id}"),
+                "program": annotations.get("program", "Ingeniería en Sistemas"),
+                "skills": annotations.get("skills", ["Python", "JavaScript", "SQL"]),
+                "soft_skills": annotations.get("soft_skills", ["Trabajo en equipo", "Comunicación"]),
+                "projects": annotations.get("projects", ["Proyecto de desarrollo web", "Análisis de datos"]),
+                "industry": industry,
+                "seniority_level": seniority,
+                "location": annotations.get("location", "Ciudad de México"),
+                "cv_uploaded": True,
+                "cv_filename": f"cv_demo_{profile_id}.pdf",
+                "created_at": "2025-11-01T00:00:00",
+                "last_active": "2025-11-30T00:00:00",
+                "is_demo": True
+            }
+            results.append(profile)
+        
+        conn.close()
+        return results
+        
+    except Exception as e:
+        print(f"Error searching demo students: {e}")
+        raise HTTPException(status_code=500, detail="Error loading demo students")
+
 
 # ============================================================================
 # END OF STUDENTS ENDPOINTS

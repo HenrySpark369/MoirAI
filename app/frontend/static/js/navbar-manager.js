@@ -48,22 +48,28 @@ class NavbarManager {
                 this.isAuthenticated = true;
                 this.userRole = this.demoRole;
 
+                // ✅ Usar perfil demo real si está disponible
+                let demoProfile = null;
+                if (typeof storageManager !== 'undefined' && storageManager.isDemoMode()) {
+                    demoProfile = storageManager.getDemoProfile();
+                }
+
                 // Set appropriate demo user info and API key
                 if (this.demoRole === 'student') {
-                    this.userName = 'Demo Estudiante';
+                    this.userName = demoProfile?.name || 'Demo Estudiante';
                     localStorage.setItem('api_key', 'demo-student-key');
                     localStorage.setItem('user_role', 'student');
-                    localStorage.setItem('user_name', 'Demo Estudiante');
+                    localStorage.setItem('user_name', this.userName);
                 } else if (this.demoRole === 'company') {
-                    this.userName = 'Demo Empresa';
+                    this.userName = demoProfile?.name || 'Demo Empresa';
                     localStorage.setItem('api_key', 'demo-company-key');
                     localStorage.setItem('user_role', 'company');
-                    localStorage.setItem('user_name', 'Demo Empresa');
+                    localStorage.setItem('user_name', this.userName);
                 } else { // admin
-                    this.userName = 'Demo Admin';
+                    this.userName = demoProfile?.name || 'Demo Admin';
                     localStorage.setItem('api_key', 'admin-key-123-change-me');
                     localStorage.setItem('user_role', 'admin');
-                    localStorage.setItem('user_name', 'Demo Admin');
+                    localStorage.setItem('user_name', this.userName);
                 }
 
                 this.setupDemoNavbar();
@@ -337,8 +343,8 @@ class NavbarManager {
             'company': [
                 { href: `/dashboard${baseUrl}`, icon: 'fa-home', label: 'Dashboard', page: 'dashboard' },
                 { href: `/buscar-candidatos${baseUrl}`, icon: 'fa-search', label: 'Buscar Candidatos', page: 'buscar-candidatos' },
-                { href: `/profile${baseUrl}`, icon: 'fa-building', label: 'Mi Empresa', page: 'profile' },
-                { href: `/mis-vacantes${baseUrl}`, icon: 'fa-briefcase', label: 'Mis Vacantes', page: 'mis-vacantes' }
+                { href: `/applications${baseUrl}`, icon: 'fa-file-alt', label: 'Aplicaciones', page: 'applications' },
+                { href: `/profile${baseUrl}`, icon: 'fa-building', label: 'Mi Empresa', page: 'profile' }
             ],
             'admin': [
                 { href: `/dashboard${baseUrl}`, icon: 'fa-home', label: 'Dashboard', page: 'dashboard' },

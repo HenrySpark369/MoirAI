@@ -400,44 +400,57 @@ const StorageManager = {
     },
 
     /**
-     * Verificar si tiene un rol específico
+     * DEMO MODE METHODS - Métodos específicos para modo demo
      */
-    hasRole(role) {
-        return this.getUserRole() === role;
+
+    /**
+     * Verificar si está en modo demo
+     */
+    isDemoMode() {
+        return this.get('demo_mode') === true;
     },
 
     /**
-     * Limpiar sesión de usuario
+     * Obtener perfil demo completo
      */
-    clearUserSession() {
-        this.remove('api_key');
-        this.remove('token');
-        this.remove('user_role');
-        this.remove('user_id');
-        this.remove('user_name');
-        this.remove('user_email');
-        
-        // Backward compatibility
-        localStorage.removeItem('api_key');
-        localStorage.removeItem('moirai_token');
-        localStorage.removeItem('user_role');
-        localStorage.removeItem('user_id');
-        localStorage.removeItem('user_name');
-        localStorage.removeItem('user_email');
-        
+    getDemoProfile() {
+        return this.get('demo_profile');
+    },
+
+    /**
+     * Establecer perfil demo
+     */
+    setDemoProfile(profile) {
+        this.set('demo_profile', profile);
+        this.set('demo_mode', true);
+        // También actualizar campos de usuario estándar
+        if (profile) {
+            this.setUserName(profile.name);
+            this.setUserEmail(profile.email);
+            this.setUserRole('student');
+        }
         return true;
     },
 
     /**
-     * Depuración: mostrar todos los datos de sesión
+     * Limpiar modo demo
      */
-    debugSession() {
-        console.log('📋 MoirAI Storage Debug:');
-        console.log('Session:', this.getUserSession());
-        console.log('Authenticated:', this.isAuthenticated());
-        console.log('Role:', this.getUserRole());
-        console.log('Storage Stats:', this.getStorageStats());
+    clearDemoMode() {
+        this.remove('demo_profile');
+        this.remove('demo_mode');
+        return true;
     },
+
+    /**
+     * Obtener perfil de usuario (demo o autenticado)
+     */
+    getCurrentUserProfile() {
+        if (this.isDemoMode()) {
+            return this.getDemoProfile();
+        }
+        // Para usuarios autenticados, devolver sesión básica
+        return this.getUserSession();
+    }
 };
 
 // Exportar para uso global

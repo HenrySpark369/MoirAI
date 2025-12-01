@@ -434,3 +434,104 @@ async def calculate_matching_score(
             status_code=500,
             detail=f"Error al calcular matching score: {str(e)}"
         )
+
+
+# ============================================================================
+# DEMO ENDPOINTS - Using Synthetic CV Data
+# ============================================================================
+
+@router.get("/demo/recommendations", response_model=JobRecommendationResponse)
+async def get_demo_recommendations(
+    limit: int = Query(10, ge=1, le=20, description="Número máximo de recomendaciones"),
+    session: AsyncSession = Depends(get_session)
+):
+    """
+    Get job recommendations for demo mode using synthetic student profiles
+    
+    Uses a random synthetic CV profile to generate personalized recommendations
+    """
+    import sqlite3
+    import random
+    import json
+    from datetime import datetime
+    
+    try:
+        # Get random synthetic profile
+        db_path = "cv_simulator/training_data_cvs.db"
+        conn = sqlite3.connect(db_path)
+        cursor = conn.cursor()
+        
+        cursor.execute("SELECT id, industry, seniority, annotations FROM cv_dataset ORDER BY RANDOM() LIMIT 1")
+        row = cursor.fetchone()
+        conn.close()
+        
+        if not row:
+            raise HTTPException(status_code=404, detail="No synthetic profiles available")
+        
+        profile_id, industry, seniority, annotations_json = row
+        annotations = json.loads(annotations_json) if annotations_json else {}
+        
+        # For demo, return mock recommendations with realistic scores
+        from app.schemas import JobItem
+        
+        recommendations = [
+            JobItem(
+                title="Desarrollador Full Stack",
+                company="TechCorp",
+                location="Ciudad de México",
+                description="Buscamos desarrollador con experiencia en React, Node.js y bases de datos",
+                match_score=85.0,
+                source="demo",
+                url=f"/jobs/1",  # Add URL for navigation
+                # Add custom fields for demo
+                work_mode="Híbrido",
+                job_type="Tiempo completo",
+                skills=["React", "Node.js", "JavaScript", "SQL"],
+                id=1
+            ),
+            JobItem(
+                title="Científico de Datos",
+                company="DataInc", 
+                location="Remoto",
+                description="Posición para analista con Python, SQL y experiencia en machine learning",
+                match_score=78.0,
+                source="demo",
+                url=f"/jobs/2",
+                work_mode="Remoto",
+                job_type="Tiempo completo", 
+                skills=["Python", "SQL", "Machine Learning", "Pandas"],
+                id=2
+            ),
+            JobItem(
+                title="Ingeniero de Software",
+                company="InnovateLab",
+                location="Córdoba",
+                description="Desarrollo de aplicaciones web con tecnologías modernas",
+                match_score=72.0,
+                source="demo",
+                url=f"/jobs/3",
+                work_mode="Presencial",
+                job_type="Tiempo completo",
+                skills=["JavaScript", "Python", "AWS", "Docker"],
+                id=3
+            )
+        ]
+        
+        # Convert profile_id to int for schema compliance
+        student_id_int = abs(hash(str(profile_id))) % 1000000  # Convert UUID to positive int
+        
+        return JobRecommendationResponse(
+            student_id=student_id_int,
+            jobs=recommendations[:limit],
+            total_found=len(recommendations[:limit]),
+            query_used="demo_recommendations",
+            generated_at=datetime.utcnow()
+        )
+        
+    except Exception as e:
+        logger.error(f"Error getting demo recommendations: {e}")
+        raise HTTPException(status_code=500, detail="Error generating demo recommendations")
+
+# ============================================================================
+# END OF MATCHING ENDPOINTS
+# ============================================================================

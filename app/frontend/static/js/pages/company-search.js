@@ -10,6 +10,7 @@ let currentPage = 1;
 const itemsPerPage = 12;
 let totalStudents = 0;
 let isSearchInProgress = false;
+let isDemoMode = false;
 
 // Rate limiter
 class SearchRateLimiter {
@@ -43,6 +44,10 @@ document.addEventListener('DOMContentLoaded', () => {
  * Inicializar página con verificación de protectedPageManager
  */
 async function initCompanySearchPage() {
+    // Detect demo mode from URL parameters
+    const urlParams = new URLSearchParams(window.location.search);
+    isDemoMode = urlParams.get('demo') === 'true';
+    
     // Verificar que protectedPageManager está definido
     if (typeof protectedPageManager === 'undefined') {
         console.warn('⚠️ ProtectedPageManager no está definido aún, reintentando...');
@@ -109,9 +114,17 @@ async function loadInitialStudents() {
     notificationManager.loading('Cargando candidatos disponibles...');
 
     try {
-        // ✅ ALTERNATIVA: Usar endpoint de búsqueda por skills (disponible)
-        const response = await apiClient.get('/students/search/skills?limit=50');
-        allStudents = response.students || response.data || [];
+        let response;
+        if (isDemoMode) {
+            // Use demo endpoint for synthetic students
+            console.log('🎭 Demo mode detected - using synthetic student data');
+            response = await apiClient.get('/students/demo/search?limit=50');
+        } else {
+            // Use regular endpoint for authenticated companies
+            response = await apiClient.get('/students/search/skills?limit=50');
+        }
+
+        allStudents = response.students || response.data || response || [];
         filteredStudents = allStudents;
         totalStudents = allStudents.length;
 
@@ -121,7 +134,7 @@ async function loadInitialStudents() {
     } catch (error) {
         notificationManager.hideLoading();
         notificationManager.warning('No se pudo cargar candidatos destacados');
-        console.error(error);
+        console.error('Error loading students:', error);
     }
 }
 
@@ -149,22 +162,32 @@ async function handleSearch() {
 
         notificationManager.loading('Buscando candidatos...');
 
-        // ✅ CORRECCIÓN: Usar endpoint correcto GET /{company_id}/search-students
-        // Obtener company_id del usuario actual (si es empresa)
-        const currentUser = authManager.getCurrentUser();
-        if (!currentUser || !currentUser.user_id) {
-            throw new Error('Usuario no autenticado');
+        let response;
+        if (isDemoMode) {
+            // Use demo endpoint for synthetic students
+            console.log('🎭 Demo mode detected - searching synthetic students');
+            const queryParams = new URLSearchParams({
+                skills: searchTerm.split(',').map(s => s.trim()),  // Split by comma for multiple skills
+                limit: 50
+            }).toString();
+            response = await apiClient.get(`/students/demo/search?${queryParams}`);
+        } else {
+            // Use regular endpoint for authenticated companies
+            const currentUser = authManager.getCurrentUser();
+            if (!currentUser || !currentUser.user_id) {
+                throw new Error('Usuario no autenticado');
+            }
+
+            // El endpoint espera query parameters, no POST body
+            const queryParams = new URLSearchParams({
+                skills: searchTerm,  // Buscar por skill
+                limit: 50
+            }).toString();
+
+            response = await apiClient.get(`/companies/${currentUser.user_id}/search-students?${queryParams}`);
         }
 
-        // El endpoint espera query parameters, no POST body
-        const queryParams = new URLSearchParams({
-            skills: searchTerm,  // Buscar por skill
-            limit: 50
-        }).toString();
-
-        const response = await apiClient.get(`/companies/${currentUser.user_id}/search-students?${queryParams}`);
-
-        allStudents = response.students || response.data || [];
+        allStudents = response.students || response.data || response || [];
         filteredStudents = allStudents;
         totalStudents = allStudents.length;
         currentPage = 1;
@@ -327,9 +350,12 @@ function renderStudents() {
             <div class="student-card" data-student-id="${student.id}">
                 <div class="student-header">
                     <div class="student-avatar">
-                        <img src="${student.avatar_url || '/static/images/avatar-default.png'}"
-                             alt="${escapeHtml(student.full_name || 'Estudiante')}"
-                             onerror="this.src='/static/images/avatar-default.png'">
+                        ${isDemoMode ? 
+                            '<div class="demo-avatar"><i class="fas fa-user-graduate"></i></div>' :
+                            `<img src="${student.avatar_url || '/static/images/avatar-default.png'}"
+                                 alt="${escapeHtml(student.full_name || 'Estudiante')}"
+                                 onerror="this.src='/static/images/avatar-default.png'">`
+                        }
                     </div>
                     <div class="student-info">
                         <h3 class="student-name">${escapeHtml(student.full_name || 'Estudiante')}</h3>

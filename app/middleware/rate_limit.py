@@ -21,12 +21,12 @@ class RateLimitConfig:
     """Configuración de límites de tasa por rol de usuario"""
 
     # Límites por rol (requests / hora)
-    # Límites por rol (requests / hora)
     LIMITS_PER_ROLE = {
         "admin": settings.RATE_LIMIT_ADMIN,
         "company": settings.RATE_LIMIT_COMPANY,
         "student": settings.RATE_LIMIT_STUDENT,
         "anonymous": settings.RATE_LIMIT_ANONYMOUS,
+        "demo": 1000,  # Alto límite para modo demo
     }
 
     # Límites específicos por endpoint (requests / minuto)
@@ -381,20 +381,26 @@ class RateLimitMiddleware(BaseHTTPMiddleware):
     async def dispatch(self, request: Request, call_next):
         # 1. Determinar rol del usuario
         user_role = "anonymous"
-        auth_header = request.headers.get("Authorization")
         
-        if auth_header and auth_header.startswith("Bearer "):
-            token = auth_header.split(" ")[1]
-            try:
-                payload = jwt.decode(
-                    token, 
-                    settings.SECRET_KEY, 
-                    algorithms=[settings.ALGORITHM]
-                )
-                user_role = payload.get("role", "anonymous")
-            except JWTError:
-                # Token inválido -> tratar como anónimo
-                pass
+        # Check for demo mode first
+        demo_mode = request.query_params.get('demo', '').lower() == 'true'
+        if demo_mode:
+            user_role = "demo"
+        else:
+            auth_header = request.headers.get("Authorization")
+            
+            if auth_header and auth_header.startswith("Bearer "):
+                token = auth_header.split(" ")[1]
+                try:
+                    payload = jwt.decode(
+                        token, 
+                        settings.SECRET_KEY, 
+                        algorithms=[settings.ALGORITHM]
+                    )
+                    user_role = payload.get("role", "anonymous")
+                except JWTError:
+                    # Token inválido -> tratar como anónimo
+                    pass
         
         # 2. Verificar límite
         limiter = get_rate_limiter()

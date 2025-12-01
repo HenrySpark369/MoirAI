@@ -1873,6 +1873,29 @@ body.sidebar-closed {
     flex-grow: 1;
 }
 
+.skill-tag {
+    display: inline-block;
+    background: var(--primary);
+    color: white;
+    padding: 0.25rem 0.5rem;
+    border-radius: 0.25rem;
+    font-size: 0.8rem;
+    font-weight: 500;
+    margin: 0.125rem;
+}
+
+.skills-list {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.25rem;
+    margin-top: 0.5rem;
+}
+
+.match-score-display {
+    font-weight: bold;
+    color: var(--primary);
+}
+
 .job-skills {
     display: flex;
     flex-wrap: wrap;
@@ -2106,6 +2129,22 @@ body.sidebar-closed {
     align-items: center;
     justify-content: center;
     color: white;
+    font-size: 1.8rem;
+}
+
+.demo-avatar {
+    width: 60px;
+    height: 60px;
+    background: linear-gradient(135deg, #6c757d, #495057);
+    border-radius: 50%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    color: white;
+    font-size: 1.8rem;
+}
+
+.demo-avatar i {
     font-size: 1.8rem;
 }
 

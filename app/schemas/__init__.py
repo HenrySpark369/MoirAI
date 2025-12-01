@@ -220,6 +220,11 @@ class JobItem(BaseModel):
     source: Optional[str] = None
     description: Optional[str] = None
     match_score: Optional[float] = None
+    # Additional fields for demo and compatibility
+    work_mode: Optional[str] = None
+    job_type: Optional[str] = None
+    skills: Optional[List[str]] = None
+    id: Optional[int] = None
 
 
 class JobSearchRequest(BaseModel):

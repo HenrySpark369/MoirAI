@@ -134,6 +134,9 @@ async function initDemoDashboard(demoRole = 'student') {
         // Cargar datos del dashboard en modo demo según el rol
         await loadDemoData(demoRole);
         
+        // Actualizar UI con datos del usuario demo
+        updateUserInterface(demoRole);
+        
         // Inicializar componentes del dashboard
         initializeDashboardComponents();
         
@@ -154,48 +157,95 @@ async function loadDemoData(demoRole = 'student') {
         
         switch (demoRole) {
             case 'student':
-                // Datos demo para estudiante
-                dashboardData.applications = [
-                    {
-                        id: 1,
-                        job: { id: 1, title: 'Desarrollador Frontend', company: 'TechCorp' },
-                        status: 'pending',
-                        applied_at: new Date().toISOString()
-                    },
-                    {
-                        id: 2,
-                        job: { id: 2, title: 'Analista de Datos', company: 'DataInc' },
-                        status: 'interview',
-                        applied_at: new Date(Date.now() - 86400000).toISOString()
+                // Cargar datos reales desde endpoints demo
+                try {
+                    // Obtener perfil demo
+                    const profileResponse = await apiClient.get('/students/demo/profile');
+                    const demoProfile = profileResponse.data;
+                    
+                    // Guardar perfil demo en currentUser
+                    currentUser = {
+                        ...currentUser,
+                        ...demoProfile,
+                        name: demoProfile.name,
+                        skills: demoProfile.skills,
+                        industry: demoProfile.industry,
+                        seniority_level: demoProfile.seniority_level
+                    };
+                    
+                    // ✅ PERSISTIR perfil demo en storageManager para sincronización entre páginas
+                    if (typeof storageManager !== 'undefined' && storageManager) {
+                        storageManager.set('demo_profile', demoProfile);
+                        storageManager.setUserName(demoProfile.name);
+                        storageManager.setUserEmail(demoProfile.email);
+                        storageManager.setUserRole('student');
+                        storageManager.set('demo_mode', true);
+                        console.log('💾 Perfil demo guardado en storageManager:', demoProfile);
                     }
-                ];
-                
-                dashboardData.recommendations = [
-                    {
-                        id: 3,
-                        title: 'Ingeniero de Software',
-                        company: 'InnovateLab',
-                        location: 'Córdoba',
-                        work_mode: 'Híbrido',
-                        matching_score: 0.85
-                    },
-                    {
-                        id: 4,
-                        title: 'Desarrollador Full Stack',
-                        company: 'WebSolutions',
-                        location: 'Remoto',
-                        work_mode: 'Remoto',
-                        matching_score: 0.78
-                    }
-                ];
-                
-                dashboardData.stats = {
-                    applications_count: 2,
-                    applications_pending: 1,
-                    applications_accepted: 0,
-                    recommendations_count: 2,
-                    avg_match_score: 81.5
-                };
+                    
+                    // Obtener recomendaciones demo
+                    const recommendationsResponse = await apiClient.get('/matching/demo/recommendations?limit=5');
+                    const recommendationsData = recommendationsResponse.data;
+                    
+                    dashboardData.recommendations = recommendationsData.jobs || [];
+                    
+                    // Datos mock para aplicaciones (ya que no hay aplicaciones reales en demo)
+                    dashboardData.applications = [
+                        {
+                            id: 1,
+                            job: { id: 1, title: 'Desarrollador Frontend', company: 'TechCorp' },
+                            status: 'pending',
+                            applied_at: new Date().toISOString()
+                        },
+                        {
+                            id: 2,
+                            job: { id: 2, title: 'Analista de Datos', company: 'DataInc' },
+                            status: 'interview',
+                            applied_at: new Date(Date.now() - 86400000).toISOString()
+                        }
+                    ];
+                    
+                    dashboardData.stats = {
+                        applications_count: 2,
+                        applications_pending: 1,
+                        applications_accepted: 0,
+                        recommendations_count: dashboardData.recommendations.length,
+                        avg_match_score: dashboardData.recommendations.length > 0 
+                            ? dashboardData.recommendations.reduce((sum, rec) => sum + rec.matching_score, 0) / dashboardData.recommendations.length 
+                            : 0
+                    };
+                    
+                } catch (error) {
+                    console.warn('Error loading demo data, falling back to mock data:', error);
+                    // Fallback a datos mock si falla la carga
+                    dashboardData.applications = [
+                        {
+                            id: 1,
+                            job: { id: 1, title: 'Desarrollador Frontend', company: 'TechCorp' },
+                            status: 'pending',
+                            applied_at: new Date().toISOString()
+                        }
+                    ];
+                    
+                    dashboardData.recommendations = [
+                        {
+                            id: 3,
+                            title: 'Ingeniero de Software',
+                            company: 'InnovateLab',
+                            location: 'Córdoba',
+                            work_mode: 'Híbrido',
+                            matching_score: 85
+                        }
+                    ];
+                    
+                    dashboardData.stats = {
+                        applications_count: 1,
+                        applications_pending: 1,
+                        applications_accepted: 0,
+                        recommendations_count: 1,
+                        avg_match_score: 85
+                    };
+                }
                 break;
                 
             case 'company':
@@ -317,6 +367,76 @@ function initializeDashboardComponents() {
     if (typeof initializeCharts === 'function') {
         initializeCharts();
     }
+}
+
+/**
+ * Actualizar interfaz de usuario con datos del usuario demo
+ */
+function updateUserInterface(demoRole = 'student') {
+    // Actualizar elementos del usuario
+    const userNameEl = document.getElementById('user-name');
+    const userEmailEl = document.getElementById('user-email');
+    const userSubtitleEl = document.getElementById('user-subtitle');
+
+    if (userNameEl && currentUser.name) {
+        userNameEl.textContent = currentUser.name;
+    }
+    
+    if (userEmailEl && currentUser.email) {
+        userEmailEl.textContent = currentUser.email;
+    }
+
+    // Actualizar subtítulo según el rol
+    if (userSubtitleEl) {
+        if (demoRole === 'student') {
+            userSubtitleEl.textContent = `${currentUser.industry || 'Profesional'} - ${currentUser.seniority_level || 'Demo'} | Busca tu próxima oportunidad`;
+        } else if (demoRole === 'company') {
+            userSubtitleEl.textContent = 'Empresa Colaboradora - Encuentra el talento que necesitas';
+        } else if (demoRole === 'admin') {
+            userSubtitleEl.textContent = 'Administrador - Panel de control y monitoreo';
+        }
+    }
+
+    // ✅ Iniciar actualización periódica de recomendaciones en modo demo
+    if (demoRole === 'student') {
+        startPeriodicRecommendationsUpdate();
+    }
+}
+
+/**
+ * Iniciar actualización periódica de recomendaciones (cada 5 minutos)
+ */
+function startPeriodicRecommendationsUpdate() {
+    // Evitar múltiples timers
+    if (window.recommendationsUpdateTimer) {
+        clearInterval(window.recommendationsUpdateTimer);
+    }
+
+    // Actualizar cada 5 minutos (300,000 ms)
+    window.recommendationsUpdateTimer = setInterval(async () => {
+        try {
+            console.log('🔄 Actualizando recomendaciones automáticamente...');
+            
+            // Obtener nuevas recomendaciones
+            const recommendationsResponse = await apiClient.get('/matching/demo/recommendations?limit=5');
+            const recommendationsData = recommendationsResponse.data;
+            
+            // Actualizar datos globales
+            dashboardData.recommendations = recommendationsData.jobs || [];
+            
+            // Actualizar UI si el elemento existe
+            const recommendationsContainer = document.getElementById('recommendations-container');
+            if (recommendationsContainer) {
+                renderRecommendations(dashboardData.recommendations);
+                console.log('✅ Recomendaciones actualizadas automáticamente');
+            }
+            
+        } catch (error) {
+            console.warn('⚠️ Error actualizando recomendaciones automáticamente:', error);
+        }
+    }, 5 * 60 * 1000); // 5 minutos
+
+    console.log('⏰ Actualización periódica de recomendaciones iniciada (cada 5 minutos)');
 }
 
 /**
@@ -831,7 +951,10 @@ function renderRecommendations() {
     let html = '<div class="jobs-grid">';
 
     dashboardData.recommendations.forEach(job => {
-        const matchScore = Math.round(job.matching_score * 100);
+        // ✅ Ajustar para datos demo (ya vienen como porcentaje)
+        const matchScore = typeof job.match_score === 'number' && job.match_score > 1 
+            ? Math.round(job.match_score)  // Ya es porcentaje
+            : Math.round(job.match_score * 100);  // Convertir a porcentaje
 
         html += `
             <div class="job-card-simple">
@@ -933,7 +1056,33 @@ function renderStats() {
  */
 async function viewJobDetail(jobId) {
     try {
-        const job = await apiClient.get(`/jobs/${jobId}`);
+        // ✅ Verificar si está en modo demo
+        const urlParams = new URLSearchParams(window.location.search);
+        const isDemoMode = urlParams.get('demo') === 'true';
+        
+        let job;
+        if (isDemoMode) {
+            // En modo demo, buscar en recomendaciones o usar datos mock
+            job = dashboardData.recommendations.find(j => j.id == jobId);
+            if (!job) {
+                // Fallback a datos mock
+                job = {
+                    id: jobId,
+                    title: 'Posición Demo',
+                    company: 'Empresa Demo',
+                    location: 'Ciudad de México',
+                    work_mode: 'Híbrido',
+                    description: 'Esta es una posición de demostración. En un entorno real, aquí aparecería la descripción completa del empleo.',
+                    salary_min: 15000,
+                    salary_max: 25000,
+                    currency: 'MXN',
+                    requirements: ['Experiencia relevante', 'Conocimientos técnicos', 'Actitud positiva']
+                };
+            }
+        } else {
+            // Modo normal: obtener de API
+            job = await apiClient.get(`/jobs/${jobId}`);
+        }
 
         const modal = document.createElement('div');
         modal.className = 'modal';
@@ -949,7 +1098,7 @@ async function viewJobDetail(jobId) {
                 <h4>Descripción</h4>
                 <p>${job.description}</p>
                 <h4>Salario</h4>
-                <p>$${job.salary_min} - $${job.salary_max} ${job.currency}</p>
+                <p>$${job.salary_min || 'No especificado'} - $${job.salary_max || 'No especificado'} ${job.currency || 'MXN'}</p>
                 <h4>Requisitos</h4>
                 <ul>
                     ${job.requirements?.map(req => `<li>${req}</li>`).join('') || '<li>No especificado</li>'}
@@ -1018,6 +1167,19 @@ async function applyToJob(jobId) {
     }
 
     try {
+        // ✅ Verificar si está en modo demo
+        const urlParams = new URLSearchParams(window.location.search);
+        const isDemoMode = urlParams.get('demo') === 'true';
+        
+        if (isDemoMode) {
+            // En modo demo, simular aplicación exitosa
+            notificationManager.loading('Enviando aplicación...');
+            await new Promise(resolve => setTimeout(resolve, 1000)); // Simular delay
+            notificationManager.hideLoading();
+            notificationManager.success('¡Aplicación enviada exitosamente! (Modo Demo)');
+            return;
+        }
+
         const userId = currentUser.id;
 
         notificationManager.loading('Enviando aplicación...');
