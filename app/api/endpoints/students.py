@@ -1504,7 +1504,7 @@ def get_synthetic_student_profile(student_id: int) -> StudentProfile:
 
 @router.get("/{student_id}", response_model=StudentProfile)
 async def get_student(
-    student_id: int,
+    student_id: str,
     request: Request,
     session: AsyncSession = Depends(get_session),
     current_user: UserContext = Depends(AuthService.get_current_user)
@@ -1514,6 +1514,8 @@ async def get_student(
     
     Historia de usuario: Como administrador o estudiante, quiero ver los detalles
     completos de un perfil estudiantil para revisar información y hacer seguimiento.
+    
+    Soporta tanto IDs numéricos de estudiantes reales como IDs de string del CV simulator.
     """
     # Handle demo mode
     demo_header = request.headers.get("X-Demo-Mode")
@@ -1530,28 +1532,132 @@ async def get_student(
             status_code=403,
             detail="Acceso denegado para ver perfiles de estudiantes"
         )
-    student = await session.get(Student, student_id)
+    
+    # Detectar si es un ID del CV simulator (string que parece UUID)
+    import re
+    is_cv_simulator_id = bool(re.match(r'^[a-f0-9\-]{36}$', student_id) or student_id.startswith('demo_'))
+    
+    if is_cv_simulator_id:
+        # Buscar en CV simulator database
+        try:
+            import sqlite3
+            import json
+            from pathlib import Path
+            
+            db_path = Path(__file__).parent.parent.parent.parent / "cv_simulator" / "training_data_cvs.db"
+            
+            if not db_path.exists():
+                raise HTTPException(status_code=404, detail="CV simulator database not found")
+            
+            conn = sqlite3.connect(str(db_path))
+            cursor = conn.cursor()
+            
+            # Buscar el CV por ID (remover prefijo demo_ si existe)
+            actual_id = student_id.replace('demo_', '')
+            cursor.execute("""
+                SELECT id, industry, seniority, cv_text, annotations, created_at
+                FROM cv_dataset
+                WHERE id = ?
+            """, (actual_id,))
+            
+            row = cursor.fetchone()
+            conn.close()
+            
+            if not row:
+                raise HTTPException(status_code=404, detail=f"Student with ID {student_id} not found in CV simulator")
+            
+            profile_id, industry, seniority, cv_text, annotations_json, created_at = row
+            
+            # Parsear annotations
+            annotations = json.loads(annotations_json) if annotations_json else {}
+            
+            # Crear perfil detallado compatible con StudentProfile
+            profile = {
+                "id": int(profile_id) if profile_id.isdigit() else hash(profile_id) % 10000,  # Convertir a int para compatibilidad
+                "name": annotations.get("name", f"Estudiante Demo {profile_id}"),
+                "role": "student",
+                "first_name": annotations.get("name", f"Estudiante Demo {profile_id}").split()[0] if annotations.get("name") else f"Estudiante{profile_id}",
+                "last_name": " ".join(annotations.get("name", f"Estudiante Demo {profile_id}").split()[1:]) if annotations.get("name") and len(annotations.get("name").split()) > 1 else f"Demo{profile_id}",
+                "email": annotations.get("email", f"cv{profile_id}@example.com"),
+                "phone": annotations.get("phone", "+52 55 1234 5678"),
+                "bio": annotations.get("bio", f"Estudiante de {annotations.get('program', 'Ingeniería en Sistemas')} con experiencia en {industry}."),
+                "program": annotations.get("program", "Ingeniería en Sistemas"),
+                "career": annotations.get("program", "Ingeniería en Sistemas"),
+                "semester": "6",
+                "skills": annotations.get("skills", ["Python", "JavaScript", "SQL"]),
+                "soft_skills": annotations.get("soft_skills", ["Trabajo en equipo", "Comunicación"]),
+                "projects": [proj.get("name", "Proyecto sin nombre") if isinstance(proj, dict) else str(proj) for proj in annotations.get("projects", ["Proyecto de desarrollo web", "Análisis de datos"])],
+                "objective": f"Desarrollar carrera en {industry} aplicando conocimientos técnicos.",
+                "education": [
+                    {
+                        "institution": annotations.get("university", "UNRC"),
+                        "degree": annotations.get("program", "Ingeniería en Sistemas"),
+                        "field_of_study": annotations.get("program", "Ingeniería en Sistemas"),
+                        "graduation_year": 2026
+                    }
+                ],
+                "experience": [
+                    {
+                        "position": f"{seniority} {industry}",
+                        "company": f"Empresa {industry}",
+                        "start_date": "2023-01",
+                        "end_date": "2024-12",
+                        "description": f"Experiencia laboral en {industry}."
+                    }
+                ],
+                "certifications": [f"Certificación en {skill}" for skill in annotations.get("skills", [])[:2]],
+                "languages": ["Español (Nativo)", "Inglés (Intermedio)"],
+                "industry": industry,
+                "seniority_level": seniority,
+                "cv_uploaded": True,
+                "cv_filename": f"cv_demo_{profile_id}.pdf",
+                "cv_upload_date": created_at,
+                "created_at": created_at,
+                "last_active": "2025-11-30T00:00:00",
+                "is_active": True
+            }
+            
+            await _log_audit_action(
+                session, "GET_STUDENT", f"cv_simulator_id:{student_id}",
+                current_user, details=f"Perfil CV simulator retornado: {profile['name']}"
+            )
+            
+            return StudentProfile(**profile)
+            
+        except HTTPException:
+            raise
+        except Exception as e:
+            print(f"Error getting CV simulator student {student_id}: {e}")
+            raise HTTPException(status_code=500, detail=f"Error loading CV simulator student: {str(e)}")
+    
+    # Si no es ID del CV simulator, intentar convertir a int y buscar en tabla Student
+    try:
+        numeric_id = int(student_id)
+    except ValueError:
+        raise HTTPException(status_code=400, detail="Invalid student ID format")
+    
+    student = await session.get(Student, numeric_id)
     if not student:
         # Check if demo mode and return synthetic profile
         demo_header = request.headers.get("X-Demo-Mode")
         if demo_header == "true":
-            synthetic_student = get_synthetic_student_profile(student_id)
+            synthetic_student = get_synthetic_student_profile(numeric_id)
             await _log_audit_action(
-                session, "GET_STUDENT", f"student_id:{student_id}",
+                session, "GET_STUDENT", f"student_id:{numeric_id}",
                 current_user, details="Perfil sintético demo retornado"
             )
             return synthetic_student
         
         await _log_audit_action(
-            session, "GET_STUDENT", f"student_id:{student_id}",
+            session, "GET_STUDENT", f"student_id:{numeric_id}",
             current_user, success=False, error_message="Estudiante no encontrado"
         )
         raise HTTPException(status_code=404, detail="Estudiante no encontrado")
     
     # Verificar permisos: estudiantes solo pueden ver su propio perfil
-    if current_user.role == "student" and current_user.user_id != student_id:
+    if current_user.role == "student" and current_user.user_id != numeric_id:
         await _log_audit_action(
-            session, "GET_STUDENT", f"student_id:{student_id}",
+            session, "GET_STUDENT", f"student_id:{numeric_id}",
             current_user, success=False, error_message="Acceso denegado"
         )
         raise HTTPException(
@@ -1560,7 +1666,7 @@ async def get_student(
         )
     
     await _log_audit_action(
-        session, "GET_STUDENT", f"student_id:{student_id}",
+        session, "GET_STUDENT", f"student_id:{numeric_id}",
         current_user, details=f"Consulta de perfil de {student.name}"
     )
     

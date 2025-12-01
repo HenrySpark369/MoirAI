@@ -832,12 +832,33 @@ function goToPage(p) {
 /**
  * View user details
  */
-function viewUser(id) { 
+async function viewUser(id) { 
     const urlParams = new URLSearchParams(window.location.search);
     const isDemoMode = urlParams.get('demo') === 'true';
     
     if (isDemoMode) {
-        notificationManager?.show('Vista de detalles de usuario próximamente (modo demo)', 'info');
+        try {
+            // Obtener datos detallados del estudiante desde el CV simulator
+            const response = await fetch(`${window.API_BASE_URL}/students/${id}`, {
+                headers: {
+                    'X-API-Key': getApiKey(),
+                    'Content-Type': 'application/json'
+                }
+            });
+            
+            if (!response.ok) {
+                throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+            }
+            
+            const student = await response.json();
+            
+            // Abrir modal con perfil del estudiante
+            openStudentProfileModal(student);
+            
+        } catch (error) {
+            console.error('Error loading student profile:', error);
+            notificationManager?.show('Error al cargar perfil del estudiante', 'error');
+        }
     } else {
         window.location.href = `/admin/user-details?user_id=${id}`;
     }
@@ -1379,5 +1400,138 @@ function initializeEnhancedSidebar() {
                 // Could add logic to hide tooltips if needed
             }
         }
+    });
+}
+
+// ============================================================================
+// STUDENT PROFILE MODAL FUNCTIONS
+// ============================================================================
+
+/**
+ * Escape HTML to prevent XSS
+ */
+function escapeHtml(text) {
+    const div = document.createElement('div');
+    div.textContent = text;
+    return div.innerHTML;
+}
+
+/**
+ * Capitalize first letter
+ */
+function capitalizeFirst(str) {
+    return str.charAt(0).toUpperCase() + str.slice(1);
+}
+
+/**
+ * Abrir modal con perfil del estudiante
+ */
+function openStudentProfileModal(student) {
+    const modal = document.createElement('div');
+    modal.className = 'modal modal-student-profile';
+    modal.id = `studentModal-${student.id}`;
+
+    const matchScore = student.match_score || 0;
+    const matchClass = matchScore >= 75 ? 'high' : matchScore >= 50 ? 'medium' : 'low';
+
+    modal.innerHTML = `
+        <div class="modal-content">
+            <span class="close-modal" onclick="document.getElementById('studentModal-${student.id}')?.remove()">&times;</span>
+
+            <div class="modal-header-student">
+                <div class="header-content">
+                    <img src="${student.avatar_url || '/static/images/avatar-default.png'}"
+                         alt="${escapeHtml(student.first_name && student.last_name ? `${student.first_name} ${student.last_name}` : student.name)}" class="profile-avatar"
+                         onerror="this.src='/static/images/avatar-default.png'">
+                    <div>
+                        <h1>${escapeHtml(student.name)}</h1>
+                        <p>${escapeHtml(student.program || student.career || 'Carrera no especificada')}</p>
+                        <p><i class="fas fa-university"></i> UNRC</p>
+                    </div>
+                </div>
+                <span class="match-score match-${matchClass}">
+                    ${Math.round(matchScore)}% Match
+                </span>
+            </div>
+
+            <div class="modal-body-student">
+                <div class="profile-section">
+                    <h3>Información General</h3>
+                    <div class="info-grid">
+                        <div class="info-item">
+                            <strong>Email:</strong>
+                            <span>${escapeHtml(student.email || 'N/A')}</span>
+                        </div>
+                        <div class="info-item">
+                            <strong>Programa:</strong>
+                            <span>${escapeHtml(student.program || 'No especificado')}</span>
+                        </div>
+                        <div class="info-item">
+                            <strong>Proyectos:</strong>
+                            <span>${(student.projects || []).length}</span>
+                        </div>
+                        <div class="info-item">
+                            <strong>Seniority:</strong>
+                            <span>${escapeHtml(student.seniority_level || 'No especificado')}</span>
+                        </div>
+                    </div>
+                </div>
+
+                ${student.bio ? `
+                    <div class="profile-section">
+                        <h3>Acerca de</h3>
+                        <p>${escapeHtml(student.bio)}</p>
+                    </div>
+                ` : ''}
+
+                ${student.skills && student.skills.length > 0 ? `
+                    <div class="profile-section">
+                        <h3>Habilidades Técnicas</h3>
+                        <div class="skills-grid">
+                            ${student.skills.map(skill => `
+                                <span class="skill-tag">${escapeHtml(skill)}</span>
+                            `).join('')}
+                        </div>
+                    </div>
+                ` : ''}
+
+                ${student.soft_skills && student.soft_skills.length > 0 ? `
+                    <div class="profile-section">
+                        <h3>Habilidades Blandas</h3>
+                        <div class="skills-grid">
+                            ${student.soft_skills.map(skill => `
+                                <span class="skill-tag">${escapeHtml(skill)}</span>
+                            `).join('')}
+                        </div>
+                    </div>
+                ` : ''}
+
+                ${student.projects && student.projects.length > 0 ? `
+                    <div class="profile-section">
+                        <h3>Proyectos Destacados</h3>
+                        <div class="projects-list">
+                            ${student.projects.slice(0, 3).map(project => `
+                                <div class="project-item">
+                                    <h4>${escapeHtml(typeof project === 'string' ? project : (project.name || 'Proyecto sin nombre'))}</h4>
+                                    <p>${escapeHtml(typeof project === 'string' ? 'Descripción no disponible' : (project.description || ''))}</p>
+                                </div>
+                            `).join('')}
+                        </div>
+                    </div>
+                ` : ''}
+            </div>
+
+            <div class="modal-footer">
+                <button class="btn btn-secondary" onclick="document.getElementById('studentModal-${student.id}')?.remove()">
+                    Cerrar
+                </button>
+            </div>
+        </div>
+    `;
+
+    document.body.appendChild(modal);
+    modal.style.display = 'flex';
+    modal.addEventListener('click', (e) => {
+        if (e.target === modal) modal.remove();
     });
 }
