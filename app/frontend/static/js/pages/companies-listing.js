@@ -1,6 +1,6 @@
 /**
  * MoirAI - Companies Listing Page
- * Gestiona el listado de empresas y modal de detalles
+ * Gestiona el listado de empresas usando el modal centralizado (companyModalManager)
  */
 
 // Estado global
@@ -9,7 +9,6 @@ let filteredCompanies = [];
 let currentPage = 1;
 const itemsPerPage = 9;
 let totalCompanies = 0;
-let selectedCompany = null;
 let isDemoMode = false;
 
 // Inicializar página
@@ -36,9 +35,6 @@ async function initCompaniesPage() {
 
         // Cargar empresas
         await loadCompanies();
-
-        // Configurar manejadores de eventos
-        setupEventHandlers();
 
         console.log('✅ Página de empresas inicializada correctamente');
 
@@ -230,16 +226,13 @@ function renderCompaniesGrid() {
                         <i class="fas fa-briefcase"></i> ${company.open_jobs || 0} empleos
                     </span>
                     <span class="meta-item">
-                        <i class="fas fa-users"></i> ${getSizeLabel(company.size)}
+                        <i class="fas fa-users"></i> ${companyModalManager.getSizeLabel(company.size)}
                     </span>
                 </div>
             </div>
 
             <div class="company-actions">
-                <button class="btn btn-small btn-secondary" type="button" onclick="event.preventDefault(); viewCompanyDetails(${company.id}); return false;">
-                    <i class="fas fa-eye"></i> Ver Perfil
-                </button>
-                <button class="btn btn-small btn-primary" type="button" onclick="event.preventDefault(); openCompanyModal(${company.id}); return false;">
+                <button class="btn btn-small btn-primary" type="button" onclick="openCompanyModal(${company.id}, ${JSON.stringify(company).replace(/"/g, '&quot;')})">
                     <i class="fas fa-info-circle"></i> Detalles
                 </button>
             </div>
@@ -252,248 +245,22 @@ function renderCompaniesGrid() {
         countElement.textContent = totalCompanies;
     }
 
+    // Notificar al manager de las empresas disponibles
+    if (typeof companyModalManager !== 'undefined') {
+        companyModalManager.setCompanies(allCompanies);
+    }
+
     console.log(`✅ Renderizado ${pageCompanies.length} empresas en la página ${currentPage}`);
-}
-
-/**
- * Obtener etiqueta de tamaño
- */
-function getSizeLabel(size) {
-    const sizes = {
-        'startup': 'Startup',
-        'pyme': 'PyME',
-        'grande': 'Empresa Grande'
-    };
-    return sizes[size] || size;
-}
-
-/**
- * Abrir modal de detalles de empresa
- */
-async function openCompanyModal(companyId) {
-    try {
-        console.log(`🔓 Intentando abrir modal para empresa ID: ${companyId}`);
-        console.log(`📊 Total empresas en lista: ${allCompanies.length}`);
-        console.log(`📋 Empresas cargadas:`, allCompanies.map(c => ({ id: c.id, name: c.name })));
-
-        // Encontrar empresa en la lista
-        selectedCompany = allCompanies.find(c => c.id === companyId);
-
-        if (!selectedCompany) {
-            console.error(`❌ Empresa ${companyId} no encontrada en la lista`);
-            alert('Empresa no encontrada');
-            return;
-        }
-
-        console.log(`📂 Abriendo detalles de empresa: ${selectedCompany.name}`);
-
-        // Llenar modal con datos
-        populateCompanyModal(selectedCompany);
-
-        // Mostrar modal
-        const modal = document.getElementById('companyModal');
-        if (modal) {
-            modal.classList.add('active');
-            document.body.style.overflow = 'hidden';
-            console.log('✅ Modal visible');
-        } else {
-            console.error('❌ Modal no encontrado en el DOM');
-        }
-
-    } catch (error) {
-        console.error('❌ Error abriendo modal de empresa:', error);
-        alert('Error al abrir el modal: ' + error.message);
-    }
-}
-
-/**
- * Llenar modal con datos de empresa
- */
-function populateCompanyModal(company) {
-    // Header
-    document.getElementById('modalCompanyName').textContent = company.name;
-    document.getElementById('modalCompanyIndustry').textContent = company.industry;
-    document.getElementById('modalCompanyDescription').textContent = company.description || 'Sin descripción disponible';
-    document.getElementById('modalCompanyLogo').src = company.logo_url || 'https://via.placeholder.com/200';
-
-    // Badges
-    const verifiedBadge = document.getElementById('modalCompanyVerified');
-    if (company.is_verified) {
-        verifiedBadge.style.display = 'inline-block';
-    } else {
-        verifiedBadge.style.display = 'none';
-    }
-
-    document.getElementById('modalCompanySize').textContent = getSizeLabel(company.size);
-
-    // Información General
-    document.getElementById('infoIndustry').textContent = company.industry;
-    document.getElementById('infoSize').textContent = getSizeLabel(company.size);
-    document.getElementById('infoEmployees').textContent = (company.employees_count || 'N/A') + ' empleados';
-    document.getElementById('infoFounded').textContent = company.founded_year || 'N/A';
-
-    // Website
-    const websiteLink = document.getElementById('infoWebsite');
-    if (company.website) {
-        websiteLink.href = company.website;
-        websiteLink.textContent = company.website.replace('https://', '').replace('http://', '');
-    } else {
-        websiteLink.textContent = 'No disponible';
-        websiteLink.href = '#';
-    }
-
-    // Estadísticas
-    document.getElementById('statOpenJobs').textContent = company.open_jobs || 0;
-    document.getElementById('statRegistered').textContent = company.founded_year || '--';
-    document.getElementById('statProfile').textContent = '85%'; // Placeholder
-
-    // Contacto
-    document.getElementById('modalContactEmail').textContent = company.email || 'No disponible';
-    document.getElementById('modalContactPhone').textContent = company.phone || 'No disponible';
-    document.getElementById('modalContactAddress').textContent = company.address || 'No disponible';
-
-    // Ubicaciones
-    populateLocationsList(company.locations || []);
-
-    // Empleos
-    populateJobsList(company.id);
-
-    // Reset a primer tab
-    switchCompanyTab('overview');
-}
-
-/**
- * Llenar lista de ubicaciones
- */
-function populateLocationsList(locations) {
-    const container = document.getElementById('modalLocationsList');
-    if (!locations || locations.length === 0) {
-        container.innerHTML = '<p class="empty-message">No hay ubicaciones registradas</p>';
-        return;
-    }
-
-    container.innerHTML = locations.map(location => `
-        <div class="location-item">
-            <i class="fas fa-map-pin"></i>
-            <span>${location}</span>
-        </div>
-    `).join('');
-}
-
-/**
- * Llenar lista de empleos
- */
-async function populateJobsList(companyId) {
-    const container = document.getElementById('modalJobsList');
-
-    try {
-        // Intentar cargar empleos de la API
-        const response = await apiClient.get(`/companies/${companyId}/jobs`);
-        const jobs = response.jobs || [];
-
-        if (jobs.length === 0) {
-            container.innerHTML = '<p class="empty-message">Esta empresa no tiene empleos publicados actualmente</p>';
-            return;
-        }
-
-        container.innerHTML = jobs.slice(0, 5).map(job => `
-            <div class="job-item">
-                <h4>${job.title}</h4>
-                <p class="job-location">
-                    <i class="fas fa-map-marker-alt"></i> ${job.location || 'Ubicación no especificada'}
-                </p>
-                <p class="job-description">${job.description || 'Sin descripción'}</p>
-                <div class="job-meta">
-                    <span class="job-type">${job.job_type || 'Tiempo Completo'}</span>
-                    <span class="job-mode">${job.work_mode || 'Presencial'}</span>
-                </div>
-            </div>
-        `).join('');
-
-    } catch (error) {
-        console.warn('⚠️ Error cargando empleos de la empresa:', error);
-        container.innerHTML = '<p class="empty-message">No se pudieron cargar los empleos</p>';
-    }
-}
-
-/**
- * Cambiar tab en el modal
- */
-function switchCompanyTab(tabName) {
-    // Desactivar todos los tabs
-    document.querySelectorAll('.tab-content').forEach(tab => {
-        tab.classList.remove('active');
-    });
-
-    document.querySelectorAll('.tab-btn').forEach(btn => {
-        btn.classList.remove('active');
-    });
-
-    // Activar tab seleccionado
-    const tabElement = document.getElementById(`tab-${tabName}`);
-    if (tabElement) {
-        tabElement.classList.add('active');
-    }
-
-    // Marcar botón como activo
-    event.target.classList.add('active');
-
-    console.log(`📑 Tab cambiado a: ${tabName}`);
-}
-
-/**
- * Cerrar modal de empresa
- */
-function closeCompanyModal() {
-    const modal = document.getElementById('companyModal');
-    if (modal) {
-        modal.classList.remove('active');
-        document.body.style.overflow = 'auto';
-    }
-
-    selectedCompany = null;
-    console.log('✅ Modal cerrado');
 }
 
 /**
  * Ver todos los empleos de la empresa
  */
 function viewCompanyAllJobs() {
-    if (!selectedCompany) return;
+    if (!companyModalManager.selectedCompany) return;
 
-    closeCompanyModal();
-    window.location.href = `/oportunidades?company=${selectedCompany.id}`;
-}
-
-/**
- * Ver perfil completo de empresa
- */
-function viewCompanyDetails(companyId) {
-    openCompanyModal(companyId);
-}
-
-/**
- * Configurar manejadores de eventos
- */
-function setupEventHandlers() {
-    // Cerrar modal al hacer clic fuera
-    const modal = document.getElementById('companyModal');
-    if (modal) {
-        modal.addEventListener('click', (e) => {
-            if (e.target === modal) {
-                closeCompanyModal();
-            }
-        });
-    }
-
-    // Tecla ESC para cerrar modal
-    document.addEventListener('keydown', (e) => {
-        if (e.key === 'Escape') {
-            closeCompanyModal();
-        }
-    });
-
-    console.log('✅ Event handlers configurados');
+    companyModalManager.close();
+    window.location.href = `/oportunidades?company=${companyModalManager.selectedCompany.id}`;
 }
 
 /**

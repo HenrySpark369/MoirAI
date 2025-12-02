@@ -106,12 +106,35 @@ class AdminCompaniesManager {
 
         // Update count
         this.updateCompanyCount();
+
+        // Notificar al manager de las empresas disponibles
+        if (typeof companyModalManager !== 'undefined') {
+            companyModalManager.setCompanies(this.filteredCompanies);
+        }
     }
 
     createCompanyCard(company) {
         const statusClass = company.is_verified ? 'verified' : 'pending';
         const statusText = company.is_verified ? 'Verificada' : 'Pendiente';
         const logoUrl = `https://via.placeholder.com/60?text=${encodeURIComponent(company.company_name.charAt(0))}`;
+
+        // Normalizar datos para compatibilidad con modal centralizado
+        const normalizedCompany = {
+            id: company.company_id || company.id || company.company_name,
+            name: company.company_name,
+            company_name: company.company_name,
+            industry: company.industry || 'Sin especificar',
+            description: company.business_summary || '',
+            logo_url: logoUrl,
+            email: company.email || '',
+            phone: company.phone || '',
+            address: company.locations || '',
+            website: company.website || '',
+            is_verified: company.is_verified || false,
+            size: company.company_size || 'grande',
+            open_jobs: company.active_jobs || 0,
+            locations: Array.isArray(company.locations) ? company.locations : [company.locations].filter(Boolean)
+        };
 
         return `
             <div class="company-card" data-company-name="${company.company_name}">
@@ -130,11 +153,11 @@ class AdminCompaniesManager {
                     <p><strong>Ubicaciones:</strong> ${this.escapeHtml(company.locations)}</p>
                 </div>
                 <div class="company-actions">
-                    <button class="btn btn-small btn-primary" onclick="adminCompaniesManager.viewCompanyJobs('${company.company_name}')">
-                        <i class="fas fa-briefcase"></i> Ver Empleos
+                    <button class="btn btn-small btn-primary" type="button" onclick="openCompanyModal('${normalizedCompany.id}', ${JSON.stringify(normalizedCompany).replace(/"/g, '&quot;')})">
+                        <i class="fas fa-info-circle"></i> Detalles
                     </button>
-                    <button class="btn btn-small btn-outline" onclick="adminCompaniesManager.contactCompany('${company.company_name}', '${company.email || ''}')">
-                        <i class="fas fa-envelope"></i> Contactar
+                    <button class="btn btn-small btn-outline" onclick="adminCompaniesManager.viewCompanyJobs('${company.company_name}')">
+                        <i class="fas fa-briefcase"></i> Ver Empleos
                     </button>
                     ${!company.is_verified ? `
                         <button class="btn btn-small btn-success" onclick="adminCompaniesManager.verifyCompany('${company.company_name}')">
